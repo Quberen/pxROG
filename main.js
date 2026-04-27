@@ -23,7 +23,6 @@ const screens = {
     loadout: document.getElementById('loadout-menu'), gameOver: document.getElementById('game-over-screen') 
 };
 
-// 【修复点】：彻底移除了 topRightCont 幽灵引用
 const ui = { 
     hpVal: document.getElementById('hud-hp-val'), ptVal: document.getElementById('hud-pt-val'), 
     indCvs: document.getElementById('hud-indicator'),
@@ -59,6 +58,7 @@ let isBossSpawned = false;
 let directorState = 'BUILDUP'; let directorStateTimer = 0;
 let healWaveEnemyType = null;
 
+// 确保每个 UI 对象都有速度(vx, vy)供新物理引擎使用
 let uiOffsets = { hp: {x:0, y:0, vx:0, vy:0}, pt: {x:0, y:0, vx:0, vy:0}, skill: {x:0, y:0, vx:0, vy:0} };
 
 const BASE_REFRESH_COST = 1.0; let currentRefreshCost = BASE_REFRESH_COST; let currentShopItems = [];
@@ -184,6 +184,12 @@ function setControlMode(mode) {
     document.getElementById('settings-rel-ui').classList.toggle('ctrl-hidden', mode === 'absolute');
 }
 
+function setTouchMode(mode) {
+    config.touchMode = mode;
+    document.getElementById('ctrl-touch-single').classList.toggle('selected', mode === 'single');
+    document.getElementById('ctrl-touch-multi').classList.toggle('selected', mode === 'multi');
+}
+
 function drawOffsetWidget() {
     offsetCtx.clearRect(0, 0, 80, 80);
     offsetCtx.beginPath(); offsetCtx.arc(40, 40, 35, 0, Math.PI * 2);
@@ -282,20 +288,26 @@ function activateSkill() {
     }
 }
 
+// 【全新 UI 独立物理系统】：在主循环中以 60FPS 频率调用，真正的暴力回弹！
 function applyElastic(obj, targetNode) {
-    let dx = -obj.x; let dy = -obj.y;
-    obj.x += dx * 0.25; 
-    obj.y += dy * 0.25;
-    targetNode.style.transform = `translate(${obj.x}px, ${obj.y}px)`;
+    if(obj.vx === undefined) { obj.vx = 0; obj.vy = 0; }
+    
+    // 弹簧物理：引力拽回 + 阻尼减速
+    obj.vx += -obj.x * 0.4; 
+    obj.vy += -obj.y * 0.4;
+    obj.vx *= 0.65; 
+    obj.vy *= 0.65;
+    
+    obj.x += obj.vx; 
+    obj.y += obj.vy;
+    
+    if(targetNode) targetNode.style.transform = `translate(${obj.x}px, ${obj.y}px)`;
 }
 
 function updatePixelButtons() {
     if(!player) return;
     let skProg = player.skillActiveTimer > 0 ? (player.skillActiveTimer/600) : (player.skillCdTimer > 0 ? (1 - player.skillCdTimer/900) : player.skillEnergy / player.maxSkillEnergy);
     let skColor = player.skillActiveTimer > 0 ? '#00e5ff' : (player.skillCdTimer > 0 ? '#ff1744' : (player.skillEnergy >= player.maxSkillEnergy ? '#ffea00' : '#00b0ff'));
-    
-    let btnCvs = document.getElementById('skill-btn-cvs');
-    applyElastic(uiOffsets.skill, btnCvs);
     
     drawPixelButton('skill-btn-cvs', sprites.i_skill, skProg, skColor);
     drawPixelButton('loadout-btn-cvs', sprites.i_loadout, 0, '#fff');
@@ -306,17 +318,10 @@ function updatePixelButtons() {
 function updateHUD() {
     if (!player) return;
 
-    applyElastic(uiOffsets.hp, ui.hpVal);
-    
-    if (player.hp / player.maxHp < 0.3 && frameCount % 4 === 0) {
-        uiOffsets.hp.x += (Math.random()-0.5)*8;
-        uiOffsets.hp.y += (Math.random()-0.5)*8;
-    }
-
     let isFullNow = (player.skillEnergy >= player.maxSkillEnergy);
     if(isFullNow && !wasSkillFull && player.skillCdTimer <= 0) {
-        uiOffsets.skill.x = (Math.random() > 0.5 ? 1 : -1) * 15;
-        uiOffsets.skill.y = (Math.random() > 0.5 ? 1 : -1) * 15;
+        uiOffsets.skill.x = (Math.random() > 0.5 ? 1 : -1) * 20;
+        uiOffsets.skill.y = (Math.random() > 0.5 ? 1 : -1) * 20;
     }
     wasSkillFull = isFullNow;
 
@@ -331,14 +336,18 @@ function updateHUD() {
     ui.hpVal.style.color = hpColor;
     ui.hpVal.innerText = `${Math.floor(player.hp)}%`;
 
+    let isProtected = gameTimeSeconds < DIFF_CONFIG[currentDifficulty].protectionTime;
     let indColor = '#00e676';
+    
     if (currentLevel === 'sector1') {
         let progress = Math.min(1, gameTimeSeconds / LEVELS['sector1'].duration);
         if(isBossSpawned) indColor = '#ff1744';
         else if(progress > 0.8) indColor = '#ff9800';
         else if(progress > 0.4) indColor = '#ffea00';
     } else {
-        if (directorState === 'COOLDOWN') {
+        if (isProtected) {
+            indColor = (frameCount % 60 < 30) ? '#ffffff' : '#00e5ff';
+        } else if (directorState === 'COOLDOWN') {
             if (!healWaveEnemyType) indColor = '#ffea00'; 
             else indColor = '#00e5ff'; 
         } else {
@@ -633,12 +642,17 @@ function updateDifficultyMetrics() {
         updateHUD(); 
     }
     
-    directorPoints += (difficultyScore * DIFF_CONFIG[currentDifficulty].spawnMod) / 25;
+    let isProtected = gameTimeSeconds < DIFF_CONFIG[currentDifficulty].protectionTime;
+    if (isProtected) {
+        directorPoints += (difficultyScore * DIFF_CONFIG[currentDifficulty].spawnMod) / 100.0;
+        if (directorPoints > 5.0) directorPoints = 5.0; 
+    } else {
+        directorPoints += (difficultyScore * DIFF_CONFIG[currentDifficulty].spawnMod) / 25.0;
+    }
 }
 
 function resize() { width = window.innerWidth; height = window.innerHeight; canvas.width = width; canvas.height = height; ctx.imageSmoothingEnabled = false; updateUIRects(); }
 
-// 【修复错误点】：彻底移除 showScreen 里不存在的 topRightCont
 function showScreen(screenId) {
     Object.values(screens).forEach(s => s.classList.remove('active'));
     if(screenId) screens[screenId].classList.add('active');
@@ -672,23 +686,11 @@ function togglePause() {
 }
 function quitGame() { gameState = 'START'; showScreen('start'); initDifficultyUI(); }
 
-function startGame(levelId) {
-    currentLevel = levelId || 'debug'; resize(); initSprites(); initStars();
-    player = new Player(); bullets = []; enemyBullets = []; enemies = []; particles = []; items = []; floatingTexts = []; aoeEffects = [];
-    score = 0; frameCount = 0; gameTimeSeconds = 0; shakeTimer = 0; hitStopFrames = 0; flashScreenTimer = 0;
-    comboCount = 0; comboTimer = 0; endingState = 'none'; endingTimer = 0;
-    currentRefreshCost = BASE_REFRESH_COST; currentShopItems = []; directorPoints = 0; difficultyScore = 1.0;
-    isBossSpawned = false; taggedItemId = null; ui.bossHpCont.style.opacity = 0; ui.bossToast.style.opacity = 0;
-    specialKamikazeMisses = 0; levelHpMultiplier = 1.0; directorState = 'BUILDUP'; directorStateTimer = 0; ui.sysMessage.style.opacity = 0;
-    
-    shopInflation = 0.0; wasSkillFull = false;
-    uiOffsets = {hp:{x:0,y:0,vx:0,vy:0}, pt:{x:0,y:0,vx:0,vy:0}, skill:{x:0,y:0,vx:0,vy:0}};
-
-    updateHUD(); gameState = 'PLAYING'; showScreen(null);
-}
-
+// 【彻底修复 gameOver 报错机制！】：函数满血回归
 function gameOver(title, isVictory) {
-    gameState = 'GAMEOVER'; let m = Math.floor(gameTimeSeconds / 60).toString().padStart(2, '0'); let s = (gameTimeSeconds % 60).toString().padStart(2, '0');
+    gameState = 'GAMEOVER'; 
+    let m = Math.floor(gameTimeSeconds / 60).toString().padStart(2, '0'); 
+    let s = (gameTimeSeconds % 60).toString().padStart(2, '0');
     
     let fancyTitle = title;
     let isAbyssClear = isVictory && currentDifficulty === 3;
@@ -710,47 +712,117 @@ function gameOver(title, isVictory) {
     showScreen('gameOver');
 }
 
+function startGame(levelId) {
+    currentLevel = levelId || 'debug'; resize(); initSprites(); initStars();
+    player = new Player(); bullets = []; enemyBullets = []; enemies = []; particles = []; items = []; floatingTexts = []; aoeEffects = [];
+    score = 0; frameCount = 0; gameTimeSeconds = 0; shakeTimer = 0; hitStopFrames = 0; flashScreenTimer = 0;
+    comboCount = 0; comboTimer = 0; endingState = 'none'; endingTimer = 0;
+    currentRefreshCost = BASE_REFRESH_COST; currentShopItems = []; directorPoints = 0; difficultyScore = 1.0;
+    isBossSpawned = false; taggedItemId = null; ui.bossHpCont.style.opacity = 0; ui.bossToast.style.opacity = 0;
+    specialKamikazeMisses = 0; levelHpMultiplier = 1.0; directorState = 'BUILDUP'; directorStateTimer = 0; ui.sysMessage.style.opacity = 0;
+    
+    shopInflation = 0.0; wasSkillFull = false; isTouchActive = false; shipTouchId = null;
+    uiOffsets = {hp:{x:0,y:0,vx:0,vy:0}, pt:{x:0,y:0,vx:0,vy:0}, skill:{x:0,y:0,vx:0,vy:0}};
+
+    updateHUD(); gameState = 'PLAYING'; showScreen(null);
+}
+
 let isTouchActive = false;
+let shipTouchId = null;
 let touchStartX = 0; let touchStartY = 0;
 
-function handleTouchStart(clientX, clientY) {
+function handleTouchStart(e) {
     if (gameState !== 'PLAYING' || endingState !== 'none') return;
-    isTouchActive = true;
-    touchStartX = clientX; touchStartY = clientY;
-    if(config.controlMode === 'absolute') {
-        player.targetX = clientX; 
-        player.targetY = clientY - config.controlOffsetY;
+    
+    if (config.touchMode === 'multi') {
+        for(let i=0; i<e.changedTouches.length; i++) {
+            let touch = e.changedTouches[i];
+            if (shipTouchId === null) {
+                shipTouchId = touch.identifier;
+                isTouchActive = true;
+                touchStartX = touch.clientX; touchStartY = touch.clientY;
+                if (config.controlMode === 'absolute') { player.targetX = touchStartX; player.targetY = touchStartY - config.controlOffsetY; }
+                break; 
+            }
+        }
+    } else {
+        isTouchActive = true;
+        touchStartX = e.touches[0].clientX; touchStartY = e.touches[0].clientY;
+        if(config.controlMode === 'absolute') { player.targetX = touchStartX; player.targetY = touchStartY - config.controlOffsetY; }
     }
 }
 
-function handleTouchMove(clientX, clientY) {
+function handleTouchMove(e) {
     if (!isTouchActive || gameState !== 'PLAYING' || endingState !== 'none') return;
-    if (config.controlMode === 'absolute') {
-        player.targetX = clientX; 
-        player.targetY = clientY - config.controlOffsetY;
+    
+    let clientX, clientY;
+    if (config.touchMode === 'multi') {
+        let found = false;
+        for(let i=0; i<e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === shipTouchId) {
+                clientX = e.changedTouches[i].clientX; clientY = e.changedTouches[i].clientY; found = true; break;
+            }
+        }
+        if (!found) return; 
     } else {
-        let dx = clientX - touchStartX;
-        let dy = clientY - touchStartY;
-        player.targetX += dx * config.controlSens;
-        player.targetY += dy * config.controlSens;
+        clientX = e.touches[0].clientX; clientY = e.touches[0].clientY;
+    }
+
+    if (config.controlMode === 'absolute') {
+        player.targetX = clientX; player.targetY = clientY - config.controlOffsetY;
+    } else {
+        let dx = clientX - touchStartX; let dy = clientY - touchStartY;
+        player.targetX += dx * config.controlSens; player.targetY += dy * config.controlSens;
         touchStartX = clientX; touchStartY = clientY;
     }
 }
 
-canvas.addEventListener('touchstart', e => { e.preventDefault(); handleTouchStart(e.touches[0].clientX, e.touches[0].clientY); }, {passive: false});
-canvas.addEventListener('touchmove', e => { e.preventDefault(); handleTouchMove(e.touches[0].clientX, e.touches[0].clientY); }, {passive: false});
-canvas.addEventListener('touchend', e => { isTouchActive = false; }, {passive: false});
-canvas.addEventListener('mousedown', e => { handleTouchStart(e.clientX, e.clientY); });
-canvas.addEventListener('mousemove', e => { if(e.buttons === 1) handleTouchMove(e.clientX, e.clientY); });
-canvas.addEventListener('mouseup', e => { isTouchActive = false; });
-canvas.addEventListener('mouseleave', e => { isTouchActive = false; });
+function handleTouchEnd(e) {
+    if (config.touchMode === 'multi') {
+        for(let i=0; i<e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === shipTouchId) { shipTouchId = null; isTouchActive = false; break; }
+        }
+    } else {
+        if (e.touches.length === 0) { isTouchActive = false; }
+    }
+}
+
+canvas.addEventListener('touchstart', e => { e.preventDefault(); handleTouchStart(e); }, {passive: false});
+canvas.addEventListener('touchmove', e => { e.preventDefault(); handleTouchMove(e); }, {passive: false});
+canvas.addEventListener('touchend', e => { e.preventDefault(); handleTouchEnd(e); }, {passive: false});
+canvas.addEventListener('touchcancel', e => { e.preventDefault(); handleTouchEnd(e); }, {passive: false});
+
+canvas.addEventListener('mousedown', e => {
+    if (gameState !== 'PLAYING' || endingState !== 'none') return;
+    isTouchActive = true; touchStartX = e.clientX; touchStartY = e.clientY;
+    if(config.controlMode === 'absolute') { player.targetX = touchStartX; player.targetY = touchStartY - config.controlOffsetY; }
+});
+canvas.addEventListener('mousemove', e => {
+    if (!isTouchActive || e.buttons !== 1 || gameState !== 'PLAYING') return;
+    if (config.controlMode === 'absolute') { player.targetX = e.clientX; player.targetY = e.clientY - config.controlOffsetY; } 
+    else { player.targetX += (e.clientX - touchStartX) * config.controlSens; player.targetY += (e.clientY - touchStartY) * config.controlSens; touchStartX = e.clientX; touchStartY = e.clientY; }
+});
+canvas.addEventListener('mouseup', () => { isTouchActive = false; });
+canvas.addEventListener('mouseleave', () => { isTouchActive = false; });
 
 window.addEventListener('resize', resize);
 
 function processGroup(group, isPlaying) { for (let i = group.length - 1; i >= 0; i--) { let entity = group[i]; if (isPlaying && hitStopFrames <= 0) entity.update(); entity.draw(ctx); if (isPlaying && (!entity.active)) group.splice(i, 1); } }
 
-function loop() {
+// 【帧率锁死核心】：保证 120Hz 屏幕下物理引擎依然稳定 60 FPS 运行
+let lastFrameTime = 0;
+const FPS_INTERVAL = 1000 / 60;
+
+function loop(timestamp) {
     requestAnimationFrame(loop);
+    
+    if (!lastFrameTime) lastFrameTime = timestamp;
+    let dt = timestamp - lastFrameTime;
+    
+    // 如果还没到 1/60 秒，跳过此次执行（锁 60 FPS）
+    if (dt < FPS_INTERVAL) return;
+    lastFrameTime = timestamp - (dt % FPS_INTERVAL);
+
     if (gameState === 'START') { ctx.fillStyle = '#050510'; ctx.fillRect(0, 0, width, height); updateAndDrawStars(ctx, true); return; }
     
     if (gameState === 'GAMEOVER') {
@@ -778,13 +850,20 @@ function loop() {
         if(player.skillActiveTimer > 0) {
             player.skillActiveTimer--;
             if(player.skillActiveTimer <= 0) { player.skillCdTimer = 900; }
-            updateHUD();
         } else if (player.skillCdTimer > 0) {
             player.skillCdTimer--;
-            updateHUD();
-        } else if (frameCount % 10 === 0) {
-            updateHUD(); 
         }
+
+        // 【全新独立 UI 物理线程】：与渲染解耦，保证丝滑抖动
+        applyElastic(uiOffsets.hp, ui.hpVal);
+        applyElastic(uiOffsets.skill, document.getElementById('skill-btn-cvs'));
+        
+        if (player && player.hp / player.maxHp < 0.3 && frameCount % 4 === 0) {
+            uiOffsets.hp.x += (Math.random()-0.5)*12;
+            uiOffsets.hp.y += (Math.random()-0.5)*12;
+        }
+
+        if (frameCount % 10 === 0) updateHUD(); 
 
         bullets.forEach(b => {
             if (!b.active) return;
@@ -819,7 +898,7 @@ function loop() {
         }
     }
     
-    if(player.hp > 0 && endingState !== 'playerDead') player.draw(ctx);
+    if(player && player.hp > 0 && endingState !== 'playerDead') player.draw(ctx);
     processGroup(aoeEffects, isPlaying); processGroup(items, isPlaying);
     processGroup(bullets, isPlaying); processGroup(enemyBullets, isPlaying);
     processGroup(enemies, isPlaying); processGroup(particles, isPlaying);

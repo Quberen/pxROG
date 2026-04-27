@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>像素肉鸽战机 V4.0 导演剪辑版</title>
+    <title>像素肉鸽战机 V4.1 核心觉醒</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=DotGothic16&family=Press+Start+2P&display=swap');
         
@@ -67,7 +67,6 @@
             align-items: flex-start; z-index: 5; pointer-events: none; opacity: 0.85;
             transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
-        /* 统一后的右侧 UI 容器 */
         #side-btns-container { 
             position: absolute; top: 50%; right: 20px; transform: translateY(-50%);
             z-index: 5; display: flex; flex-direction: column; gap: 12px; 
@@ -152,7 +151,6 @@
             display: flex; justify-content: center; align-items: center; color: #555; font-size: 14px; font-family: monospace;
         }
 
-        /* 商店通胀条 UI */
         #inflation-container { width: 95%; max-width: 320px; margin-bottom: 10px; background: #111; border: 2px solid #555; border-radius: 4px; padding: 5px; }
         #inflation-bar-bg { width: 100%; height: 6px; background: #222; border-radius: 3px; position: relative; overflow: hidden; }
         #inflation-bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #ff9800, #ff1744); transition: width 0.3s ease; }
@@ -189,7 +187,7 @@
     </div>
 
     <div id="start-screen" class="overlay active">
-        <h1>肉鸽战机 V4.0</h1>
+        <h1>肉鸽战机 V4.1</h1>
         
         <div class="diff-selector" id="diff-selector">
             <button class="diff-btn selected" onclick="selectDifficulty(0)">新兵</button>
@@ -234,10 +232,15 @@
         </div>
         
         <div id="settings-sub-control" class="ctrl-hidden" style="width:100%; display:flex; flex-direction:column; align-items:center;">
-            <div class="diff-selector" style="margin-bottom: 15px; width: 80%; max-width:200px;">
+            <div class="diff-selector" style="margin-bottom: 5px; width: 80%; max-width:200px;">
                 <button id="ctrl-mode-abs" class="diff-btn selected" onclick="setControlMode('absolute')">绝对定位</button>
                 <button id="ctrl-mode-rel" class="diff-btn" onclick="setControlMode('relative')">滑动牵引</button>
             </div>
+            <div class="diff-selector" style="margin-bottom: 15px; width: 80%; max-width:200px;">
+                <button id="ctrl-touch-single" class="diff-btn selected" onclick="setTouchMode('single')">单点锁定</button>
+                <button id="ctrl-touch-multi" class="diff-btn" onclick="setTouchMode('multi')">多指映射</button>
+            </div>
+
             <div id="settings-abs-ui" style="display:flex; flex-direction:column; align-items:center; width:100%;">
                 <p style="color:#aaa; font-size:8px; margin-bottom:10px;">控制手指纵向偏移补偿</p>
                 <div id="offset-widget" style="position:relative; width:80px; height:80px; margin:0 auto; touch-action:none; background:rgba(0,0,0,0.5); border-radius: 50%; box-shadow: inset 0 0 0 4px #444, 4px 4px 0 #000;">

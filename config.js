@@ -1,13 +1,13 @@
 // === config.js ===
 
-// 加入了相对滑动(relative)设定与灵敏度(controlSens)
-const config = { dmgText: true, shake: true, controlOffsetY: 90, controlMode: 'relative', controlSens: 1.5 };
+// 加入了相对滑动控制(relative)、灵敏度(controlSens) 以及 全新的单多指触控开关(touchMode)
+const config = { dmgText: true, shake: true, controlOffsetY: 90, controlMode: 'relative', controlSens: 1.5, touchMode: 'single' };
 
 const DIFF_CONFIG = [
-    { name: "新兵", desc: "简单：新手教学，无集群敌人。", hpMod: 0.8, dmgMod: 1.0, spawnMod: 0.8, ptMod: 1.2, p_hp: 100, p_dmg: 12, maxEnemies: 20 },
-    { name: "老手", desc: "普通：标准战斗，基础生存环境。", hpMod: 1.0, dmgMod: 1.0, spawnMod: 1.0, ptMod: 1.0, p_hp: 100, p_dmg: 12, maxEnemies: 35 },
-    { name: "精英", desc: "困难：高压集群，敌人规模极大增加。", hpMod: 1.5, dmgMod: 1.0, spawnMod: 1.5, ptMod: 1.0, p_hp: 100, p_dmg: 12, maxEnemies: 50 },
-    { name: "深渊", desc: "深渊：残血开局，极高物价与承伤！", hpMod: 1.5, dmgMod: 1.25, spawnMod: 1.5, ptMod: 0.8, p_hp: 80,  p_dmg: 8, maxEnemies: 70 }
+    { name: "新兵", desc: "简单：新手教学。初盘保护 45 秒。", hpMod: 0.8, dmgMod: 1.0, spawnMod: 0.8, ptMod: 1.2, p_hp: 100, p_dmg: 12, maxEnemies: 20, protectionTime: 45 },
+    { name: "老手", desc: "普通：标准战斗。初盘保护 30 秒。", hpMod: 1.0, dmgMod: 1.0, spawnMod: 1.0, ptMod: 1.0, p_hp: 100, p_dmg: 12, maxEnemies: 35, protectionTime: 30 },
+    { name: "精英", desc: "困难：高压集群。初盘保护 20 秒。", hpMod: 1.5, dmgMod: 1.0, spawnMod: 1.5, ptMod: 1.0, p_hp: 100, p_dmg: 12, maxEnemies: 50, protectionTime: 20 },
+    { name: "深渊", desc: "深渊：残血高物价。初盘保护 15 秒。", hpMod: 1.5, dmgMod: 1.25, spawnMod: 1.5, ptMod: 0.8, p_hp: 80,  p_dmg: 8, maxEnemies: 70, protectionTime: 15 }
 ];
 
 const RARITY = { C: { name: '普通', color: '#fff', weight: 50 }, R: { name: '稀有', color: '#00b0ff', weight: 30 }, E: { name: '史诗', color: '#ab47bc', weight: 15 }, L: { name: '传说', color: '#ffea00', weight: 5 } };
@@ -39,14 +39,14 @@ function getHpMaxBoost(level) {
     if(level === 0) return 0; if(level === 1) return 30; if(level === 2) return 60; return 100;
 }
 
-// 【加入阵型代币】：大幅提升精英怪权重，并引入独立的阵型单位
+// 【加入阵型代币与分类】：显著提升精英游荡者权重，引入独立阵型单位
 const ENEMY_TYPES = [
     { type: 'Locator',       weight: 1,  unlockTime: 0,   role: 'fodder' },
     { type: 'WandererLow',   weight: 3,  unlockTime: 5,   role: 'fodder' }, 
     { type: 'Kamikaze',      weight: 4,  unlockTime: 20,  role: 'special' },
     { type: 'LocatorSwarm',  weight: 6,  unlockTime: 20,  role: 'swarm' }, 
-    // 显著提升精英游荡者权重
-    { type: 'WandererHigh',  weight: 12, unlockTime: 15,  role: 'elite' },  
+    // 【修改】：精英游荡者权重显著提升，配合实体的强化，它将极度危险
+    { type: 'WandererHigh',  weight: 15, unlockTime: 15,  role: 'elite' },  
     { type: 'Turret',        weight: 10, unlockTime: 45,  role: 'elite' },
     { type: 'ArcFlyer',      weight: 12, unlockTime: 30,  role: 'special' },
     { type: 'WandererSwarm', weight: 15, unlockTime: 25,  role: 'swarm' },  
@@ -57,14 +57,14 @@ const ENEMY_TYPES = [
     { type: 'Tank',          weight: 30, unlockTime: 85,  role: 'tank' },
     { type: 'TankSwarm',     weight: 40, unlockTime: 100, role: 'tank' },
     
-    // 【全新机制】：复合阵型卡！
+    // 【全新机制】：复合阵型卡组，导演不再乱刷，而是成建制投送
     { type: 'Formation_V_Strike', weight: 12, unlockTime: 20, role: 'formation' },
     { type: 'Formation_Turret_Wall', weight: 25, unlockTime: 50, role: 'formation' },
     { type: 'Formation_Ambush', weight: 28, unlockTime: 65, role: 'formation' }
 ];
 
 const LEVELS = {
-    // 【完全重构的第一关】：纯粹的无人机(Drone)与定卫者派系，移除游荡者
+    // 【第一关完全重做】：移除所有非无人机敌人（Wanderer/Kamikaze），节奏手工控制，随后转交导演
     'sector1': {
         id: 'sector1', duration: 150, shopItems: ['damage', 'speed', 'spread', 'heal', 'hp_max', 'magnet', 'crit_rate'], 
         timeHpMultiplier: (sec) => 1 + (sec / 150) * 1.5, 
@@ -78,7 +78,7 @@ const LEVELS = {
             let sec = gameTimeSeconds + (frameCount % 60) / 60;
             let isEasy = currentDifficulty === 0;
             
-            // 前45秒：手工设计的新手引导节奏
+            // 前45秒：手工设计的新手引导节奏，只有无人机和炮台
             if (sec < 20) { 
                 if (frameCount % 120 === 0) window.spawnEnemyByType('Locator', Math.random()*(width-60)+30); 
                 if (sec > 10 && frameCount % 180 === 0) window.spawnEnemyByType('Locator', Math.random()*(width-60)+30, {forceHeal: true}); 
@@ -86,8 +86,8 @@ const LEVELS = {
                 if (frameCount % 150 === 0) window.spawnEnemyByType('Formation_V_Strike', Math.random()*(width-100)+50); 
                 if (frameCount % 200 === 0) window.spawnEnemyByType('Turret', Math.random()*(width-60)+30); 
             } else {
-                // 45秒后：接管给导演系统，但严格锁定兵种池，营造统一的派系观感
-                if (directorState === 'COOLDOWN' && !healWaveEnemyType) return; // 导演指令：等待清场
+                // 45秒后：交由导演，但兵种池被严格锁定在“无人机科技”风格内
+                if (directorState === 'COOLDOWN' && !healWaveEnemyType) return;
                 
                 let allowed = ['Locator', 'LocatorSwarm', 'Turret', 'TurretSwarm', 'ArcFlyer', 'ArcFlyerSwarm', 'Tank', 'Formation_V_Strike', 'Formation_Turret_Wall'];
                 let unlocked = ENEMY_TYPES.filter(t => allowed.includes(t.type) && gameTimeSeconds >= t.unlockTime && directorPoints >= t.weight);
@@ -114,26 +114,25 @@ const LEVELS = {
     'debug': {
         id: 'debug', shopItems: 'ALL', timeHpMultiplier: (sec) => 1 + Math.pow(sec/100, 1.2) * 0.5,
         spawnLoop: function() {
-            if (gameTimeSeconds < 10 && directorPoints < 2) directorPoints = 2; 
+            // 【导演初盘保护机制在无尽模式的应用】：详见 main.js 的点数累加控制
             let maxE = DIFF_CONFIG[currentDifficulty].maxEnemies;
             
             if (frameCount % 20 === 0 && enemies.length < maxE) {
                 if (directorPoints >= 0) {
                     
                     if (directorState === 'COOLDOWN') {
-                        // 如果有补给波次指令，直接执行
                         if (healWaveEnemyType && directorPoints > healWaveEnemyType.weight * 0.5) {
                             window.spawnEnemyByType(healWaveEnemyType.type, Math.random() * (width - 60) + 30, {forceHeal: true});
                             directorPoints -= healWaveEnemyType.weight;
                         }
-                        return; // 处于清场等待期，不刷出普通怪
+                        return; // 等待清场阶段，严格阻止产怪
                     }
 
                     let unlocked = ENEMY_TYPES.filter(type => gameTimeSeconds >= type.unlockTime && directorPoints >= type.weight);
                     if (currentDifficulty === 0) unlocked = unlocked.filter(t => !t.type.includes('Swarm') && !t.type.includes('Spec') && !t.type.includes('Formation'));
 
                     let purchases = 0;
-                    let pointPressure = directorPoints / 25.0; // 压力阀值
+                    let pointPressure = directorPoints / 25.0; 
                     
                     while (unlocked.length > 0 && purchases < 2 && directorPoints > 0 && enemies.length < maxE) {
                         let totalInverseWeight = 0;
@@ -141,7 +140,7 @@ const LEVELS = {
                             let drawProb = 100 / t.weight;
                             if (currentDifficulty >= 2 && t.role === 'swarm') drawProb *= 3; 
                             
-                            // 【智能高压发牌】：导演钱多花不掉时，极大幅度提升高危阵型和精英的概率
+                            // 【智能防积压】：点数溢出时，极大提高高消耗阵型/精英怪的刷新几率
                             if (pointPressure > 1.0) drawProb *= Math.pow(t.weight, pointPressure * 0.8); 
                             
                             t.drawProb = drawProb; totalInverseWeight += drawProb;
@@ -152,7 +151,6 @@ const LEVELS = {
                         
                         if (selected) {
                             directorPoints -= selected.weight; purchases++;
-                            // 所有的生成逻辑全部收束到全局的 spawnEnemyByType 函数中
                             window.spawnEnemyByType(selected.type, Math.random() * (width - 60) + 30);
                             unlocked = unlocked.filter(type => directorPoints >= type.weight);
                         }

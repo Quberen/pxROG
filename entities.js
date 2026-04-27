@@ -159,7 +159,7 @@ class Player {
 
         this.hp -= actualAmount; this.invincible = 20; 
         
-        // 【极速回弹】：直接赋予坐标绝对位移，无论扣血多少速度永远是最大，只有振幅受影响
+        // 【暴力 HP 位移】：直接赋予坐标偏移，配合高频插值引擎瞬间回弹！
         let dmgMag = 15 + Math.min(20, actualAmount * 0.6);
         let dmgAng = Math.random() * Math.PI * 2;
         uiOffsets.hp.x += Math.cos(dmgAng) * dmgMag;
@@ -298,7 +298,7 @@ class BaseEnemy {
         } 
     }
     baseUpdate() {
-        // 【机制】：第一帧检查变异。治疗、自爆特种和Boss免疫；但不再限制Boss小怪！
+        // 【变异判定】：治疗、自爆特种和Boss免疫，放开了对Boss小怪的限制！
         if (!this._initMods) {
             this._initMods = true;
             if (!this.isHealer && !this.isSpecial && !this.isBoss) {
@@ -307,7 +307,7 @@ class BaseEnemy {
                 }
             }
             
-            // 【纯净贴图替换】：不再用滤镜，直接挂载原生蓝调纹理
+            // 【手工绘制纹理替换】：匹配电池能量怪物
             if (this.isBattery) {
                 if (this.sprite === sprites.locator || this.sprite === sprites.locator_swarm) this.sprite = sprites.locator_battery;
                 else if (this.sprite === sprites.wanderer || this.sprite === sprites.wanderer_swarm) this.sprite = sprites.wanderer_battery;
@@ -703,7 +703,7 @@ class DamageText {
         this.text = (isPlayerDamage ? "-" : prefix) + disp + (isCrit && typeof amountStr === 'number' ? "!" : ""); 
         this.color = colorStr || '#ffffff'; this.life = 45; this.maxLife = 45;
         
-        // 【视觉优化】：降低玩家受伤时的飘字夸张程度，回归常规动量
+        // 【飘字速度回调】：恢复抛物线速度，让满天飞的数字更可控
         if (isPlayerDamage) {
             this.vx = (Math.random() - 0.5) * 3; 
             this.vy = -4 - Math.random() * 2; 
