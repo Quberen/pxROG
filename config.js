@@ -1,5 +1,7 @@
 // === config.js ===
-const config = { dmgText: true, shake: true, controlOffsetY: 90 };
+
+// 增加全新的操控模式配置 (absolute: 绝对定位, relative: 滑动牵引)
+const config = { dmgText: true, shake: true, controlOffsetY: 90, controlMode: 'absolute', controlSens: 1.5 };
 
 const DIFF_CONFIG = [
     { name: "新兵", desc: "简单：新手教学，无集群敌人。", hpMod: 0.8, dmgMod: 1.0, spawnMod: 0.8, ptMod: 1.2, p_hp: 100, p_dmg: 12, maxEnemies: 20 },
@@ -37,21 +39,22 @@ function getHpMaxBoost(level) {
     if(level === 0) return 0; if(level === 1) return 30; if(level === 2) return 60; return 100;
 }
 
+// 【为导演代币系统做准备】：新增 role 标签，以便未来的生成逻辑可以分类抽取
 const ENEMY_TYPES = [
-    { type: 'Locator',       weight: 1,  unlockTime: 0   },
-    { type: 'WandererLow',   weight: 3,  unlockTime: 5   }, 
-    { type: 'Kamikaze',      weight: 4,  unlockTime: 20  },
-    { type: 'LocatorSwarm',  weight: 6,  unlockTime: 20  }, 
-    { type: 'WandererHigh',  weight: 8,  unlockTime: 15  },  
-    { type: 'Turret',        weight: 10, unlockTime: 45  },
-    { type: 'ArcFlyer',      weight: 12, unlockTime: 30  },
-    { type: 'WandererSwarm', weight: 15, unlockTime: 25  },  
-    { type: 'KamikazeSwarm', weight: 16, unlockTime: 40  },
-    { type: 'ArcFlyerSwarm', weight: 20, unlockTime: 50  },
-    { type: 'TurretSwarm',   weight: 22, unlockTime: 70  },
-    { type: 'KamikazeSpec',  weight: 25, unlockTime: 60  },
-    { type: 'Tank',          weight: 30, unlockTime: 85  },
-    { type: 'TankSwarm',     weight: 40, unlockTime: 100 }
+    { type: 'Locator',       weight: 1,  unlockTime: 0,   role: 'fodder' },
+    { type: 'WandererLow',   weight: 3,  unlockTime: 5,   role: 'fodder' }, 
+    { type: 'Kamikaze',      weight: 4,  unlockTime: 20,  role: 'special' },
+    { type: 'LocatorSwarm',  weight: 6,  unlockTime: 20,  role: 'swarm' }, 
+    { type: 'WandererHigh',  weight: 8,  unlockTime: 15,  role: 'elite' },  
+    { type: 'Turret',        weight: 10, unlockTime: 45,  role: 'elite' },
+    { type: 'ArcFlyer',      weight: 12, unlockTime: 30,  role: 'special' },
+    { type: 'WandererSwarm', weight: 15, unlockTime: 25,  role: 'swarm' },  
+    { type: 'KamikazeSwarm', weight: 16, unlockTime: 40,  role: 'swarm' },
+    { type: 'ArcFlyerSwarm', weight: 20, unlockTime: 50,  role: 'swarm' },
+    { type: 'TurretSwarm',   weight: 22, unlockTime: 70,  role: 'swarm' },
+    { type: 'KamikazeSpec',  weight: 25, unlockTime: 60,  role: 'elite' },
+    { type: 'Tank',          weight: 30, unlockTime: 85,  role: 'tank' },
+    { type: 'TankSwarm',     weight: 40, unlockTime: 100, role: 'tank' }
 ];
 
 const LEVELS = {
@@ -132,12 +135,21 @@ const LEVELS = {
             
             let maxE = DIFF_CONFIG[currentDifficulty].maxEnemies;
             
-            // 只有当场上怪物未达上限时，才允许产怪
             if (frameCount % 20 === 0 && enemies.length < maxE) {
                 if (directorPoints >= 0) {
                     
                     if (directorState === 'COOLDOWN') {
-                        // 导演休息阶段不再强制产怪，由 main.js 控制静默清场，清完才进入下一阶段
+                        // 修正：只有当指令已下达(healWaveEnemyType不为空)时，才强行买入补给怪
+                        if (healWaveEnemyType && directorPoints > healWaveEnemyType.weight * 0.5) {
+                            let x = Math.random() * (width - 60) + 30; let e = null;
+                            if(healWaveEnemyType.type === 'Locator') e = new Locator(x, -40, false, true);
+                            else if(healWaveEnemyType.type === 'WandererLow') e = new Wanderer(x, -40, false, null, false, true);
+                            else e = new Wanderer(x, -40, true, null, false, true);
+                            
+                            if(e) {
+                                e.hp *= 2; e.maxHp *= 2; e.scale = 1.2; enemies.push(e); directorPoints -= healWaveEnemyType.weight;
+                            }
+                        }
                         return;
                     }
 
@@ -145,8 +157,6 @@ const LEVELS = {
                     if (currentDifficulty === 0) unlocked = unlocked.filter(t => !t.type.includes('Swarm') && !t.type.includes('Spec'));
 
                     let purchases = 0;
-                    
-                    // 【高压智能调控】：如果点数大量积压，或者快触及怪物数量上限，就指数级放大高危怪物的抽取概率！
                     let pointPressure = directorPoints / 20.0;
                     
                     while (unlocked.length > 0 && purchases < 2 && directorPoints > 0 && enemies.length < maxE) {
@@ -154,12 +164,7 @@ const LEVELS = {
                         unlocked.forEach(t => {
                             let drawProb = 100 / t.weight;
                             if (currentDifficulty >= 2 && t.type.includes('Swarm')) drawProb *= 3; 
-                            
-                            // 压力越大，高花费(大体重)怪物的概率越高
-                            if (pointPressure > 1.0) {
-                                drawProb *= Math.pow(t.weight, pointPressure * 0.8); 
-                            }
-                            
+                            if (pointPressure > 1.0) drawProb *= Math.pow(t.weight, pointPressure * 0.8); 
                             t.drawProb = drawProb; totalInverseWeight += drawProb;
                         });
 
@@ -227,24 +232,28 @@ function initSprites() {
     sprites.pt_core = createPixelTexture([[0,1,0],[1,2,1],[0,1,0]], ['#ffffff', '#e0e0e0'], 3);
     sprites.energy_crystal = createPixelTexture([[0,1,0],[1,2,1],[0,1,0]], ['#00e5ff', '#ffffff'], 3);
     
+    // 【手工独立绘制】：纯正的深蓝科技调能量怪贴图！抛弃了滤镜
     sprites.locator = createPixelTexture([[1,0,0,0,1],[0,1,2,1,0],[1,2,3,2,1],[0,1,2,1,0],[0,1,0,1,0]], ['#546e7a', '#90a4ae', '#ff1744'], 3);
     sprites.locator_swarm = createPixelTexture([[1,0,0,0,1],[0,1,2,1,0],[1,2,3,2,1],[0,1,2,1,0],[0,1,0,1,0]], ['#4a148c', '#ab47bc', '#00b0ff'], 3); 
     sprites.locator_healer = createPixelTexture([[1,0,0,0,1],[0,1,2,1,0],[1,2,3,2,1],[0,1,2,1,0],[0,1,0,1,0]], ['#1b5e20', '#4caf50', '#b2ff59'], 3);
+    sprites.locator_battery = createPixelTexture([[1,0,0,0,1],[0,1,2,1,0],[1,2,3,2,1],[0,1,2,1,0],[0,1,0,1,0]], ['#0277bd', '#03a9f4', '#00e5ff'], 3);
     
     sprites.wanderer = createPixelTexture([[1,0,0,0,1],[0,1,2,1,0],[0,1,1,1,0],[1,2,3,2,1],[1,1,1,1,1],[0,1,0,1,0]], ['#424242', '#757575', '#ff1744'], pSize); 
     sprites.wanderer_swarm = createPixelTexture([[1,0,0,0,1],[0,1,2,1,0],[0,1,1,1,0],[1,2,3,2,1],[1,1,1,1,1],[0,1,0,1,0]], ['#4a148c', '#ab47bc', '#00b0ff'], pSize); 
     sprites.wanderer_healer = createPixelTexture([[1,0,0,0,1],[0,1,2,1,0],[0,1,1,1,0],[1,2,3,2,1],[1,1,1,1,1],[0,1,0,1,0]], ['#1b5e20', '#4caf50', '#b2ff59'], pSize);
+    sprites.wanderer_battery = createPixelTexture([[1,0,0,0,1],[0,1,2,1,0],[0,1,1,1,0],[1,2,3,2,1],[1,1,1,1,1],[0,1,0,1,0]], ['#01579b', '#0288d1', '#00e5ff'], pSize);
     
+    sprites.turret = createPixelTexture([[1,1,1,1,1,1],[1,2,2,2,2,1],[1,2,3,3,2,1],[1,2,2,2,2,1],[0,1,1,1,1,0]], ['#424242', '#757575', '#ff1744'], pSize);
+    sprites.turret_swarm = createPixelTexture([[1,1,1,1,1,1],[1,2,2,2,2,1],[1,2,3,3,2,1],[1,2,2,2,2,1],[0,1,1,1,1,0]], ['#4a148c', '#ab47bc', '#00b0ff'], pSize);
+    sprites.turret_healer = createPixelTexture([[1,1,1,1,1,1],[1,2,2,2,2,1],[1,2,3,3,2,1],[1,2,2,2,2,1],[0,1,1,1,1,0]], ['#1b5e20', '#4caf50', '#b2ff59'], pSize);
+    sprites.turret_battery = createPixelTexture([[1,1,1,1,1,1],[1,2,2,2,2,1],[1,2,3,3,2,1],[1,2,2,2,2,1],[0,1,1,1,1,0]], ['#01579b', '#0288d1', '#00e5ff'], pSize);
+
     sprites.kamikaze_idle = createPixelTexture([[0,0,1,0,0],[0,1,2,1,0],[1,1,2,1,1],[1,0,1,0,1]], ['#ffaa00', '#ffeb3b'], pSize);
     sprites.kamikaze_warn = createPixelTexture([[0,0,1,0,0],[0,1,2,1,0],[1,1,2,1,1],[1,0,1,0,1]], ['#ff1744', '#ffeb3b'], pSize); 
     sprites.kamikaze_swarm_idle = createPixelTexture([[0,0,1,0,0],[0,1,2,1,0],[1,1,2,1,1],[1,0,1,0,1]], ['#d500f9', '#f57f17'], pSize); 
     sprites.kamikaze_swarm_warn = createPixelTexture([[0,0,1,0,0],[0,1,2,1,0],[1,1,2,1,1],[1,0,1,0,1]], ['#d500f9', '#f57f17'], pSize);
     sprites.kamikaze_special_idle = createPixelTexture([[0,0,1,0,0],[0,1,2,1,0],[1,1,2,1,1],[1,0,1,0,1]], ['#7f0000', '#b71c1c'], 4); 
     sprites.kamikaze_special_warn = createPixelTexture([[0,0,1,0,0],[0,1,2,1,0],[1,1,2,1,1],[1,0,1,0,1]], ['#ffffff', '#ff1744'], 4);
-    
-    sprites.turret = createPixelTexture([[1,1,1,1,1,1],[1,2,2,2,2,1],[1,2,3,3,2,1],[1,2,2,2,2,1],[0,1,1,1,1,0]], ['#424242', '#757575', '#ff1744'], pSize);
-    sprites.turret_swarm = createPixelTexture([[1,1,1,1,1,1],[1,2,2,2,2,1],[1,2,3,3,2,1],[1,2,2,2,2,1],[0,1,1,1,1,0]], ['#4a148c', '#ab47bc', '#00b0ff'], pSize);
-    sprites.turret_healer = createPixelTexture([[1,1,1,1,1,1],[1,2,2,2,2,1],[1,2,3,3,2,1],[1,2,2,2,2,1],[0,1,1,1,1,0]], ['#1b5e20', '#4caf50', '#b2ff59'], pSize);
     
     sprites.arc = createPixelTexture([[1,0,0,0,0,0,1],[1,1,0,0,0,1,1],[0,1,1,2,1,1,0],[0,0,1,1,1,0,0]], ['#37474f', '#ffffff'], pSize);
     sprites.arc_swarm = createPixelTexture([[1,0,0,0,0,0,1],[1,1,0,0,0,1,1],[0,1,1,2,1,1,0],[0,0,1,1,1,0,0]], ['#6a1b9a', '#00b0ff'], pSize); 

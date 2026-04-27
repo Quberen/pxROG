@@ -160,6 +160,9 @@
         .tab-content { width: 100%; display: flex; flex-direction: column; align-items: center; }
 
         .abyss-clear-title { color: #ffea00 !important; text-shadow: 2px 4px 0 #e65100 !important; animation: textGlow 2s infinite; }
+        
+        /* 操控设置区块的隐藏切换类 */
+        .ctrl-hidden { display: none !important; }
     </style>
 </head>
 <body>
@@ -222,24 +225,42 @@
     <div id="settings-menu" class="overlay">
         <h2>系统设置</h2>
         <div style="display:flex; gap:10px; margin-bottom:20px; width:80%; max-width:250px;">
-            <button class="tab-btn active" onclick="switchSettingsTab('control')">操控</button>
-            <button class="tab-btn" onclick="switchSettingsTab('game')">游戏</button>
+            <button class="tab-btn active" onclick="switchSettingsTab('control')">操控设定</button>
+            <button class="tab-btn" onclick="switchSettingsTab('game')">系统功能</button>
         </div>
+        
         <div id="tab-game" class="tab-content hidden">
             <div class="btn-group">
                 <button class="btn btn-dark" id="toggle-dmg-btn" onclick="toggleSetting('dmgText')">伤害飘字: 开</button>
                 <button class="btn btn-dark" id="toggle-shake-btn" onclick="toggleSetting('shake')">屏幕震动: 开</button>
             </div>
         </div>
+        
         <div id="tab-control" class="tab-content">
-            <p style="color:#aaa; font-size:10px; margin-bottom:10px;">控制纵向偏移 (触控区域划动)</p>
-            <div id="offset-widget" style="position:relative; width:80px; height:80px; margin:0 auto; touch-action:none; background:rgba(0,0,0,0.5); border-radius: 50%; box-shadow: inset 0 0 0 4px #444, 4px 4px 0 #000;">
-                <canvas id="offsetCanvas" width="80" height="80"></canvas>
-                <div id="offset-val" style="position:absolute; top:0; left:0; width:100%; height:100%; display:flex; justify-content:center; align-items:center; font-family:'Press Start 2P'; font-size:16px;">90</div>
+            <div class="diff-selector" style="margin-bottom: 15px; width: 80%; max-width:200px;">
+                <button id="ctrl-mode-abs" class="diff-btn selected" onclick="setControlMode('absolute')">绝对定位</button>
+                <button id="ctrl-mode-rel" class="diff-btn" onclick="setControlMode('relative')">滑动牵引</button>
+            </div>
+            
+            <div id="settings-abs-ui" style="display:flex; flex-direction:column; align-items:center; width:100%;">
+                <p style="color:#aaa; font-size:8px; margin-bottom:10px;">控制手指纵向偏移补偿</p>
+                <div id="offset-widget" style="position:relative; width:80px; height:80px; margin:0 auto; touch-action:none; background:rgba(0,0,0,0.5); border-radius: 50%; box-shadow: inset 0 0 0 4px #444, 4px 4px 0 #000;">
+                    <canvas id="offsetCanvas" width="80" height="80"></canvas>
+                    <div id="offset-val" style="position:absolute; top:0; left:0; width:100%; height:100%; display:flex; justify-content:center; align-items:center; font-family:'Press Start 2P'; font-size:16px;">90</div>
+                </div>
+            </div>
+            
+            <div id="settings-rel-ui" class="ctrl-hidden" style="display:flex; flex-direction:column; align-items:center; width:100%;">
+                <p style="color:#aaa; font-size:8px; margin-bottom:10px;">调节指尖滑动灵敏度</p>
+                <div id="sens-widget" style="position:relative; width:80px; height:80px; margin:0 auto; touch-action:none; background:rgba(0,0,0,0.5); border-radius: 50%; box-shadow: inset 0 0 0 4px #444, 4px 4px 0 #000;">
+                    <canvas id="sensCanvas" width="80" height="80"></canvas>
+                    <div id="sens-val" style="position:absolute; top:0; left:0; width:100%; height:100%; display:flex; justify-content:center; align-items:center; font-family:'Press Start 2P'; font-size:12px;">1.5x</div>
+                </div>
             </div>
         </div>
+        
         <div class="btn-group" style="margin-top:30px;">
-            <button class="btn btn-blue" onclick="closeSettings()">返回</button>
+            <button class="btn btn-blue" onclick="closeSettings()">保存配置</button>
         </div>
     </div>
 

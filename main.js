@@ -58,7 +58,7 @@ let isBossSpawned = false;
 let directorState = 'BUILDUP'; let directorStateTimer = 0;
 let healWaveEnemyType = null;
 
-let uiOffsets = { hp: {x:0, y:0, vx:0, vy:0}, pt: {x:0, y:0, vx:0, vy:0} };
+let uiOffsets = { hp: {x:0, y:0}, pt: {x:0, y:0} };
 
 const BASE_REFRESH_COST = 1.0; let currentRefreshCost = BASE_REFRESH_COST; let currentShopItems = [];
 let taggedItemId = null; 
@@ -117,8 +117,16 @@ function drawPixelButton(id, icon, progress, color) {
     if(icon) ctx.drawImage(icon, 24 - icon.width/2, 24 - icon.height/2);
 }
 
-let offsetCanvas = document.getElementById('offsetCanvas');
-let offsetCtx = offsetCanvas.getContext('2d');
+let offsetCanvas = document.getElementById('offsetCanvas'); let offsetCtx = offsetCanvas.getContext('2d');
+let sensCanvas = document.getElementById('sensCanvas'); let sensCtx = sensCanvas.getContext('2d');
+
+function setControlMode(mode) {
+    config.controlMode = mode;
+    document.getElementById('ctrl-mode-abs').classList.toggle('selected', mode === 'absolute');
+    document.getElementById('ctrl-mode-rel').classList.toggle('selected', mode === 'relative');
+    document.getElementById('settings-abs-ui').classList.toggle('ctrl-hidden', mode === 'relative');
+    document.getElementById('settings-rel-ui').classList.toggle('ctrl-hidden', mode === 'absolute');
+}
 
 function drawOffsetWidget() {
     offsetCtx.clearRect(0, 0, 80, 80);
@@ -131,27 +139,48 @@ function drawOffsetWidget() {
     document.getElementById('offset-val').innerText = config.controlOffsetY;
 }
 
-let offsetDragging = false; let lastTouchX = 0, lastTouchY = 0;
+function drawSensWidget() {
+    sensCtx.clearRect(0, 0, 80, 80);
+    sensCtx.beginPath(); sensCtx.arc(40, 40, 35, 0, Math.PI * 2);
+    sensCtx.strokeStyle = '#444'; sensCtx.lineWidth = 4; sensCtx.stroke();
+    sensCtx.beginPath();
+    let pct = Math.min(1, Math.max(0, (config.controlSens - 0.5) / 2.5));
+    sensCtx.arc(40, 40, 35, -Math.PI/2, -Math.PI/2 + (Math.PI * 2 * pct));
+    sensCtx.strokeStyle = '#ab47bc'; sensCtx.stroke();
+    document.getElementById('sens-val').innerText = config.controlSens.toFixed(1) + 'x';
+}
+
+let widgetDragging = null; let lastTouchX = 0, lastTouchY = 0;
 document.getElementById('offset-widget').addEventListener('touchstart', e => {
-    offsetDragging = true; lastTouchX = e.touches[0].clientX; lastTouchY = e.touches[0].clientY; e.preventDefault();
+    widgetDragging = 'offset'; lastTouchX = e.touches[0].clientX; lastTouchY = e.touches[0].clientY; e.preventDefault();
 }, {passive: false});
+document.getElementById('sens-widget').addEventListener('touchstart', e => {
+    widgetDragging = 'sens'; lastTouchX = e.touches[0].clientX; lastTouchY = e.touches[0].clientY; e.preventDefault();
+}, {passive: false});
+
 window.addEventListener('touchmove', e => {
-    if (!offsetDragging) return;
+    if (!widgetDragging) return;
     let dx = e.touches[0].clientX - lastTouchX; let dy = lastTouchY - e.touches[0].clientY; 
     if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
-        let valChange = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 2 : -2) : (dy > 0 ? 2 : -2);
-        config.controlOffsetY = Math.max(0, Math.min(200, config.controlOffsetY + valChange));
-        drawOffsetWidget(); lastTouchX = e.touches[0].clientX; lastTouchY = e.touches[0].clientY;
+        let valChange = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : -1) : (dy > 0 ? 1 : -1);
+        if (widgetDragging === 'offset') {
+            config.controlOffsetY = Math.max(0, Math.min(200, config.controlOffsetY + valChange * 2));
+            drawOffsetWidget();
+        } else if (widgetDragging === 'sens') {
+            config.controlSens = Math.max(0.5, Math.min(3.0, config.controlSens + valChange * 0.1));
+            drawSensWidget();
+        }
+        lastTouchX = e.touches[0].clientX; lastTouchY = e.touches[0].clientY;
     }
 }, {passive: false});
-window.addEventListener('touchend', () => offsetDragging = false);
+window.addEventListener('touchend', () => widgetDragging = null);
 
 function switchSettingsTab(tabId) {
     document.getElementById('tab-game').classList.add('hidden'); document.getElementById('tab-control').classList.add('hidden');
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.getElementById('tab-' + tabId).classList.remove('hidden');
     document.querySelector(`.tab-btn[onclick="switchSettingsTab('${tabId}')"]`).classList.add('active');
-    if (tabId === 'control') drawOffsetWidget();
+    if (tabId === 'control') { drawOffsetWidget(); drawSensWidget(); }
 }
 
 function triggerShake(intensity, duration) { if (!config.shake) return; shakeIntensity = intensity; shakeTimer = duration; }
@@ -189,13 +218,19 @@ function activateSkill() {
     }
 }
 
-// 增强弹性系数，为接下来的高速位移做准备
+// 【暴力物理插值】：血量UI回弹极快，无视幅度
 function applyElastic(obj, targetNode) {
-    obj.vx -= obj.x * 0.7; 
-    obj.vy -= obj.y * 0.7;
-    obj.vx *= 0.6;        
-    obj.vy *= 0.6;
-    obj.x += obj.vx; obj.y += obj.vy;
+    let dx = -obj.x; let dy = -obj.y;
+    let dist = Math.sqrt(dx*dx + dy*dy);
+    if(dist > 0.5) {
+        // 保证最小回弹速度为极速 10
+        let speed = Math.max(10, dist * 0.4); 
+        if(speed > dist) speed = dist;
+        obj.x += (dx/dist) * speed;
+        obj.y += (dy/dist) * speed;
+    } else {
+        obj.x = 0; obj.y = 0;
+    }
     targetNode.style.transform = `translate(${obj.x}px, ${obj.y}px)`;
 }
 
@@ -215,11 +250,6 @@ function updateHUD() {
 
     applyElastic(uiOffsets.hp, ui.hpVal);
     
-    if (player.hp / player.maxHp < 0.3 && frameCount % 4 === 0) {
-        uiOffsets.hp.vx += (Math.random()-0.5)*5;
-        uiOffsets.hp.vy += (Math.random()-0.5)*5;
-    }
-
     ui.ptVal.innerText = `${player.pt.toFixed(1)} PT`;
     const hpPercent = Math.max(0, player.hp / player.maxHp);
     
@@ -229,11 +259,8 @@ function updateHUD() {
     else if (hpPercent > 0.2) hpColor = '#ff9800';
 
     ui.hpVal.style.color = hpColor;
-    
-    // 【新设定】：血量永远显示实际数值的百分比，可以直接突破100%
     ui.hpVal.innerText = `${Math.floor(player.hp)}%`;
 
-    // 【新设定】：无尽模式渐变色危险指示灯
     let indColor = '#00e676';
     if (currentLevel === 'sector1') {
         let progress = Math.min(1, gameTimeSeconds / LEVELS['sector1'].duration);
@@ -242,10 +269,9 @@ function updateHUD() {
         else if(progress > 0.4) indColor = '#ffea00';
     } else {
         if (directorState === 'COOLDOWN') {
-            if (!healWaveEnemyType) indColor = '#ffea00'; // 黄色：停火警戒，等待清场
-            else indColor = '#00e5ff'; // 科技蓝：补给波次正在下达
+            if (!healWaveEnemyType) indColor = '#ffea00'; 
+            else indColor = '#00e5ff'; 
         } else {
-            // BUILDUP：根据压力指数，进行丝滑的 绿 -> 黄 -> 红 渐变
             let pressure = Math.min(1, directorPoints / 25);
             let r = 0, g = 0;
             if (pressure < 0.5) {
@@ -300,7 +326,7 @@ function generateShopItems() {
 }
 
 function openShop() { gameState = 'SHOP'; if (currentShopItems.length === 0) generateShopItems(); renderShopCards(); showScreen('shop'); }
-function closeShop() { gameState = 'PLAYING'; player.targetX = player.x; player.targetY = player.y; showScreen(null); }
+function closeShop() { gameState = 'PLAYING'; showScreen(null); }
 
 function openLoadout(fromState) { overlayHistory = fromState; gameState = 'LOADOUT'; renderLoadout(); showScreen('loadout'); }
 function closeLoadout() { gameState = overlayHistory; if(gameState === 'PLAYING') showScreen(null); else showScreen(overlayHistory.toLowerCase()); }
@@ -429,6 +455,9 @@ function buyUpgrade(id) {
     if (!opt || player.pt < itemCost) return;
     player.pt -= itemCost; 
     
+    // 【完美修复】：每次消费，累计积分都要增加，确保神装能被顺利解锁！
+    player.totalUpgradePoints += itemCost;
+    
     if (opt.type === 'equip') {
         if (!player.equipment[id].owned) {
             player.equipment[id].owned = true; player.equipment[id].level = 1;
@@ -477,7 +506,6 @@ function getPlayerPowerScore() {
     return isNaN(power) ? 0 : Math.max(0, power);
 }
 
-// 【核心机制】：AI导演状态机与等待清场逻辑
 function updateDifficultyMetrics() {
     if (frameCount % 60 === 0) { 
         gameTimeSeconds++; 
@@ -488,14 +516,13 @@ function updateDifficultyMetrics() {
             
             if (directorState === 'COOLDOWN') {
                 if (!healWaveEnemyType) {
-                    // 等待清场阶段：只要场上少于4只怪，或者等了太久(20秒)，就强行派出特种波次
+                    // 等待清场阶段：只要场上少于4只怪，或者等了太久(20秒)，就立刻切入蓝色补给波次
                     if (enemies.length <= 4 || directorStateTimer > 20) {
                         let possible = ENEMY_TYPES.filter(t => ['Locator', 'WandererLow', 'WandererHigh'].includes(t.type));
                         healWaveEnemyType = possible[Math.floor(Math.random() * possible.length)];
                         directorPoints += 20; 
                     }
                 } else {
-                    // 特种波次持续期间，到期自动恢复常规出怪
                     if (directorStateTimer > 30) { 
                         directorState = 'BUILDUP'; 
                         directorStateTimer = 0; 
@@ -505,7 +532,7 @@ function updateDifficultyMetrics() {
             } else if (directorState === 'BUILDUP' && directorStateTimer > 30 && Math.random() < 0.05 && gameTimeSeconds > 60) {
                 directorState = 'COOLDOWN'; 
                 directorStateTimer = 0;
-                healWaveEnemyType = null; // 置空以触发“等待清场”阶段
+                healWaveEnemyType = null; 
             }
         }
 
@@ -515,7 +542,6 @@ function updateDifficultyMetrics() {
         updateHUD(); 
     }
     
-    // 资金注入
     directorPoints += (difficultyScore * DIFF_CONFIG[currentDifficulty].spawnMod) / 25;
 }
 
@@ -541,7 +567,7 @@ function closeSettings() { gameState = overlayHistory; if (gameState === 'START'
 
 function togglePause() { 
     if (gameState === 'PLAYING') { gameState = 'PAUSED'; ui.pauseScore.innerText = `当前战绩: ${score} PTS`; showScreen('pause'); } 
-    else if (gameState === 'PAUSED') { gameState = 'PLAYING'; showScreen(null); player.targetX = player.x; player.targetY = player.y; } 
+    else if (gameState === 'PAUSED') { gameState = 'PLAYING'; showScreen(null); } 
 }
 function quitGame() { gameState = 'START'; showScreen('start'); initDifficultyUI(); }
 
@@ -554,38 +580,48 @@ function startGame(levelId) {
     isBossSpawned = false; taggedItemId = null; ui.bossHpCont.style.opacity = 0; ui.bossToast.style.opacity = 0;
     specialKamikazeMisses = 0; levelHpMultiplier = 1.0; directorState = 'BUILDUP'; directorStateTimer = 0; ui.sysMessage.style.opacity = 0;
     
-    uiOffsets = {hp:{x:0,y:0,vx:0,vy:0}, pt:{x:0,y:0,vx:0,vy:0}};
+    uiOffsets = {hp:{x:0,y:0}, pt:{x:0,y:0}};
 
     updateHUD(); gameState = 'PLAYING'; showScreen(null);
 }
 
-function gameOver(title, isVictory) {
-    gameState = 'GAMEOVER'; let m = Math.floor(gameTimeSeconds / 60).toString().padStart(2, '0'); let s = (gameTimeSeconds % 60).toString().padStart(2, '0');
-    
-    let fancyTitle = title;
-    let isAbyssClear = isVictory && currentDifficulty === 3;
-    
-    const titleEl = document.getElementById('game-over-title');
-    titleEl.className = '';
-    if (isAbyssClear) {
-        fancyTitle = "ABYSS CLEARED";
-        titleEl.classList.add('abyss-clear-title');
-    } else {
-        titleEl.style.color = isVictory ? "#00e676" : "#e60050";
+// 【全新触摸操作系统】：支持绝对控制和相对滑动牵引控制
+let isTouchActive = false;
+let touchStartX = 0; let touchStartY = 0;
+
+function handleTouchStart(clientX, clientY) {
+    if (gameState !== 'PLAYING' || endingState !== 'none') return;
+    isTouchActive = true;
+    touchStartX = clientX; touchStartY = clientY;
+    if(config.controlMode === 'absolute') {
+        player.targetX = clientX; 
+        player.targetY = clientY - config.controlOffsetY;
     }
-    
-    titleEl.innerText = fancyTitle; 
-    
-    let extraText = isAbyssClear ? "<br><br><span style='color:#00b0ff'>[DATABASE UNLOCKED]</span>" : "";
-    ui.finalScore.innerHTML = `战绩结算: ${score} PTS<br>存活时间: ${m}:${s}${extraText}`; 
-    
-    showScreen('gameOver');
 }
 
-function handleMove(clientX, clientY) { if (gameState !== 'PLAYING' || endingState !== 'none') return; player.targetX = clientX; player.targetY = clientY - config.controlOffsetY; }
-canvas.addEventListener('touchmove', e => { e.preventDefault(); handleMove(e.touches[0].clientX, e.touches[0].clientY); }, {passive: false});
-canvas.addEventListener('touchstart', e => { e.preventDefault(); handleMove(e.touches[0].clientX, e.touches[0].clientY); }, {passive: false});
-canvas.addEventListener('mousemove', e => { if(e.buttons === 1) handleMove(e.clientX, e.clientY); });
+function handleTouchMove(clientX, clientY) {
+    if (!isTouchActive || gameState !== 'PLAYING' || endingState !== 'none') return;
+    if (config.controlMode === 'absolute') {
+        player.targetX = clientX; 
+        player.targetY = clientY - config.controlOffsetY;
+    } else {
+        // 相对牵引模式：根据灵敏度放大或缩小移动距离
+        let dx = clientX - touchStartX;
+        let dy = clientY - touchStartY;
+        player.targetX += dx * config.controlSens;
+        player.targetY += dy * config.controlSens;
+        touchStartX = clientX; touchStartY = clientY;
+    }
+}
+
+canvas.addEventListener('touchstart', e => { e.preventDefault(); handleTouchStart(e.touches[0].clientX, e.touches[0].clientY); }, {passive: false});
+canvas.addEventListener('touchmove', e => { e.preventDefault(); handleTouchMove(e.touches[0].clientX, e.touches[0].clientY); }, {passive: false});
+canvas.addEventListener('touchend', e => { isTouchActive = false; }, {passive: false});
+canvas.addEventListener('mousedown', e => { handleTouchStart(e.clientX, e.clientY); });
+canvas.addEventListener('mousemove', e => { if(e.buttons === 1) handleTouchMove(e.clientX, e.clientY); });
+canvas.addEventListener('mouseup', e => { isTouchActive = false; });
+canvas.addEventListener('mouseleave', e => { isTouchActive = false; });
+
 window.addEventListener('resize', resize);
 
 function processGroup(group, isPlaying) { for (let i = group.length - 1; i >= 0; i--) { let entity = group[i]; if (isPlaying && hitStopFrames <= 0) entity.update(); entity.draw(ctx); if (isPlaying && (!entity.active)) group.splice(i, 1); } }

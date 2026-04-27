@@ -159,7 +159,8 @@ class Player {
 
         this.hp -= actualAmount; this.invincible = 20; 
         
-        let dmgMag = Math.min(30, Math.max(12, actualAmount * 0.8));
+        // 【暴力 UI 位移】：保底给出极大的位移系数，结合 main.js 里的高频插值，实现闪电般的回弹手感
+        let dmgMag = 35 + Math.min(25, actualAmount * 0.5);
         let dmgAng = Math.random() * Math.PI * 2;
         uiOffsets.hp.vx += Math.cos(dmgAng) * dmgMag;
         uiOffsets.hp.vy += Math.sin(dmgAng) * dmgMag;
@@ -176,7 +177,6 @@ class Player {
         else if (isKamikaze && !isSpecial) textColor = '#ffea00'; 
         else if (isSwarm) textColor = '#ab47bc'; 
         
-        // 传递 true 表示这是玩家受到的伤害，会触发极速飘字
         if(config.dmgText) pushFloatingText(this.x, this.y-20, Math.floor(actualAmount), textColor, true);
         comboCount = Math.floor(comboCount / 2);
         
@@ -298,13 +298,20 @@ class BaseEnemy {
         } 
     }
     baseUpdate() {
-        // 【核心】：第一帧判定标签，与治疗兵互斥，且Boss完全免疫
+        // 【标签互斥与独立贴图】：第一帧进行判定。治疗兵、特种兵和Boss免疫；允许Boss衍生物变异。
         if (!this._initMods) {
             this._initMods = true;
-            if (!this.isBoss && !this.isBossMinion && !this.isHealer && !this.isSpecial) {
+            if (!this.isHealer && !this.isSpecial && !this.isBoss) {
                 if (Math.random() < 0.15) {
                     this.isBattery = true;
                 }
+            }
+            
+            // 【无滤镜渲染】：如果是能量怪，自动将本体贴图替换为 config 里的电池专属贴图
+            if (this.isBattery) {
+                if (this.sprite === sprites.locator || this.sprite === sprites.locator_swarm) this.sprite = sprites.locator_battery;
+                else if (this.sprite === sprites.wanderer || this.sprite === sprites.wanderer_swarm) this.sprite = sprites.wanderer_battery;
+                else if (this.sprite === sprites.turret || this.sprite === sprites.turret_swarm) this.sprite = sprites.turret_battery;
             }
         }
 
@@ -323,11 +330,7 @@ class BaseEnemy {
         
         if(this.isElite) { ctx.shadowBlur = 15; ctx.shadowColor = '#ff1744'; }
         
-        // 【核心】：不发边缘光，直接使用原生滤镜翻转色彩，呈现纯正蓝调！
-        if(this.isBattery && !this.isElite) {
-            ctx.filter = 'hue-rotate(210deg)'; 
-        }
-        
+        // 彻底移除了这里的 filter 滤镜
         ctx.scale(this.scale, this.scale); ctx.drawImage(this.sprite, -this.w/2, -this.h/2); ctx.restore();
     }
     takeDamage(amount, showText=true, isCrit=false, damageType='normal') {
@@ -701,11 +704,11 @@ class DamageText {
         this.text = (isPlayerDamage ? "-" : prefix) + disp + (isCrit && typeof amountStr === 'number' ? "!" : ""); 
         this.color = colorStr || '#ffffff'; this.life = 45; this.maxLife = 45;
         
-        // 【核心】：大幅提升玩家受击时的飙血数字物理速度！
+        // 【暴力物理弹射】：极速爆射的初始速度！
         if (isPlayerDamage) {
-            this.vx = (Math.random() - 0.5) * 6; 
-            this.vy = -6 - Math.random() * 4; 
-            this.gravity = 0.4;
+            this.vx = (Math.random() - 0.5) * 8; 
+            this.vy = -8 - Math.random() * 5; 
+            this.gravity = 0.5;
         } else {
             this.vx = (Math.random() - 0.5) * 2; 
             this.vy = -3 - Math.random() * 2; 
@@ -720,7 +723,6 @@ class DamageText {
         let scale = progress < 0.2 ? 1 + (progress / 0.2) * 0.5 : 1.5 - ((progress - 0.2) / 0.8) * 0.5;
         if(this.isCrit) scale *= 1.3;
         ctx.save(); ctx.translate(this.x, this.y); ctx.scale(scale, scale);
-        // 使用在线完美像素字体
         ctx.fillStyle = this.color; ctx.font = `${this.fontSize}px "Press Start 2P", "DotGothic16", monospace`; ctx.textAlign = 'center'; 
         ctx.lineWidth = 3; ctx.strokeStyle = "#000"; ctx.strokeText(this.text, 0, 0); ctx.fillText(this.text, 0, 0);
         ctx.restore(); ctx.globalAlpha = 1; 
