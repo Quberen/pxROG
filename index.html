@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>像素肉鸽战机 V4.1 核心觉醒</title>
+    <title>像素肉鸽战机 V4.2 数据觉醒</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=DotGothic16&family=Press+Start+2P&display=swap');
         
@@ -51,6 +51,7 @@
         .btn-red { background: #e60050; border-color: #ff8a80;}
         .btn-blue { background: #00b0ff; border-color: #80d8ff;}
         .btn-dark { background: #333; }
+        .btn-yellow { background: #ff9800; border-color: #ffd180; color: #000; font-weight: bold; }
         .btn-disabled { background: #222 !important; border-color: #444 !important; color: #666 !important; pointer-events: none; filter: none !important; box-shadow: 4px 4px 0 #000 !important; }
 
         .diff-selector { display: flex; justify-content: space-between; gap: 5px; margin-bottom: 15px; width: 100%; max-width: 280px; }
@@ -77,52 +78,27 @@
         #hud-top-left.hud-hidden { transform: translateY(-20px); }
         #side-btns-container.hud-hidden { transform: translate(20px, -50%); }
 
-        #hud-hp-val { 
-            font-family: 'Press Start 2P', monospace; font-size: 16px; color: #00e676; 
-            text-shadow: 2px 2px 0 #000; display: inline-block;
-        }
-        #hud-pt-val { 
-            font-family: 'Press Start 2P', monospace; font-size: 12px; color: #e0e0e0; 
-            text-shadow: 2px 2px 0 #000; margin-bottom: 4px; display: inline-block;
-            position: relative;
-        }
+        #hud-hp-val { font-family: 'Press Start 2P', monospace; font-size: 16px; color: #00e676; text-shadow: 2px 2px 0 #000; display: inline-block; }
+        #hud-pt-val { font-family: 'Press Start 2P', monospace; font-size: 12px; color: #e0e0e0; text-shadow: 2px 2px 0 #000; margin-bottom: 4px; display: inline-block; position: relative; }
 
-        .pixel-btn-cvs {
-            cursor: pointer; transition: transform 0.1s, filter 0.2s; width: 48px; height: 48px;
-            image-rendering: pixelated; display: block;
-        }
+        .pixel-btn-cvs { cursor: pointer; transition: transform 0.1s, filter 0.2s; width: 48px; height: 48px; image-rendering: pixelated; display: block; }
         .pixel-btn-cvs:hover { filter: brightness(1.2); }
         .pixel-btn-cvs:active { transform: translate(3px, 3px); filter: brightness(1); }
 
-        #boss-hp-container {
-            position: absolute; top: 30px; left: 50%; transform: translateX(-50%); width: 50%; max-width: 250px;
-            height: 8px; background: #050505; border: 3px solid #222; z-index: 4; opacity: 0; transition: opacity 0.4s;
-            box-shadow: 0 4px 0 rgba(0,0,0,0.5); pointer-events: none; border-radius: 4px;
-        }
+        #boss-hp-container { position: absolute; top: 30px; left: 50%; transform: translateX(-50%); width: 50%; max-width: 250px; height: 8px; background: #050505; border: 3px solid #222; z-index: 4; opacity: 0; transition: opacity 0.4s; box-shadow: 0 4px 0 rgba(0,0,0,0.5); pointer-events: none; border-radius: 4px; }
         #boss-hp-delay { position: absolute; height: 100%; background: #fff; width: 100%; transition: width 0.5s linear; opacity: 0.8;}
         #boss-hp-fill { position: absolute; height: 100%; background: #ff1744; width: 100%; transition: width 0.1s linear;}
         
-        #boss-name-toast {
-            position: absolute; top: 65px; width: 100%; text-align: center; color: #ff1744; 
-            font-family: 'Press Start 2P', monospace; font-size: 24px; letter-spacing: 2px;
-            text-shadow: 3px 3px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000;
-            opacity: 0; transition: opacity 1.5s ease-in-out; z-index: 10; pointer-events: none;
-        }
-        
+        #boss-name-toast { position: absolute; top: 65px; width: 100%; text-align: center; color: #ff1744; font-family: 'Press Start 2P', monospace; font-size: 24px; letter-spacing: 2px; text-shadow: 3px 3px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000; opacity: 0; transition: opacity 1.5s ease-in-out; z-index: 10; pointer-events: none; }
         .system-message { position: absolute; top: 105px; width: 100%; text-align: center; font-family: 'Press Start 2P', 'DotGothic16', monospace; font-size: 10px; opacity: 0; pointer-events: none; transition: opacity 0.5s; text-shadow: 2px 2px 0 #000; z-index: 4; }
 
         .card-container { display: flex; flex-direction: column; gap: 12px; width: 95%; max-width: 320px; }
-        
         @keyframes popAnim { 0% { transform: scale(1); } 50% { transform: scale(1.05); filter: brightness(1.5); } 100% { transform: scale(1); } }
         .anim-pop { animation: popAnim 0.2s ease; }
 
-        .upgrade-card {
-            background: #1a1a2e; border: 3px solid #fff; padding: 12px; text-align: left; cursor: pointer; position: relative;
-            box-shadow: 4px 4px 0 #000; transition: transform 0.1s, box-shadow 0.1s, filter 0.2s; display: flex; justify-content: space-between; align-items: stretch; border-radius: 6px;
-        }
+        .upgrade-card { background: #1a1a2e; border: 3px solid #fff; padding: 12px; text-align: left; cursor: pointer; position: relative; box-shadow: 4px 4px 0 #000; transition: transform 0.1s, box-shadow 0.1s, filter 0.2s; display: flex; justify-content: space-between; align-items: stretch; border-radius: 6px; }
         .upgrade-card:hover:not(.disabled) { filter: brightness(1.15); }
         .upgrade-card:active { transform: translate(4px, 4px); box-shadow: 0 0 0 transparent; filter: brightness(1); }
-        
         .card-info { flex: 1; padding-right: 8px; }
         .card-title { margin-bottom: 6px; font-size: 10px; display: flex; justify-content: space-between; align-items:center;}
         .card-desc { color: #aaa; line-height: 1.4; font-size: 8px; }
@@ -131,25 +107,18 @@
         .card-max { font-size: 6px; color: #ccc; font-family: 'Press Start 2P', monospace;}
         .upgrade-card.disabled { opacity: 0.6; filter: grayscale(80%); cursor: not-allowed; }
         .upgrade-card.disabled:active { transform: none; box-shadow: 4px 4px 0 #000; filter: grayscale(80%); }
-        
         .equip-active { border-color: #00e676 !important; background: linear-gradient(90deg, #003311, #1a1a2e) !important;}
         .equip-inactive { border-color: #555 !important; background: #111 !important;}
         .tagged-item { box-shadow: 4px 4px 0 #ffea00 !important; border-color: #ffea00 !important; }
 
-        .equip-chip {
-            background: #111; border: 3px solid #555; border-radius: 6px; padding: 6px; display: flex; align-items: center; gap: 8px; 
-            cursor: pointer; transition: all 0.1s; width: calc(50% - 3px);
-        }
+        .equip-chip { background: #111; border: 3px solid #555; border-radius: 6px; padding: 6px; display: flex; align-items: center; gap: 8px; cursor: pointer; transition: all 0.1s; width: calc(50% - 3px); }
         .equip-chip:hover { border-color: #fff; filter: brightness(1.2); }
         .equip-chip:active { transform: translateY(2px); }
         .equip-chip.core-chip { border-color: #00b0ff; background: rgba(0, 176, 255, 0.15); }
         .equip-chip.ext-chip { border-color: #ab47bc; background: rgba(171, 71, 188, 0.15); }
         .equip-chip.locked-chip { border-color: #ff1744 !important; background: rgba(255, 23, 68, 0.15) !important; cursor: not-allowed; }
 
-        .empty-slot {
-            background: rgba(255,255,255,0.05); border: 3px dashed #444; border-radius: 6px; width: calc(50% - 3px); height: 32px; 
-            display: flex; justify-content: center; align-items: center; color: #555; font-size: 14px; font-family: monospace;
-        }
+        .empty-slot { background: rgba(255,255,255,0.05); border: 3px dashed #444; border-radius: 6px; width: calc(50% - 3px); height: 32px; display: flex; justify-content: center; align-items: center; color: #555; font-size: 14px; font-family: monospace; }
 
         #inflation-container { width: 95%; max-width: 320px; margin-bottom: 10px; background: #111; border: 2px solid #555; border-radius: 4px; padding: 5px; }
         #inflation-bar-bg { width: 100%; height: 6px; background: #222; border-radius: 3px; position: relative; overflow: hidden; }
@@ -158,6 +127,16 @@
 
         .abyss-clear-title { color: #ffea00 !important; text-shadow: 2px 4px 0 #e65100 !important; animation: textGlow 2s infinite; }
         .ctrl-hidden { display: none !important; }
+        
+        /* 创意工坊终端文本框样式 */
+        #workshop-textarea {
+            width: 90%; max-width: 400px; height: 50%; background: #000; color: #00e676;
+            font-family: monospace; font-size: 10px; border: 2px solid #00b0ff; 
+            padding: 10px; resize: none; border-radius: 4px; outline: none;
+            box-shadow: inset 0 0 10px rgba(0, 229, 255, 0.2);
+            white-space: pre; overflow-wrap: normal; overflow-x: auto;
+        }
+        #workshop-textarea:focus { border-color: #00e5ff; }
     </style>
 </head>
 <body>
@@ -187,7 +166,7 @@
     </div>
 
     <div id="start-screen" class="overlay active">
-        <h1>肉鸽战机 V4.1</h1>
+        <h1>肉鸽战机 V4.2</h1>
         
         <div class="diff-selector" id="diff-selector">
             <button class="diff-btn selected" onclick="selectDifficulty(0)">新兵</button>
@@ -196,12 +175,26 @@
             <button class="diff-btn locked" id="diff-nightmare" onclick="selectDifficulty(3)">深渊</button>
         </div>
 
-        <p style="margin-bottom: 20px; color:#ffeb3b" id="diff-desc">简单：新手教学，无集群敌人。</p>
+        <p style="margin-bottom: 15px; color:#ffeb3b" id="diff-desc">简单：新手教学，无集群敌人。</p>
 
         <div class="btn-group">
             <button class="btn btn-red" onclick="startGame('sector1')">区域 1: 废星边缘</button>
             <button class="btn btn-dark" onclick="startGame('debug')">代号: 调试 [无尽模式]</button>
+            <button class="btn btn-yellow" style="margin-top: 15px;" onclick="openWorkshop()">进入极客工坊 (DIY)</button>
         </div>
+    </div>
+
+    <div id="workshop-menu" class="overlay">
+        <h2 style="color: #ffea00; text-shadow: 2px 2px 0 #e65100;">JSON 数据控制台</h2>
+        <p style="font-size: 8px; color: #aaa; margin-bottom: 5px;">修改参数后点击[注入覆写]生效。修改敌人数值、商品价格、物理手感。</p>
+        
+        <textarea id="workshop-textarea" spellcheck="false"></textarea>
+        
+        <div style="display:flex; gap:10px; margin-top:15px; width:90%; max-width:400px;">
+            <button class="btn btn-red" style="flex:1;" onclick="applyWorkshopData()">注入覆写</button>
+            <button class="btn btn-dark" style="flex:1;" onclick="closeWorkshop()">关闭控制台</button>
+        </div>
+        <div id="workshop-status" style="font-size:8px; color:#00e676; margin-top:10px; font-family:'Press Start 2P';"></div>
     </div>
 
     <div id="pause-menu" class="overlay">
@@ -216,13 +209,11 @@
 
     <div id="settings-menu" class="overlay">
         <h2 id="settings-title">系统设置</h2>
-        
         <div id="settings-main-list" class="btn-group">
             <button class="btn" onclick="enterSettingsSub('control')">操控设定 >></button>
             <button class="btn" onclick="enterSettingsSub('game')">系统与画面 >></button>
             <button class="btn btn-blue" style="margin-top:20px;" onclick="closeSettings()">返回游戏</button>
         </div>
-        
         <div id="settings-sub-game" class="ctrl-hidden" style="width:100%; display:flex; flex-direction:column; align-items:center;">
             <div class="btn-group">
                 <button class="btn btn-dark" id="toggle-dmg-btn" onclick="toggleSetting('dmgText')">伤害飘字: 开</button>
@@ -230,7 +221,6 @@
             </div>
             <button class="btn btn-blue" style="margin-top:30px; width:80%; max-width:250px;" onclick="backToSettingsMain()">返回上级</button>
         </div>
-        
         <div id="settings-sub-control" class="ctrl-hidden" style="width:100%; display:flex; flex-direction:column; align-items:center;">
             <div class="diff-selector" style="margin-bottom: 5px; width: 80%; max-width:200px;">
                 <button id="ctrl-mode-abs" class="diff-btn selected" onclick="setControlMode('absolute')">绝对定位</button>
@@ -240,7 +230,6 @@
                 <button id="ctrl-touch-single" class="diff-btn selected" onclick="setTouchMode('single')">单点锁定</button>
                 <button id="ctrl-touch-multi" class="diff-btn" onclick="setTouchMode('multi')">多指映射</button>
             </div>
-
             <div id="settings-abs-ui" style="display:flex; flex-direction:column; align-items:center; width:100%;">
                 <p style="color:#aaa; font-size:8px; margin-bottom:10px;">控制手指纵向偏移补偿</p>
                 <div id="offset-widget" style="position:relative; width:80px; height:80px; margin:0 auto; touch-action:none; background:rgba(0,0,0,0.5); border-radius: 50%; box-shadow: inset 0 0 0 4px #444, 4px 4px 0 #000;">
@@ -312,6 +301,7 @@
     </div>
 </div>
 
+<script src="mod_workshop.js"></script>
 <script src="config.js"></script>
 <script src="entities.js"></script>
 <script src="main.js"></script>

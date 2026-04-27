@@ -159,7 +159,7 @@ class Player {
 
         this.hp -= actualAmount; this.invincible = 20; 
         
-        // 【暴力 HP 位移】：直接赋予坐标偏移，配合高频插值引擎瞬间回弹！
+        // 动态位移坐标产生：被 main.js 中的高频弹簧捕获
         let dmgMag = 15 + Math.min(20, actualAmount * 0.6);
         let dmgAng = Math.random() * Math.PI * 2;
         uiOffsets.hp.x += Math.cos(dmgAng) * dmgMag;
@@ -298,16 +298,12 @@ class BaseEnemy {
         } 
     }
     baseUpdate() {
-        // 【变异判定】：治疗、自爆特种和Boss免疫，放开了对Boss小怪的限制！
         if (!this._initMods) {
             this._initMods = true;
             if (!this.isHealer && !this.isSpecial && !this.isBoss) {
-                if (Math.random() < 0.15) {
-                    this.isBattery = true;
-                }
+                if (Math.random() < 0.15) { this.isBattery = true; }
             }
             
-            // 【手工绘制纹理替换】：匹配电池能量怪物
             if (this.isBattery) {
                 if (this.sprite === sprites.locator || this.sprite === sprites.locator_swarm) this.sprite = sprites.locator_battery;
                 else if (this.sprite === sprites.wanderer || this.sprite === sprites.wanderer_swarm) this.sprite = sprites.wanderer_battery;
@@ -318,92 +314,72 @@ class BaseEnemy {
         if (this.isElite && this.y > 0 && this.y < height * 0.8) {
             this.eliteFireTimer--;
             if (this.eliteFireTimer <= 0) {
-                for(let i=0; i<8; i++) {
-                    let angle = (Math.PI * 2 / 8) * i; enemyBullets.push(new EnemyBullet(this.x, this.y, Math.cos(angle)*2.5, Math.sin(angle)*2.5, 'normal'));
-                }
+                for(let i=0; i<8; i++) { let angle = (Math.PI * 2 / 8) * i; enemyBullets.push(new EnemyBullet(this.x, this.y, Math.cos(angle)*2.5, Math.sin(angle)*2.5, 'normal')); }
                 this.eliteFireTimer = 180;
             }
         }
     }
     draw(ctx) { 
         ctx.save(); ctx.translate(this.x, this.y);
-        
         if(this.isElite) { ctx.shadowBlur = 15; ctx.shadowColor = '#ff1744'; }
-        
         ctx.scale(this.scale, this.scale); ctx.drawImage(this.sprite, -this.w/2, -this.h/2); ctx.restore();
     }
     takeDamage(amount, showText=true, isCrit=false, damageType='normal') {
         this.hp -= amount; 
         if(particles.length < 150) {
-            let pCount = this.isElite || this.isBoss ? 4 : 2;
-            let pCol = this.isBattery ? '#00e5ff' : this.particleColor; 
+            let pCount = this.isElite || this.isBoss ? 4 : 2; let pCol = this.isBattery ? '#00e5ff' : this.particleColor; 
             for(let i=0; i<pCount; i++) particles.push(new Particle(this.x, this.y, pCol, (Math.random()-0.5)*4, (Math.random()-0.5)*4, 10));
         }
         if(showText && config.dmgText) {
             let color = '#ffffff'; if (isCrit) color = '#ffea00'; else if (damageType === 'laser') color = '#00e5ff';
             pushFloatingText(this.x + (Math.random()-0.5)*15, this.y - this.h/2*this.scale, amount, color, false, isCrit);
         }
-        if (this.hp <= 0 && endingState === 'none') {
-            if (this.isBoss) { this.hp = 0; startEnding('bossDead'); } else { this.die(true); }
-        }
+        if (this.hp <= 0 && endingState === 'none') { if (this.isBoss) { this.hp = 0; startEnding('bossDead'); } else { this.die(true); } }
     }
     die(killed) {
-        this.active = false; 
-        let pColor = this.isBattery ? '#00e5ff' : this.particleColor;
-        createExplosion(this.x, this.y, pColor, this.isElite || this.isBoss ? 40 : 12); 
-        triggerShake(this.isElite || this.isBoss ? 8 : 2, 5); 
+        this.active = false; let pColor = this.isBattery ? '#00e5ff' : this.particleColor;
+        createExplosion(this.x, this.y, pColor, this.isElite || this.isBoss ? 40 : 12); triggerShake(this.isElite || this.isBoss ? 8 : 2, 5); 
         
         if (killed) { 
             if (this.isSpecial) specialKamikazeMisses = 0; 
-            
             comboCount++; comboTimer = maxComboTimer;
             if (comboCount > 0 && comboCount % 50 === 0) {
                 let color = comboCount >= 200 ? '#e60050' : (comboCount >= 100 ? '#ffea00' : '#00b0ff');
-                createExplosion(this.x, this.y, color, 30); triggerShake(4, 5);
-                items.push(new Item(this.x, this.y, 'combo_reward', comboCount * 0.1, color));
+                createExplosion(this.x, this.y, color, 30); triggerShake(4, 5); items.push(new Item(this.x, this.y, 'combo_reward', comboCount * 0.1, color));
             }
-
-            if (this.isHealer) {
-                items.push(new Item(this.x, this.y, 'hp', { isElite: this.isElite })); 
-            } else if (this.isBattery) {
-                items.push(new Item(this.x, this.y, 'energy', Math.max(15, this.weight * 5))); 
-            } else {
-                let ptVal = this.weight * 0.1;
-                if (this.isElite) ptVal *= 30; 
-                if (this.isBossMinion) ptVal = this.weight * 0.1 * 1.5; 
+            if (this.isHealer) { items.push(new Item(this.x, this.y, 'hp', { isElite: this.isElite })); } 
+            else if (this.isBattery) { items.push(new Item(this.x, this.y, 'energy', Math.max(15, this.weight * 5))); } 
+            else {
+                let ptVal = this.weight * 0.1; if (this.isElite) ptVal *= 30; if (this.isBossMinion) ptVal = this.weight * 0.1 * 1.5; 
                 items.push(new Item(this.x, this.y, ptVal >= 1.0 ? 'pt_core' : 'pt_shard', ptVal)); 
             }
         }
     }
 }
 
+// 【数据剥离实现】：所有继承类在构建时直接抽取 WORKSHOP 中的字典数据
 class Locator extends BaseEnemy {
     constructor(x, y, isSwarm=false, isHealer=false, speedOverride=null) { 
         let pColor = isHealer ? '#00e676' : (isSwarm ? '#ab47bc' : '#757575');
-        let hpRaw = isSwarm ? 18 : 12;
+        let key = isSwarm ? 'LocatorSwarm' : 'Locator'; let def = WORKSHOP.data.enemies[key];
         let spr = isHealer ? sprites.locator_healer : (isSwarm ? sprites.locator_swarm : sprites.locator);
-        super(x, y, spr, hpRaw, isSwarm ? 6 : 1, pColor); 
+        super(x, y, spr, def.hp, def.weight, pColor); 
         this.speed = speedOverride || (isSwarm ? 1.5 : 1.0 + Math.random()*0.5); 
         this.isHealer = isHealer; this.isSwarm = isSwarm;
     }
-    update() { 
-        this.baseUpdate(); this.y += this.speed; this.checkBounds(); this.checkPlayerCollision(); 
-    }
+    update() { this.baseUpdate(); this.y += this.speed; this.checkBounds(); this.checkPlayerCollision(); }
 }
 
 class Wanderer extends BaseEnemy { 
     constructor(x, y, isHighThreat, phase=null, isSwarm=false, isHealer=false, side=null) { 
-        let spr = isHealer ? sprites.wanderer_healer : (isSwarm ? sprites.wanderer_swarm : sprites.wanderer);
         let pColor = isHealer ? '#00e676' : (isSwarm ? '#ab47bc' : '#757575');
-        let hpRaw = isHighThreat ? 24 : (isSwarm ? 30 : 18);
-        let w = isHighThreat ? 8 : (isSwarm ? 15 : 3);
-        super(x, y, spr, hpRaw, w, pColor); 
+        let key = isSwarm ? 'WandererSwarm' : (isHighThreat ? 'WandererHigh' : 'WandererLow'); let def = WORKSHOP.data.enemies[key];
+        let spr = isHealer ? sprites.wanderer_healer : (isSwarm ? sprites.wanderer_swarm : sprites.wanderer);
+        super(x, y, spr, def.hp, def.weight, pColor); 
         this.isHealer = isHealer; this.isSwarm = isSwarm;
-
         this.side = side; this.swayPhase = phase !== null ? phase : Math.random() * Math.PI * 2; 
         let baseSpeed = isHighThreat ? (1.6 + Math.random()*1.5) : (0.8 + Math.random()*0.6);
         this.swayAmp = isHighThreat ? (3.5 + Math.random()*3.5) : (1.0 + Math.random()*1.5);
-
         if (this.side === 'left') { this.x = -40; this.y = -40; this.vx = 2.0; this.vy = baseSpeed; }
         else if (this.side === 'right') { this.x = width+40; this.y = -40; this.vx = -2.0; this.vy = baseSpeed; }
         else { this.vx = 0; this.vy = baseSpeed; }
@@ -411,25 +387,20 @@ class Wanderer extends BaseEnemy {
     update() { 
         this.baseUpdate(); this.x += this.vx; this.y += this.vy; 
         if (!this.side) this.x += Math.sin(frameCount * 0.04 + this.swayPhase) * this.swayAmp; 
-        if (this.y > 0) {
-            let boundedW = this.w/2 * this.scale;
-            if (this.x < boundedW) { this.x = boundedW; if(this.vx < 0) this.vx *= -1; }
-            if (this.x > width - boundedW) { this.x = width - boundedW; if(this.vx > 0) this.vx *= -1; }
-        }
+        if (this.y > 0) { let boundedW = this.w/2 * this.scale; if (this.x < boundedW) { this.x = boundedW; if(this.vx < 0) this.vx *= -1; } if (this.x > width - boundedW) { this.x = width - boundedW; if(this.vx > 0) this.vx *= -1; } }
         this.checkBounds(); this.checkPlayerCollision(); 
     } 
 }
 
 class Kamikaze extends BaseEnemy {
     constructor(x, y, vType='normal') { 
-        let spr = vType === 'special' ? sprites.kamikaze_special_idle : (vType === 'swarm' ? sprites.kamikaze_swarm_idle : sprites.kamikaze_idle);
         let pColor = vType === 'special' ? '#8e0000' : (vType === 'swarm' ? '#ab47bc' : '#ffeb3b');
+        let key = vType === 'special' ? 'KamikazeSpec' : (vType === 'swarm' ? 'KamikazeSwarm' : 'Kamikaze'); let def = WORKSHOP.data.enemies[key];
+        let spr = vType === 'special' ? sprites.kamikaze_special_idle : (vType === 'swarm' ? sprites.kamikaze_swarm_idle : sprites.kamikaze_idle);
         
-        let hpRaw = 18; let w = 4;
-        if (vType === 'special') { hpRaw = (currentDifficulty === 3 ? 180 : 120) * (1 + specialKamikazeMisses * 1.5); w = 25; }
-        else if (vType === 'swarm') { hpRaw = 12; w = 16; }
-
-        super(x, y, spr, hpRaw, w, pColor); 
+        let actHp = def.hp;
+        if (vType === 'special') { actHp = (currentDifficulty === 3 ? 180 : 120) * (1 + specialKamikazeMisses * 1.5); }
+        super(x, y, spr, actHp, def.weight, pColor); 
         this.vType = vType; this.state = 'ENTER'; this.timer = 0; this.vx = 0; this.vy = 2; 
         this.warnTime = vType === 'special' ? 75 : 45; this.dashSpeed = vType === 'special' ? 16 : (8 + Math.random()*3); 
         this.isKamikaze = true; this.isSpecial = vType === 'special'; this.isSwarm = vType === 'swarm';
@@ -437,20 +408,11 @@ class Kamikaze extends BaseEnemy {
     update() {
         this.baseUpdate();
         if (this.state === 'ENTER') { 
-            this.y += this.vy; 
-            if (this.y > 60) { this.state = 'WARN'; this.timer = this.warnTime; this.sprite = this.vType === 'special' ? sprites.kamikaze_special_warn : (this.vType === 'swarm' ? sprites.kamikaze_swarm_warn : sprites.kamikaze_warn); } 
-        } 
-        else if (this.state === 'WARN') { 
+            this.y += this.vy; if (this.y > 60) { this.state = 'WARN'; this.timer = this.warnTime; this.sprite = this.vType === 'special' ? sprites.kamikaze_special_warn : (this.vType === 'swarm' ? sprites.kamikaze_swarm_warn : sprites.kamikaze_warn); } 
+        } else if (this.state === 'WARN') { 
             this.timer--; this.x += (Math.random() - 0.5) * (this.vType === 'special' ? 3 : 2); 
-            if (this.timer <= 0) { 
-                this.state = 'DASH'; let dx = player.x - this.x; let dy = player.y - this.y; let dist = Math.sqrt(dx*dx + dy*dy) || 1; 
-                this.vx = (dx/dist) * this.dashSpeed; this.vy = (dy/dist) * this.dashSpeed; 
-            } 
-        } 
-        else if (this.state === 'DASH') { 
-            this.x += this.vx; this.y += this.vy; 
-            this.checkBounds(); 
-        }
+            if (this.timer <= 0) { this.state = 'DASH'; let dx = player.x - this.x; let dy = player.y - this.y; let dist = Math.sqrt(dx*dx + dy*dy) || 1; this.vx = (dx/dist) * this.dashSpeed; this.vy = (dy/dist) * this.dashSpeed; } 
+        } else if (this.state === 'DASH') { this.x += this.vx; this.y += this.vy; this.checkBounds(); }
         
         let overrideDmg = 30; if(this.vType === 'swarm') overrideDmg = 20;
         if (this.vType === 'special') this.checkPlayerCollision(true, 0.35); else this.checkPlayerCollision(false, overrideDmg);
@@ -459,10 +421,10 @@ class Kamikaze extends BaseEnemy {
 
 class Turret extends BaseEnemy {
     constructor(x, y, isSwarm=false, isHealer=false) { 
-        let spr = isHealer ? sprites.turret_healer : (isSwarm ? sprites.turret_swarm : sprites.turret);
         let pColor = isHealer ? '#00e676' : (isSwarm ? '#ab47bc' : '#757575');
-        let hpRaw = isSwarm ? 72 : 48;
-        super(x, y, spr, hpRaw, isSwarm ? 22 : 10, pColor); 
+        let key = isSwarm ? 'TurretSwarm' : 'Turret'; let def = WORKSHOP.data.enemies[key];
+        let spr = isHealer ? sprites.turret_healer : (isSwarm ? sprites.turret_swarm : sprites.turret);
+        super(x, y, spr, def.hp, def.weight, pColor); 
         this.isSwarm = isSwarm; this.targetY = 50 + Math.random() * 100; 
         this.shootTimer = 60 + Math.random() * 60; this.isHealer = isHealer;
     }
@@ -470,11 +432,7 @@ class Turret extends BaseEnemy {
         this.baseUpdate();
         if (this.y < this.targetY) this.y += 2; else { 
             this.shootTimer--; 
-            if(this.shootTimer <= 0) { 
-                let dx = player.x - this.x; let dy = player.y - this.y; let dist = Math.sqrt(dx*dx + dy*dy) || 1; 
-                enemyBullets.push(new EnemyBullet(this.x, this.y + this.h/2, (dx/dist)*3, (dy/dist)*3, this.isSwarm ? 'homing' : 'normal')); 
-                this.shootTimer = this.isSwarm ? 120 : 100; 
-            } 
+            if(this.shootTimer <= 0) { let dx = player.x - this.x; let dy = player.y - this.y; let dist = Math.sqrt(dx*dx + dy*dy) || 1; enemyBullets.push(new EnemyBullet(this.x, this.y + this.h/2, (dx/dist)*3, (dy/dist)*3, this.isSwarm ? 'homing' : 'normal')); this.shootTimer = this.isSwarm ? 120 : 100; } 
         }
         this.checkBounds(); this.checkPlayerCollision();
     }
@@ -483,20 +441,16 @@ class Turret extends BaseEnemy {
 class ArcFlyer extends BaseEnemy { 
     constructor(x, y, isLeft, progressOffset=0, isSwarm=false) { 
         let pColor = isSwarm ? '#ab47bc' : '#37474f';
-        let hpRaw = isSwarm ? 144 : 72;
-        super(0, y, isSwarm ? sprites.arc_swarm : sprites.arc, hpRaw, isSwarm ? 20 : 12, pColor); 
+        let key = isSwarm ? 'ArcFlyerSwarm' : 'ArcFlyer'; let def = WORKSHOP.data.enemies[key];
+        super(0, y, isSwarm ? sprites.arc_swarm : sprites.arc, def.hp, def.weight, pColor); 
         this.isLeft = isLeft; this.x = this.isLeft ? -30 : width + 30; 
         this.startY = y + 80; this.progress = progressOffset; this.bombTimer = 0; this.isSwarm = isSwarm;
     } 
     update() { 
         this.baseUpdate(); this.progress += 0.012; 
         if(this.progress > 0) {
-            this.x = this.isLeft ? -30 + (width + 60) * this.progress : width + 30 - (width + 60) * this.progress; 
-            this.y = this.startY + Math.sin(this.progress * Math.PI) * 150; 
-            this.bombTimer--;
-            if (this.bombTimer <= 0 && this.x > 10 && this.x < width - 10) {
-                enemyBullets.push(new EnemyBullet(this.x, this.y, 0, 4, 'normal')); this.bombTimer = 35; 
-            }
+            this.x = this.isLeft ? -30 + (width + 60) * this.progress : width + 30 - (width + 60) * this.progress; this.y = this.startY + Math.sin(this.progress * Math.PI) * 150; 
+            this.bombTimer--; if (this.bombTimer <= 0 && this.x > 10 && this.x < width - 10) { enemyBullets.push(new EnemyBullet(this.x, this.y, 0, 4, 'normal')); this.bombTimer = 35; }
         }
         if (this.progress >= 1) this.active = false; if (this.progress > 0) this.checkPlayerCollision(); 
     } 
@@ -504,10 +458,10 @@ class ArcFlyer extends BaseEnemy {
 
 class Tank extends BaseEnemy { 
     constructor(x, y, isSpecial=false, isSwarm=false) { 
-        let spr = isSwarm ? sprites.tank_swarm : sprites.tank;
         let pColor = isSwarm ? '#ab47bc' : '#757575';
-        let hpRaw = isSwarm ? 180 : 120;
-        super(x, y, spr, hpRaw, isSwarm ? 40 : 30, pColor); 
+        let key = isSwarm ? 'TankSwarm' : 'Tank'; let def = WORKSHOP.data.enemies[key];
+        let spr = isSwarm ? sprites.tank_swarm : sprites.tank;
+        super(x, y, spr, def.hp, def.weight, pColor); 
         this.speed = isSwarm ? 0.15 : 0.4; this.spawnTimer = 180; this.isSwarm = isSwarm;
     } 
     update() { 
@@ -515,14 +469,8 @@ class Tank extends BaseEnemy {
         if(this.isSwarm && this.y > 0 && this.y < height * 0.7) {
             this.spawnTimer--;
             if(this.spawnTimer <= 0) { 
-                if (Math.random() < 0.5) {
-                    enemies.push(new Kamikaze(this.x - 20, this.y + 20, 'swarm'));
-                    enemies.push(new Kamikaze(this.x + 20, this.y + 20, 'swarm'));
-                } else {
-                    enemies.push(new Locator(this.x - 30, this.y + 20, true));
-                    enemies.push(new Locator(this.x, this.y + 30, true));
-                    enemies.push(new Locator(this.x + 30, this.y + 20, true));
-                }
+                if (Math.random() < 0.5) { enemies.push(new Kamikaze(this.x - 20, this.y + 20, 'swarm')); enemies.push(new Kamikaze(this.x + 20, this.y + 20, 'swarm')); } 
+                else { enemies.push(new Locator(this.x - 30, this.y + 20, true)); enemies.push(new Locator(this.x, this.y + 30, true)); enemies.push(new Locator(this.x + 30, this.y + 20, true)); }
                 this.spawnTimer = 240; 
             }
         }
@@ -533,81 +481,45 @@ class Tank extends BaseEnemy {
 class BossScrapDominator extends BaseEnemy {
     constructor(x, y) {
         super(x, y, sprites.boss_scrap, (currentDifficulty <= 1) ? 4000 : 8000, 100, '#7b1fa2');
-        this.hp = this.maxHp; 
-        this.phase = 1; this.state = 'ENTER'; this.timer = 120; this.targetX = width / 2;
+        this.hp = this.maxHp; this.phase = 1; this.state = 'ENTER'; this.timer = 120; this.targetX = width / 2;
         this.isSpecial = true; this.isBoss = true; this.laserWarnTimer = 0; this.laserFireTimer = 0;
         
-        ui.bossHpCont.style.opacity = 1;
-        ui.bossToast.innerText = "废铁主宰者";
-        ui.bossToast.style.opacity = 1;
-        setTimeout(() => { ui.bossToast.style.opacity = 0; }, 4000);
+        ui.bossHpCont.style.opacity = 1; ui.bossToast.innerText = "废铁主宰者"; ui.bossToast.style.opacity = 1; setTimeout(() => { ui.bossToast.style.opacity = 0; }, 4000);
     }
     
     update() {
         if (endingState === 'bossDead') return;
-        
         let hpPct = Math.max(0, this.hp / this.maxHp);
-        ui.bossHpFill.style.width = `${hpPct * 100}%`;
-        ui.bossHpDelay.style.width = `${hpPct * 100}%`;
+        ui.bossHpFill.style.width = `${hpPct * 100}%`; ui.bossHpDelay.style.width = `${hpPct * 100}%`;
 
-        if (this.phase === 1 && this.hp < this.maxHp * 0.5) {
-            this.phase = 2; this.sprite = sprites.boss_scrap_phase2; 
-            triggerShake(20, 30); createExplosion(this.x, this.y, '#ff1744', 40); this.state = 'HOVER'; this.timer = 60;
-        }
-        if (this.state === 'ENTER') {
-            this.y += 1; if (this.y >= 100) { this.state = 'HOVER'; this.timer = 60; }
-        }
+        if (this.phase === 1 && this.hp < this.maxHp * 0.5) { this.phase = 2; this.sprite = sprites.boss_scrap_phase2; triggerShake(20, 30); createExplosion(this.x, this.y, '#ff1744', 40); this.state = 'HOVER'; this.timer = 60; }
+        if (this.state === 'ENTER') { this.y += 1; if (this.y >= 100) { this.state = 'HOVER'; this.timer = 60; } }
         else if (this.state === 'HOVER') {
             this.x += (this.targetX - this.x) * 0.02; this.timer--;
             if (this.timer <= 0) {
                 let roll = Math.random();
-                if (this.phase === 1) {
-                    if (roll < 0.5) { this.state = 'ATTACK_SPAWN'; this.timer = 30; } else { this.state = 'ATTACK_RING'; this.timer = 60; }
-                } else {
-                    if (roll < 0.3) { this.state = 'ATTACK_SPAWN'; this.timer = 30; }
-                    else if (roll < 0.6) { this.state = 'ATTACK_RING'; this.timer = 60; }
-                    else { this.state = 'ATTACK_LASER'; this.laserWarnTimer = 60; this.laserFireTimer = 60; }
-                }
+                if (this.phase === 1) { if (roll < 0.5) { this.state = 'ATTACK_SPAWN'; this.timer = 30; } else { this.state = 'ATTACK_RING'; this.timer = 60; } } 
+                else { if (roll < 0.3) { this.state = 'ATTACK_SPAWN'; this.timer = 30; } else if (roll < 0.6) { this.state = 'ATTACK_RING'; this.timer = 60; } else { this.state = 'ATTACK_LASER'; this.laserWarnTimer = 60; this.laserFireTimer = 60; } }
             }
             if (Math.abs(this.targetX - this.x) < 10 && Math.random() < 0.02) this.targetX = Math.random() * (width - 100) + 50;
         }
         else if (this.state === 'ATTACK_SPAWN') {
             this.timer--; this.x += (this.targetX - this.x) * 0.01;
             if (this.timer === 0) {
-                if (this.phase === 1) { 
-                    for(let i=0; i<4; i++) {
-                        let e = new Locator(this.x + (i-1.5)*40, this.y + 40); e.weight *= 1.5; e.isBossMinion = true; enemies.push(e);
-                    }
-                } 
-                else { 
-                    let phaseAngle = Math.random() * Math.PI * 2; 
-                    for(let i=0; i<4; i++) {
-                        let e = new Wanderer(i%2===0 ? 40 : width-40, -40, false, phaseAngle + i*Math.PI/2, true); e.weight *= 1.5; e.isBossMinion = true; enemies.push(e);
-                    }
-                }
+                if (this.phase === 1) { for(let i=0; i<4; i++) { let e = new Locator(this.x + (i-1.5)*40, this.y + 40); e.weight *= 1.5; e.isBossMinion = true; enemies.push(e); } } 
+                else { let phaseAngle = Math.random() * Math.PI * 2; for(let i=0; i<4; i++) { let e = new Wanderer(i%2===0 ? 40 : width-40, -40, false, phaseAngle + i*Math.PI/2, true); e.weight *= 1.5; e.isBossMinion = true; enemies.push(e); } }
                 this.state = 'HOVER'; this.timer = 60;
             }
         }
         else if (this.state === 'ATTACK_RING') {
             this.timer--; this.x += (this.targetX - this.x) * 0.005;
-            if (this.timer % 15 === 0) {
-                let bCount = this.phase === 1 ? 12 : 16; let offset = (this.timer / 15) * 0.2;
-                for (let i = 0; i < bCount; i++) {
-                    let angle = (Math.PI * 2 / bCount) * i + offset; let speed = 3;
-                    enemyBullets.push(new EnemyBullet(this.x, this.y, Math.cos(angle)*speed, Math.sin(angle)*speed, 'normal'));
-                }
-            }
+            if (this.timer % 15 === 0) { let bCount = this.phase === 1 ? 12 : 16; let offset = (this.timer / 15) * 0.2; for (let i = 0; i < bCount; i++) { let angle = (Math.PI * 2 / bCount) * i + offset; let speed = 3; enemyBullets.push(new EnemyBullet(this.x, this.y, Math.cos(angle)*speed, Math.sin(angle)*speed, 'normal')); } }
             if (this.timer <= 0) { this.state = 'HOVER'; this.timer = 90; }
         }
         else if (this.state === 'ATTACK_LASER') {
             if (this.laserWarnTimer > 0) this.laserWarnTimer--;
-            else if (this.laserFireTimer > 0) {
-                this.laserFireTimer--;
-                if (Math.abs(player.x - this.x) < 30 && player.y > this.y) {
-                    let diffDmg = 10 * DIFF_CONFIG[currentDifficulty].dmgMod; player.takeDamage(diffDmg, false, 'special');
-                }
-                triggerShake(3, 2);
-            } else { this.state = 'HOVER'; this.timer = 90; this.targetX = Math.random() * (width - 100) + 50; }
+            else if (this.laserFireTimer > 0) { this.laserFireTimer--; if (Math.abs(player.x - this.x) < 30 && player.y > this.y) { let diffDmg = 10 * DIFF_CONFIG[currentDifficulty].dmgMod; player.takeDamage(diffDmg, false, 'special'); } triggerShake(3, 2); } 
+            else { this.state = 'HOVER'; this.timer = 90; this.targetX = Math.random() * (width - 100) + 50; }
         }
         this.checkPlayerCollision(false, 40);
     }
@@ -615,12 +527,8 @@ class BossScrapDominator extends BaseEnemy {
     draw(ctx) {
         super.draw(ctx);
         if (this.state === 'ATTACK_LASER' && endingState === 'none') {
-            if (this.laserWarnTimer > 0) {
-                ctx.fillStyle = `rgba(255, 23, 68, ${0.2 + (60-this.laserWarnTimer)/60 * 0.4})`; ctx.fillRect(this.x - 30, this.y, 60, height);
-            } else if (this.laserFireTimer > 0) {
-                ctx.save(); ctx.shadowBlur = 20; ctx.shadowColor = '#ff1744'; ctx.fillStyle = '#ff1744'; ctx.fillRect(this.x - 25, this.y, 50, height);
-                ctx.shadowBlur = 0; ctx.fillStyle = '#ffffff'; ctx.fillRect(this.x - 10, this.y, 20, height); ctx.restore();
-            }
+            if (this.laserWarnTimer > 0) { ctx.fillStyle = `rgba(255, 23, 68, ${0.2 + (60-this.laserWarnTimer)/60 * 0.4})`; ctx.fillRect(this.x - 30, this.y, 60, height); } 
+            else if (this.laserFireTimer > 0) { ctx.save(); ctx.shadowBlur = 20; ctx.shadowColor = '#ff1744'; ctx.fillStyle = '#ff1744'; ctx.fillRect(this.x - 25, this.y, 50, height); ctx.shadowBlur = 0; ctx.fillStyle = '#ffffff'; ctx.fillRect(this.x - 10, this.y, 20, height); ctx.restore(); }
         }
     }
 }
@@ -629,63 +537,33 @@ class Item {
     constructor(x, y, type, value, overrideColor = null) { 
         this.x = x; this.y = y; this.type = type; this.value = value; this.active = true; 
         this.vy = 1.5; this.color = overrideColor;
-        
-        if (type === 'hp') this.sprite = sprites.hp;
-        else if (type === 'pt_core') this.sprite = sprites.pt_core;
-        else if (type === 'pt_shard') this.sprite = sprites.pt_shard;
-        else if (type === 'energy') this.sprite = sprites.energy_crystal;
-        else this.sprite = sprites.pt_shard;
-        
+        if (type === 'hp') this.sprite = sprites.hp; else if (type === 'pt_core') this.sprite = sprites.pt_core; else if (type === 'pt_shard') this.sprite = sprites.pt_shard; else if (type === 'energy') this.sprite = sprites.energy_crystal; else this.sprite = sprites.pt_shard;
         this.w = this.sprite.width; this.h = this.sprite.height; 
     }
     update() {
         if(player.hp <= 0) return;
-        
         if (this.type === 'combo_reward') {
             if(!this.color) this.color = '#00e5ff';
             if(frameCount % 2 === 0) particles.push(new Particle(this.x, this.y, this.color, 0, 0, 10));
-            let dx = shopBtnRect.x - this.x; let dy = shopBtnRect.y - this.y;
-            let dist = Math.sqrt(dx*dx + dy*dy) || 1;
-            this.x += (dx/dist) * 15; this.y += (dy/dist) * 15;
-            if (dist < 20) {
-                this.active = false; player.pt += this.value; 
-                pushFloatingText(50 + Math.random()*15, 45 + Math.random()*10, `+${this.value % 1 === 0 ? this.value : this.value.toFixed(1)} PT`, this.color, false, true, "", 7);
-                if(ui.shopBtn) { let s = document.getElementById('shop-btn-cvs'); s.style.transform = 'scale(1.2)'; setTimeout(()=> { s.style.transform = 'translate(3px, 3px)'; }, 100); }
-            }
-            return;
+            let dx = shopBtnRect.x - this.x; let dy = shopBtnRect.y - this.y; let dist = Math.sqrt(dx*dx + dy*dy) || 1; this.x += (dx/dist) * 15; this.y += (dy/dist) * 15;
+            if (dist < 20) { this.active = false; player.pt += this.value; pushFloatingText(50 + Math.random()*15, 45 + Math.random()*10, `+${this.value % 1 === 0 ? this.value : this.value.toFixed(1)} PT`, this.color, false, true, "", 7); if(ui.shopBtn) { let s = document.getElementById('shop-btn-cvs'); s.style.transform = 'scale(1.2)'; setTimeout(()=> { s.style.transform = 'translate(3px, 3px)'; }, 100); } } return;
         }
 
-        let dx = player.x - this.x; let dy = player.y - this.y; let distSq = dx*dx + dy*dy;
-        let magnetArea = player.magnetRadius * player.magnetRadius;
+        let dx = player.x - this.x; let dy = player.y - this.y; let distSq = dx*dx + dy*dy; let magnetArea = player.magnetRadius * player.magnetRadius;
         if (distSq < magnetArea) { const force = 800 / (distSq + 100); this.x += dx * force; this.y += dy * force; } else { this.y += this.vy; }
         
         if (distSq < 900) { 
             this.active = false; 
-            if (this.type.startsWith('pt')) { 
-                player.pt += this.value; 
-                pushFloatingText(50 + (Math.random()-0.5)*15, 45 + (Math.random()-0.5)*10, `+${this.value % 1 === 0 ? this.value : this.value.toFixed(1)}`, '#e0e0e0', false, false, "", 6);
-            } 
-            else if (this.type === 'hp') { 
-                let healAmt = this.value.isElite ? player.maxHp * 0.60 : player.maxHp * (0.20 + (player.upgrades.heal_up * 0.05));
-                player.heal(healAmt, this.value.isElite); 
-            }
-            else if (this.type === 'energy') {
-                player.skillEnergy = Math.min(player.maxSkillEnergy, player.skillEnergy + this.value);
-                pushFloatingText(skillBtnRect.x, skillBtnRect.y - 30, `+ENG`, '#00e5ff', false, false, "", 8);
-                updateHUD(); 
-            }
+            if (this.type.startsWith('pt')) { player.pt += this.value; pushFloatingText(50 + (Math.random()-0.5)*15, 45 + (Math.random()-0.5)*10, `+${this.value % 1 === 0 ? this.value : this.value.toFixed(1)}`, '#e0e0e0', false, false, "", 6); } 
+            else if (this.type === 'hp') { let healAmt = this.value.isElite ? player.maxHp * 0.60 : player.maxHp * (0.20 + (player.upgrades.heal_up * 0.05)); player.heal(healAmt, this.value.isElite); }
+            else if (this.type === 'energy') { player.skillEnergy = Math.min(player.maxSkillEnergy, player.skillEnergy + this.value); pushFloatingText(skillBtnRect.x, skillBtnRect.y - 30, `+ENG`, '#00e5ff', false, false, "", 8); updateHUD(); }
         }
         if (this.y > height + 50) this.active = false;
     }
     draw(ctx) { 
-        if(this.type === 'combo_reward') return; 
-        ctx.save();
-        
-        if (this.type === 'hp') { ctx.shadowBlur = 12; ctx.shadowColor = '#00e676'; }
-        else if (this.type === 'energy') { ctx.shadowBlur = 12; ctx.shadowColor = '#00e5ff'; }
-        
-        ctx.drawImage(this.sprite, this.x - this.w/2, this.y - this.h/2 + Math.sin(frameCount * 0.1) * 3); 
-        ctx.restore();
+        if(this.type === 'combo_reward') return; ctx.save();
+        if (this.type === 'hp') { ctx.shadowBlur = 12; ctx.shadowColor = '#00e676'; } else if (this.type === 'energy') { ctx.shadowBlur = 12; ctx.shadowColor = '#00e5ff'; }
+        ctx.drawImage(this.sprite, this.x - this.w/2, this.y - this.h/2 + Math.sin(frameCount * 0.1) * 3); ctx.restore();
     }
 }
 
@@ -697,34 +575,27 @@ class Particle {
 
 class DamageText {
     constructor(x, y, amountStr, colorStr, isPlayerDamage = false, isCrit = false, prefix = "", fontSize = 10) { 
-        this.x = x; this.y = y; this.fontSize = fontSize;
-        let disp = amountStr;
-        if(typeof amountStr === 'number') { disp = Math.floor(amountStr); } 
+        this.x = x; this.y = y; this.fontSize = fontSize; let disp = amountStr; if(typeof amountStr === 'number') { disp = Math.floor(amountStr); } 
         this.text = (isPlayerDamage ? "-" : prefix) + disp + (isCrit && typeof amountStr === 'number' ? "!" : ""); 
         this.color = colorStr || '#ffffff'; this.life = 45; this.maxLife = 45;
         
-        // 【飘字速度回调】：恢复抛物线速度，让满天飞的数字更可控
+        let phys = WORKSHOP.data.physics;
         if (isPlayerDamage) {
-            this.vx = (Math.random() - 0.5) * 3; 
-            this.vy = -4 - Math.random() * 2; 
-            this.gravity = 0.25;
+            this.vx = (Math.random() - 0.5) * phys.dmg_text_player_speed_x; 
+            this.vy = phys.dmg_text_player_speed_y - Math.random() * 2; 
+            this.gravity = phys.dmg_text_player_gravity;
         } else {
-            this.vx = (Math.random() - 0.5) * 2; 
-            this.vy = -3 - Math.random() * 2; 
-            this.gravity = 0.2;
+            this.vx = (Math.random() - 0.5) * 2; this.vy = -3 - Math.random() * 2; this.gravity = 0.2;
         }
-        
         this.active = true; this.isCrit = isCrit;
     }
     update() { this.x += this.vx; this.y += this.vy; this.vy += this.gravity; this.life--; if (this.life <= 0) this.active = false; }
     draw(ctx) { 
         let progress = 1 - (this.life / this.maxLife); ctx.globalAlpha = this.life < 15 ? this.life / 15 : 1; 
-        let scale = progress < 0.2 ? 1 + (progress / 0.2) * 0.5 : 1.5 - ((progress - 0.2) / 0.8) * 0.5;
-        if(this.isCrit) scale *= 1.3;
+        let scale = progress < 0.2 ? 1 + (progress / 0.2) * 0.5 : 1.5 - ((progress - 0.2) / 0.8) * 0.5; if(this.isCrit) scale *= 1.3;
         ctx.save(); ctx.translate(this.x, this.y); ctx.scale(scale, scale);
         ctx.fillStyle = this.color; ctx.font = `${this.fontSize}px "Press Start 2P", "DotGothic16", monospace`; ctx.textAlign = 'center'; 
-        ctx.lineWidth = 3; ctx.strokeStyle = "#000"; ctx.strokeText(this.text, 0, 0); ctx.fillText(this.text, 0, 0);
-        ctx.restore(); ctx.globalAlpha = 1; 
+        ctx.lineWidth = 3; ctx.strokeStyle = "#000"; ctx.strokeText(this.text, 0, 0); ctx.fillText(this.text, 0, 0); ctx.restore(); ctx.globalAlpha = 1; 
     }
 }
 function pushFloatingText(x, y, amt, col, isP, isCrit=false, prefix="", fSize=10) { if(floatingTexts.length > 50) floatingTexts.shift(); floatingTexts.push(new DamageText(x, y, amt, col, isP, isCrit, prefix, fSize)); }
