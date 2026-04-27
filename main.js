@@ -98,24 +98,23 @@ function drawIndicator(color) {
 function drawPixelButton(id, icon, progress, color) {
     let cvs = document.getElementById(id); if(!cvs) return;
     let ctx = cvs.getContext('2d'); ctx.clearRect(0,0,48,48);
-    ctx.fillStyle = '#111'; ctx.fillRect(4,4,40,40);
-    if(icon) ctx.drawImage(icon, 24 - icon.width/2, 24 - icon.height/2);
     
+    ctx.fillStyle = '#111'; ctx.fillRect(4,4,40,40);
+
+    if (progress > 0) {
+        ctx.fillStyle = color;
+        ctx.globalAlpha = progress >= 1 ? 0.6 : 0.4;
+        let fillH = Math.floor(40 * Math.min(1, progress));
+        ctx.fillRect(4, 44 - fillH, 40, fillH);
+        ctx.globalAlpha = 1.0;
+    }
+
     ctx.fillStyle = '#555'; 
     ctx.fillRect(4,0,40,4); ctx.fillRect(4,44,40,4); 
     ctx.fillRect(0,4,4,40); ctx.fillRect(44,4,4,40); 
     ctx.fillRect(2,2,4,4); ctx.fillRect(42,2,4,4); ctx.fillRect(2,42,4,4); ctx.fillRect(42,42,4,4); 
 
-    if (progress > 0) {
-        ctx.fillStyle = color;
-        let p = progress;
-        if (p > 0) ctx.fillRect(4, 0, 40 * Math.min(1, p/0.25), 4);
-        if (p > 0.25) ctx.fillRect(44, 4, 4, 40 * Math.min(1, (p-0.25)/0.25));
-        if (p > 0.5) ctx.fillRect(44 - 40*Math.min(1, (p-0.5)/0.25), 44, 40*Math.min(1, (p-0.5)/0.25), 4);
-        if (p > 0.75) ctx.fillRect(0, 44 - 40*Math.min(1, (p-0.75)/0.25), 4, 40*Math.min(1, (p-0.75)/0.25));
-        if (p > 0.05) ctx.fillRect(42,2,4,4); if (p > 0.30) ctx.fillRect(42,42,4,4);
-        if (p > 0.55) ctx.fillRect(2,42,4,4); if (p > 0.80) ctx.fillRect(2,2,4,4);
-    }
+    if(icon) ctx.drawImage(icon, 24 - icon.width/2, 24 - icon.height/2);
 }
 
 let offsetCanvas = document.getElementById('offsetCanvas');
@@ -191,8 +190,10 @@ function activateSkill() {
 }
 
 function applyElastic(obj, targetNode) {
-    obj.vx -= obj.x * 0.3; obj.vy -= obj.y * 0.3;
-    obj.vx *= 0.7; obj.vy *= 0.7;
+    obj.vx -= obj.x * 0.5; 
+    obj.vy -= obj.y * 0.5;
+    obj.vx *= 0.65;        
+    obj.vy *= 0.65;
     obj.x += obj.vx; obj.y += obj.vy;
     targetNode.style.transform = `translate(${obj.x}px, ${obj.y}px)`;
 }
@@ -200,22 +201,22 @@ function applyElastic(obj, targetNode) {
 function updatePixelButtons() {
     if(!player) return;
     let skProg = player.skillActiveTimer > 0 ? (player.skillActiveTimer/600) : (player.skillCdTimer > 0 ? (1 - player.skillCdTimer/900) : player.skillEnergy / player.maxSkillEnergy);
-    let skColor = player.skillActiveTimer > 0 ? '#00e5ff' : (player.skillCdTimer > 0 ? '#ff1744' : (player.skillEnergy >= player.maxSkillEnergy ? '#ffea00' : '#555'));
-    drawPixelButton('skill-btn-cvs', sprites.i_skill, skProg, skColor);
+    let skColor = player.skillActiveTimer > 0 ? '#00e5ff' : (player.skillCdTimer > 0 ? '#ff1744' : (player.skillEnergy >= player.maxSkillEnergy ? '#ffea00' : '#00b0ff'));
     
-    drawPixelButton('loadout-btn-cvs', sprites.i_loadout, 1, '#fff');
-    drawPixelButton('shop-btn-cvs', sprites.i_shop, 1, '#fff');
+    drawPixelButton('skill-btn-cvs', sprites.i_skill, skProg, skColor);
+    drawPixelButton('loadout-btn-cvs', sprites.i_loadout, 0, '#fff');
+    drawPixelButton('shop-btn-cvs', sprites.i_shop, 0, '#fff');
+    drawPixelButton('pause-btn-cvs', sprites.i_pause, 0, '#fff');
 }
 
 function updateHUD() {
     if (!player) return;
 
     applyElastic(uiOffsets.hp, ui.hpVal);
-    applyElastic(uiOffsets.pt, ui.ptVal);
-
+    
     if (player.hp / player.maxHp < 0.3 && frameCount % 4 === 0) {
-        uiOffsets.hp.vx += (Math.random()-0.5)*3;
-        uiOffsets.hp.vy += (Math.random()-0.5)*3;
+        uiOffsets.hp.vx += (Math.random()-0.5)*5;
+        uiOffsets.hp.vy += (Math.random()-0.5)*5;
     }
 
     ui.ptVal.innerText = `${player.pt.toFixed(1)} PT`;
@@ -452,9 +453,12 @@ function buyUpgrade(id) {
 }
 
 function getPlayerPowerScore() {
-    let power = player.level * 0.5 + (player.damage * (player.equipment['debt_protocol'].equipped ? 0.8 : 1.0) - 12) * 0.2;
-    if(player.equipment.speed.equipped) power += 3; if(player.equipment.spread.equipped) power += 5; if(player.equipment.laser.equipped) power += 10;
-    return power;
+    // 【核心 Bug 修复】：移除了未定义的 player.level，避免了计算出 NaN 导致系统死锁！
+    let power = (player.damage * (player.equipment['debt_protocol'].equipped ? 0.8 : 1.0) - 12) * 0.2;
+    if(player.equipment.speed.equipped) power += 3; 
+    if(player.equipment.spread.equipped) power += 5; 
+    if(player.equipment.laser.equipped) power += 10;
+    return isNaN(power) ? 0 : Math.max(0, power);
 }
 
 function updateDifficultyMetrics() {
@@ -480,7 +484,7 @@ function updateDifficultyMetrics() {
         difficultyScore = baseDiff; 
         updateHUD(); 
     }
-    directorPoints += (difficultyScore * DIFF_CONFIG[currentDifficulty].spawnMod) / 60;
+    directorPoints += (difficultyScore * DIFF_CONFIG[currentDifficulty].spawnMod) / 25;
 }
 
 function resize() { width = window.innerWidth; height = window.innerHeight; canvas.width = width; canvas.height = height; ctx.imageSmoothingEnabled = false; updateUIRects(); }
@@ -645,7 +649,7 @@ function loop() {
         ctx.save(); let color = comboCount >= 200 ? '#e60050' : (comboCount >= 100 ? '#ffea00' : '#00b0ff');
         ctx.fillStyle = color; ctx.globalAlpha = Math.min(1, comboTimer / 30); 
         let scale = 1 + (comboTimer / maxComboTimer) * 0.3; if (comboCount >= 100) scale += Math.sin(frameCount * 0.3) * 0.15; 
-        ctx.translate(width - 20, 85); ctx.scale(scale, scale); ctx.font = '10px "Press Start 2P", "DotGothic16", monospace';
+        ctx.translate(width - 20, 85); ctx.scale(scale, scale); ctx.font = '10px "Press Start 2P", "Courier New", "SimSun", monospace';
         ctx.textAlign = 'right'; ctx.fillText(comboCount + 'X', 0, 0); ctx.restore();
         if (isPlaying && hitStopFrames <= 0) { comboTimer--; if (comboTimer <= 0) comboCount = 0; }
     }

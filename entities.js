@@ -159,8 +159,7 @@ class Player {
 
         this.hp -= actualAmount; this.invincible = 20; 
         
-        // Elastic Damage Bump
-        let dmgMag = Math.min(15, Math.max(3, actualAmount * 0.5));
+        let dmgMag = Math.min(30, Math.max(12, actualAmount * 0.8));
         let dmgAng = Math.random() * Math.PI * 2;
         uiOffsets.hp.vx += Math.cos(dmgAng) * dmgMag;
         uiOffsets.hp.vy += Math.sin(dmgAng) * dmgMag;
@@ -177,7 +176,7 @@ class Player {
         else if (isKamikaze && !isSpecial) textColor = '#ffea00'; 
         else if (isSwarm) textColor = '#ab47bc'; 
         
-        if(config.dmgText) pushFloatingText(this.x, this.y-20, actualAmount, textColor, true);
+        if(config.dmgText) pushFloatingText(this.x, this.y-20, Math.floor(actualAmount), textColor, true);
         comboCount = Math.floor(comboCount / 2);
         
         if (this.hp <= 0) { this.hp = 0; startEnding('playerDead'); }
@@ -188,7 +187,7 @@ class Player {
         let actualHeal = Math.min(amount, Math.max(0, this.maxHp - this.hp));
         this.hp += actualHeal;
         if(config.dmgText && actualHeal > 0) {
-            pushFloatingText(this.x, this.y-20, actualHeal, isEliteDrop ? '#ffea00' : '#00e676', false, false, "+");
+            pushFloatingText(this.x, this.y-20, Math.floor(actualHeal), isEliteDrop ? '#ffea00' : '#00e676', false, false, "+");
         }
         updateHUD();
     }
@@ -259,7 +258,11 @@ class BaseEnemy {
         this.maxHp = this.hp; 
         
         this.weight = weight;
-        this.active = true; this.isHealer = false; this.isSwarm = false; this.isKamikaze = false; this.isSpecial = false; this.isBoss = false; this.isBossMinion = false; this.isBattery = false;
+        this.active = true; this.isHealer = false; this.isSwarm = false; this.isKamikaze = false; this.isSpecial = false; this.isBoss = false; this.isBossMinion = false;
+        
+        this.isBattery = false; 
+        this._initMods = false; // 用于延迟判断标签
+        
         this.particleColor = particleColor || '#757575'; 
         this.scale = 1.0; this.isElite = false; this.eliteFireTimer = 0;
     }
@@ -294,6 +297,16 @@ class BaseEnemy {
         } 
     }
     baseUpdate() {
+        // 第一帧初始化修饰符，确保与医疗兵互斥、Boss免疫
+        if (!this._initMods) {
+            this._initMods = true;
+            if (!this.isBoss && !this.isBossMinion && !this.isHealer && !this.isSpecial) {
+                if (Math.random() < 0.15) {
+                    this.isBattery = true;
+                }
+            }
+        }
+
         if (this.isElite && this.y > 0 && this.y < height * 0.8) {
             this.eliteFireTimer--;
             if (this.eliteFireTimer <= 0) {
@@ -306,15 +319,22 @@ class BaseEnemy {
     }
     draw(ctx) { 
         ctx.save(); ctx.translate(this.x, this.y);
+        
         if(this.isElite) { ctx.shadowBlur = 15; ctx.shadowColor = '#ff1744'; }
-        if(this.isBattery) { ctx.shadowBlur = 15; ctx.shadowColor = '#00e5ff'; }
+        
+        // 移除光晕，使用原生的色彩翻转滤镜，赋予其科技蓝色调！
+        if(this.isBattery && !this.isElite) {
+            ctx.filter = 'hue-rotate(210deg) brightness(1.5)';
+        }
+        
         ctx.scale(this.scale, this.scale); ctx.drawImage(this.sprite, -this.w/2, -this.h/2); ctx.restore();
     }
     takeDamage(amount, showText=true, isCrit=false, damageType='normal') {
         this.hp -= amount; 
         if(particles.length < 150) {
             let pCount = this.isElite || this.isBoss ? 4 : 2;
-            for(let i=0; i<pCount; i++) particles.push(new Particle(this.x, this.y, this.particleColor, (Math.random()-0.5)*4, (Math.random()-0.5)*4, 10));
+            let pCol = this.isBattery ? '#00e5ff' : this.particleColor; 
+            for(let i=0; i<pCount; i++) particles.push(new Particle(this.x, this.y, pCol, (Math.random()-0.5)*4, (Math.random()-0.5)*4, 10));
         }
         if(showText && config.dmgText) {
             let color = '#ffffff'; if (isCrit) color = '#ffea00'; else if (damageType === 'laser') color = '#00e5ff';
@@ -325,8 +345,11 @@ class BaseEnemy {
         }
     }
     die(killed) {
-        this.active = false; createExplosion(this.x, this.y, this.particleColor, this.isElite || this.isBoss ? 40 : 12); 
+        this.active = false; 
+        let pColor = this.isBattery ? '#00e5ff' : this.particleColor;
+        createExplosion(this.x, this.y, pColor, this.isElite || this.isBoss ? 40 : 12); 
         triggerShake(this.isElite || this.isBoss ? 8 : 2, 5); 
+        
         if (killed) { 
             if (this.isSpecial) specialKamikazeMisses = 0; 
             
@@ -340,12 +363,12 @@ class BaseEnemy {
             if (this.isHealer) {
                 items.push(new Item(this.x, this.y, 'hp', { isElite: this.isElite })); 
             } else if (this.isBattery) {
-                items.push(new Item(this.x, this.y, 'energy', 20)); 
+                items.push(new Item(this.x, this.y, 'energy', Math.max(15, this.weight * 5))); 
             } else {
                 let ptVal = this.weight * 0.1;
                 if (this.isElite) ptVal *= 30; 
                 if (this.isBossMinion) ptVal = this.weight * 0.1 * 1.5; 
-                items.push(new Item(this.x, this.y, 'pt', ptVal)); 
+                items.push(new Item(this.x, this.y, ptVal >= 1.0 ? 'pt_core' : 'pt_shard', ptVal)); 
             }
         }
     }
@@ -361,7 +384,6 @@ class Locator extends BaseEnemy {
         this.isHealer = isHealer; this.isSwarm = isSwarm;
     }
     update() { 
-        if(this.isBattery) { this.sprite = sprites.battery; this.particleColor = '#00e5ff'; }
         this.baseUpdate(); this.y += this.speed; this.checkBounds(); this.checkPlayerCollision(); 
     }
 }
@@ -384,7 +406,6 @@ class Wanderer extends BaseEnemy {
         else { this.vx = 0; this.vy = baseSpeed; }
     } 
     update() { 
-        if(this.isBattery) { this.sprite = sprites.battery; this.particleColor = '#00e5ff'; }
         this.baseUpdate(); this.x += this.vx; this.y += this.vy; 
         if (!this.side) this.x += Math.sin(frameCount * 0.04 + this.swayPhase) * this.swayAmp; 
         if (this.y > 0) {
@@ -443,7 +464,6 @@ class Turret extends BaseEnemy {
         this.shootTimer = 60 + Math.random() * 60; this.isHealer = isHealer;
     }
     update() {
-        if(this.isBattery) { this.sprite = sprites.battery; this.particleColor = '#00e5ff'; }
         this.baseUpdate();
         if (this.y < this.targetY) this.y += 2; else { 
             this.shootTimer--; 
@@ -605,38 +625,29 @@ class BossScrapDominator extends BaseEnemy {
 class Item {
     constructor(x, y, type, value, overrideColor = null) { 
         this.x = x; this.y = y; this.type = type; this.value = value; this.active = true; 
-        this.sprite = type === 'hp' ? sprites.hp : sprites.pt; 
-        this.w = this.sprite.width; this.h = this.sprite.height; this.vy = 1.5; 
-        this.color = overrideColor;
+        this.vy = 1.5; this.color = overrideColor;
+        
+        if (type === 'hp') this.sprite = sprites.hp;
+        else if (type === 'pt_core') this.sprite = sprites.pt_core;
+        else if (type === 'pt_shard') this.sprite = sprites.pt_shard;
+        else if (type === 'energy') this.sprite = sprites.energy_crystal;
+        else this.sprite = sprites.pt_shard;
+        
+        this.w = this.sprite.width; this.h = this.sprite.height; 
     }
     update() {
         if(player.hp <= 0) return;
         
-        if (this.type === 'energy' || this.type === 'combo_reward') {
+        if (this.type === 'combo_reward') {
             if(!this.color) this.color = '#00e5ff';
             if(frameCount % 2 === 0) particles.push(new Particle(this.x, this.y, this.color, 0, 0, 10));
-            
-            let tx = this.type === 'energy' ? skillBtnRect.x : shopBtnRect.x;
-            let ty = this.type === 'energy' ? skillBtnRect.y : shopBtnRect.y;
-            let dx = tx - this.x; let dy = ty - this.y;
+            let dx = shopBtnRect.x - this.x; let dy = shopBtnRect.y - this.y;
             let dist = Math.sqrt(dx*dx + dy*dy) || 1;
             this.x += (dx/dist) * 15; this.y += (dy/dist) * 15;
-            
             if (dist < 20) {
-                this.active = false;
-                if(this.type === 'energy') {
-                    player.skillEnergy = Math.min(player.maxSkillEnergy, player.skillEnergy + this.value);
-                } else {
-                    player.pt += this.value; 
-                    let mag = Math.min(15, Math.max(4, this.value * 5)); let ang = Math.random() * Math.PI * 2;
-                    uiOffsets.pt.vx += Math.cos(ang) * mag; uiOffsets.pt.vy += Math.sin(ang) * mag;
-                    pushFloatingText(30, 45, `+${this.value % 1 === 0 ? this.value : this.value.toFixed(1)} PT`, this.color, false, true);
-                    if(ui.shopBtn) {
-                        let s = document.getElementById('shop-btn-cvs');
-                        s.style.transform = 'scale(1.2)';
-                        setTimeout(()=> { s.style.transform = 'translate(3px, 3px)'; }, 100);
-                    }
-                }
+                this.active = false; player.pt += this.value; 
+                pushFloatingText(50 + Math.random()*15, 45 + Math.random()*10, `+${this.value % 1 === 0 ? this.value : this.value.toFixed(1)} PT`, this.color, false, true, "", 7);
+                if(ui.shopBtn) { let s = document.getElementById('shop-btn-cvs'); s.style.transform = 'scale(1.2)'; setTimeout(()=> { s.style.transform = 'translate(3px, 3px)'; }, 100); }
             }
             return;
         }
@@ -644,30 +655,35 @@ class Item {
         let dx = player.x - this.x; let dy = player.y - this.y; let distSq = dx*dx + dy*dy;
         let magnetArea = player.magnetRadius * player.magnetRadius;
         if (distSq < magnetArea) { const force = 800 / (distSq + 100); this.x += dx * force; this.y += dy * force; } else { this.y += this.vy; }
+        
         if (distSq < 900) { 
             this.active = false; 
-            if (this.type === 'pt') { 
+            if (this.type.startsWith('pt')) { 
                 player.pt += this.value; 
-                let mag = Math.min(15, Math.max(3, this.value * 5)); let ang = Math.random() * Math.PI * 2;
-                uiOffsets.pt.vx += Math.cos(ang) * mag; uiOffsets.pt.vy += Math.sin(ang) * mag;
-                pushFloatingText(30, 45, `+${this.value % 1 === 0 ? this.value : this.value.toFixed(1)}`, '#e0e0e0', false, false);
+                pushFloatingText(50 + (Math.random()-0.5)*15, 45 + (Math.random()-0.5)*10, `+${this.value % 1 === 0 ? this.value : this.value.toFixed(1)}`, '#e0e0e0', false, false, "", 6);
             } 
             else if (this.type === 'hp') { 
-                let healAmt = 0;
-                if (this.value.isElite) {
-                    healAmt = player.maxHp * 0.60; 
-                } else {
-                    let healMod = 0.20 + (player.upgrades.heal_up * 0.05); 
-                    healAmt = player.maxHp * healMod;
-                }
+                let healAmt = this.value.isElite ? player.maxHp * 0.60 : player.maxHp * (0.20 + (player.upgrades.heal_up * 0.05));
                 player.heal(healAmt, this.value.isElite); 
+            }
+            else if (this.type === 'energy') {
+                player.skillEnergy = Math.min(player.maxSkillEnergy, player.skillEnergy + this.value);
+                pushFloatingText(skillBtnRect.x, skillBtnRect.y - 30, `+ENG`, '#00e5ff', false, false, "", 8);
+                updateHUD(); // 触发UI更新，能量条瞬间填色
             }
         }
         if (this.y > height + 50) this.active = false;
     }
     draw(ctx) { 
-        if(this.type === 'energy' || this.type === 'combo_reward') return; 
+        if(this.type === 'combo_reward') return; 
+        ctx.save();
+        
+        // 只有掉落物（绿血包、蓝能量包）才会发光
+        if (this.type === 'hp') { ctx.shadowBlur = 12; ctx.shadowColor = '#00e676'; }
+        else if (this.type === 'energy') { ctx.shadowBlur = 12; ctx.shadowColor = '#00e5ff'; }
+        
         ctx.drawImage(this.sprite, this.x - this.w/2, this.y - this.h/2 + Math.sin(frameCount * 0.1) * 3); 
+        ctx.restore();
     }
 }
 
@@ -678,10 +694,10 @@ class Particle {
 }
 
 class DamageText {
-    constructor(x, y, amountStr, colorStr, isPlayerDamage = false, isCrit = false, prefix = "") { 
-        this.x = x; this.y = y; 
+    constructor(x, y, amountStr, colorStr, isPlayerDamage = false, isCrit = false, prefix = "", fontSize = 10) { 
+        this.x = x; this.y = y; this.fontSize = fontSize;
         let disp = amountStr;
-        if(typeof amountStr === 'number') { disp = amountStr % 1 === 0 ? amountStr : amountStr.toFixed(1); }
+        if(typeof amountStr === 'number') { disp = Math.floor(amountStr); } // 去除一切小数
         this.text = (isPlayerDamage ? "-" : prefix) + disp + (isCrit && typeof amountStr === 'number' ? "!" : ""); 
         this.color = colorStr || '#ffffff'; this.life = 45; this.maxLife = 45;
         this.vx = (Math.random() - 0.5) * 2; this.vy = -3 - Math.random() * 2; this.gravity = 0.2; this.active = true; this.isCrit = isCrit;
@@ -692,12 +708,12 @@ class DamageText {
         let scale = progress < 0.2 ? 1 + (progress / 0.2) * 0.5 : 1.5 - ((progress - 0.2) / 0.8) * 0.5;
         if(this.isCrit) scale *= 1.3;
         ctx.save(); ctx.translate(this.x, this.y); ctx.scale(scale, scale);
-        ctx.fillStyle = this.color; ctx.font = '10px "Press Start 2P", "DotGothic16", monospace'; ctx.textAlign = 'center'; 
+        ctx.fillStyle = this.color; ctx.font = `${this.fontSize}px "Press Start 2P", "Courier New", "SimSun", monospace`; ctx.textAlign = 'center'; 
         ctx.lineWidth = 3; ctx.strokeStyle = "#000"; ctx.strokeText(this.text, 0, 0); ctx.fillText(this.text, 0, 0);
         ctx.restore(); ctx.globalAlpha = 1; 
     }
 }
-function pushFloatingText(x, y, amt, col, isP, isCrit=false, prefix="") { if(floatingTexts.length > 50) floatingTexts.shift(); floatingTexts.push(new DamageText(x, y, amt, col, isP, isCrit, prefix)); }
+function pushFloatingText(x, y, amt, col, isP, isCrit=false, prefix="", fSize=10) { if(floatingTexts.length > 50) floatingTexts.shift(); floatingTexts.push(new DamageText(x, y, amt, col, isP, isCrit, prefix, fSize)); }
 
 class AOEEffect {
     constructor(x, y, maxRadius) { this.x = x; this.y = y; this.radius = 0; this.maxRadius = maxRadius; this.life = 15; this.active = true; }

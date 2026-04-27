@@ -73,7 +73,6 @@ const LEVELS = {
 
             let spawnLoc = (x, y, isHeal) => {
                 let e = new Locator(x, y, false, isHeal);
-                if(!isHeal && Math.random()<0.1) e.isBattery = true;
                 enemies.push(e);
             }
             let spawnV = (cx, y) => {
@@ -133,7 +132,8 @@ const LEVELS = {
             if (frameCount % 20 === 0 && enemies.length < 60) {
                 if (directorPoints >= 0) {
                     if (directorState === 'COOLDOWN') {
-                        if (healWaveEnemyType && directorPoints > healWaveEnemyType.weight) {
+                        // 补给波次直接随机变异，不再手动指定特定类型
+                        if (healWaveEnemyType && directorPoints > healWaveEnemyType.weight * 0.5) {
                             let x = Math.random() * (width - 60) + 30; let e = null;
                             if(healWaveEnemyType.type === 'Locator') e = new Locator(x, -40, false, true);
                             else if(healWaveEnemyType.type === 'WandererLow') e = new Wanderer(x, -40, false, null, false, true);
@@ -163,25 +163,19 @@ const LEVELS = {
                         
                         if (selected) {
                             let x = Math.random() * (width - 60) + 30;
-                            let isHealer = false; let isBattery = false;
-                            let canBeSp = ['Locator', 'WandererLow', 'WandererHigh', 'Turret'].includes(selected.type);
-                            if (canBeSp) {
-                                let r = Math.random();
-                                if (r < player.healSpawnRate) isHealer = true;
-                                else if (r < player.healSpawnRate + 0.05) isBattery = true;
-                            }
-                            
                             let side = null; if (Math.random() < 0.15) side = Math.random() < 0.5 ? 'left' : 'right';
                             let enemyInstance = null;
+                            
+                            // 移除旧版 spawnLoop 里的 isBattery 强制标记，交由 entities.js 里的构造函数概率决定
                             switch(selected.type) {
-                                case 'Locator': enemyInstance = new Locator(x, -40, false, isHealer); break;
+                                case 'Locator': enemyInstance = new Locator(x, -40, false, false); break;
                                 case 'LocatorSwarm': 
                                     let formType = Math.floor(Math.random() * 3); let baseX = Math.max(80, Math.min(width - 80, x)); let swarmSpeed = 1.6 + Math.random() * 0.4; 
                                     if (formType === 0) { enemies.push(new Locator(baseX, -40, true, false, swarmSpeed)); enemies.push(new Locator(baseX - 35, -75, true, false, swarmSpeed)); enemies.push(new Locator(baseX + 35, -75, true, false, swarmSpeed)); enemies.push(new Locator(baseX - 70, -110, true, false, swarmSpeed)); enemies.push(new Locator(baseX + 70, -110, true, false, swarmSpeed)); } 
                                     else if (formType === 1) { for(let i=-2; i<=2; i++) enemies.push(new Locator(baseX + i*35, -40, true, false, swarmSpeed)); } 
                                     else { let dir = Math.random() > 0.5 ? 1 : -1; if (baseX + 4*35*dir > width - 20) dir = -1; if (baseX + 4*35*dir < 20) dir = 1; for(let i=0; i<5; i++) enemies.push(new Locator(baseX + i*35*dir, -40 - i*35, true, false, swarmSpeed)); } break;
-                                case 'WandererLow': enemyInstance = new Wanderer(x, -40, false, null, false, isHealer, side); break;
-                                case 'WandererHigh': enemyInstance = new Wanderer(x, -40, true, null, false, isHealer, side); break;
+                                case 'WandererLow': enemyInstance = new Wanderer(x, -40, false, null, false, false, side); break;
+                                case 'WandererHigh': enemyInstance = new Wanderer(x, -40, true, null, false, false, side); break;
                                 case 'WandererSwarm': let phase = Math.random() * Math.PI * 2; for(let i=0; i<4; i++) enemies.push(new Wanderer(x, -40 - i*35, false, phase, true, false, side)); break;
                                 case 'Kamikaze': enemyInstance = new Kamikaze(x, -40); break;
                                 case 'KamikazeSwarm': 
@@ -191,14 +185,13 @@ const LEVELS = {
                                 case 'KamikazeSpec': enemies.push(new Kamikaze(x, -40, 'special')); break;
                                 case 'ArcFlyer': enemies.push(new ArcFlyer(0, -20, Math.random() > 0.5)); break;
                                 case 'ArcFlyerSwarm': let isLeft = Math.random() > 0.5; for(let i=0; i<3; i++) enemies.push(new ArcFlyer(0, -20, isLeft, -0.15 * i, true)); break;
-                                case 'Turret': enemyInstance = new Turret(x, -40, false, isHealer); break;
+                                case 'Turret': enemyInstance = new Turret(x, -40, false, false); break;
                                 case 'TurretSwarm': enemies.push(new Turret(x - 35, -40, true)); enemies.push(new Turret(x + 35, -40, true)); break;
                                 case 'Tank': enemyInstance = new Tank(x, -40); break;
                                 case 'TankSwarm': enemyInstance = new Tank(x, -40, false, true); break;
                             }
                             
                             if (enemyInstance) { 
-                                if(isBattery) enemyInstance.isBattery = true;
                                 if (Math.random() < 0.05 && gameTimeSeconds > 45) enemyInstance.makeElite(); 
                                 enemies.push(enemyInstance); 
                             }
@@ -225,12 +218,15 @@ function initSprites() {
     const pSize = 3; 
     sprites.player = createPixelTexture([[0,0,0,0,0,1,0,0,0,0,0],[0,0,0,0,1,2,1,0,0,0,0],[0,0,0,0,1,2,1,0,0,0,0],[0,0,1,1,1,2,1,1,1,0,0],[0,1,2,2,1,2,1,2,2,1,0],[1,2,2,2,2,3,2,2,2,2,1],[1,1,1,1,1,1,1,1,1,1,1],[1,0,0,1,0,3,0,1,0,0,1]], ['#ffffff', '#00b0ff', '#00e676'], pSize);
     sprites.hp = createPixelTexture([[0,1,0],[1,2,1],[0,1,0]], ['#00e676', '#ffffff'], pSize);
-    sprites.pt = createPixelTexture([[1,1],[1,1]], ['#ffffff'], 3);
+    
+    // 【掉落物系统更新】：碎屑、核心、能量水晶
+    sprites.pt_shard = createPixelTexture([[1]], ['#eeeeee'], 3);
+    sprites.pt_core = createPixelTexture([[0,1,0],[1,2,1],[0,1,0]], ['#ffffff', '#e0e0e0'], 3);
+    sprites.energy_crystal = createPixelTexture([[0,1,0],[1,2,1],[0,1,0]], ['#00e5ff', '#ffffff'], 3);
     
     sprites.locator = createPixelTexture([[1,0,0,0,1],[0,1,2,1,0],[1,2,3,2,1],[0,1,2,1,0],[0,1,0,1,0]], ['#546e7a', '#90a4ae', '#ff1744'], 3);
     sprites.locator_swarm = createPixelTexture([[1,0,0,0,1],[0,1,2,1,0],[1,2,3,2,1],[0,1,2,1,0],[0,1,0,1,0]], ['#4a148c', '#ab47bc', '#00b0ff'], 3); 
     sprites.locator_healer = createPixelTexture([[1,0,0,0,1],[0,1,2,1,0],[1,2,3,2,1],[0,1,2,1,0],[0,1,0,1,0]], ['#1b5e20', '#4caf50', '#b2ff59'], 3);
-    sprites.battery = createPixelTexture([[1,0,0,0,1],[0,1,2,1,0],[1,2,3,2,1],[0,1,2,1,0],[0,1,0,1,0]], ['#005a80', '#00b0ff', '#00e5ff'], 3);
     
     sprites.wanderer = createPixelTexture([[1,0,0,0,1],[0,1,2,1,0],[0,1,1,1,0],[1,2,3,2,1],[1,1,1,1,1],[0,1,0,1,0]], ['#424242', '#757575', '#ff1744'], pSize); 
     sprites.wanderer_swarm = createPixelTexture([[1,0,0,0,1],[0,1,2,1,0],[0,1,1,1,0],[1,2,3,2,1],[1,1,1,1,1],[0,1,0,1,0]], ['#4a148c', '#ab47bc', '#00b0ff'], pSize); 
