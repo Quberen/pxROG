@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>像素肉鸽战机 V3.16+</title>
     <style>
-        /* 彻底移除外部网络字体依赖，使用系统级纯正等宽与点阵宋体 */
+        @import url('https://fonts.googleapis.com/css2?family=DotGothic16&family=Press+Start+2P&display=swap');
+        
         * { 
             box-sizing: border-box; 
             -webkit-font-smoothing: none;
@@ -16,7 +17,7 @@
         body, html {
             margin: 0; padding: 0; width: 100%; height: 100%;
             background-color: #050510; overflow: hidden;
-            font-family: 'Courier New', Courier, 'SimSun', '宋体', monospace; 
+            font-family: 'DotGothic16', 'Press Start 2P', 'SimSun', '宋体', monospace; 
             color: white;
             user-select: none; -webkit-user-select: none; touch-action: none;
         }
@@ -34,14 +35,14 @@
         }
         .overlay.active { opacity: 1; pointer-events: auto; visibility: visible; transform: scale(1); }
         
-        h1 { font-size: 20px; text-shadow: 2px 4px 0 #e60050; margin-bottom: 10px; line-height: 1.5; font-family: inherit; font-weight: bold; }
-        h2 { font-size: 16px; color: #00b0ff; margin-bottom: 20px; text-shadow: 2px 3px 0 #005a80; font-weight: bold; }
+        h1 { font-size: 20px; text-shadow: 2px 4px 0 #e60050; margin-bottom: 10px; line-height: 1.5; font-family: 'Press Start 2P', 'DotGothic16', monospace; }
+        h2 { font-size: 16px; color: #00b0ff; margin-bottom: 20px; text-shadow: 2px 3px 0 #005a80; }
         p { font-size: 10px; line-height: 1.8; color: #ccc; margin-bottom: 25px; max-width: 80%; }
         
         .btn-group { display: flex; flex-direction: column; gap: 12px; width: 80%; max-width: 250px; }
         .btn {
-            background: #1a1a2e; color: white; border: 3px solid #fff; padding: 15px; font-size: 12px;
-            font-family: inherit; border-radius: 6px; font-weight: bold;
+            background: #1a1a2e; color: white; border: 3px solid #fff; padding: 15px; font-size: 10px;
+            font-family: inherit; border-radius: 6px; 
             cursor: pointer; text-transform: uppercase; position: relative; box-shadow: 4px 4px 0 #000; 
             transition: transform 0.1s, box-shadow 0.1s, filter 0.2s;
         }
@@ -55,7 +56,7 @@
         .diff-selector { display: flex; justify-content: space-between; gap: 5px; margin-bottom: 15px; width: 100%; max-width: 280px; }
         .diff-btn { 
             flex: 1; padding: 10px 0; background: #222; color: #888; border: 3px solid #444; 
-            font-family: inherit; font-size: 10px; font-weight: bold; cursor: pointer; border-radius: 6px; transition: all 0.2s;
+            font-family: inherit; font-size: 8px; cursor: pointer; border-radius: 6px; transition: all 0.2s;
         }
         .diff-btn:hover:not(.locked) { filter: brightness(1.2); border-color: #888; }
         .diff-btn.selected { background: #e60050; color: #fff; border-color: #ff8a80; font-weight: bold; box-shadow: 2px 2px 0 rgba(0,0,0,0.8); }
@@ -80,11 +81,11 @@
         #side-btns-container.hud-hidden { transform: translateX(20px); }
 
         #hud-hp-val { 
-            font-family: inherit; font-weight: bold; font-size: 18px; color: #00e676; 
+            font-family: 'Press Start 2P', monospace; font-size: 16px; color: #00e676; 
             text-shadow: 2px 2px 0 #000; display: inline-block;
         }
         #hud-pt-val { 
-            font-family: inherit; font-weight: bold; font-size: 14px; color: #e0e0e0; 
+            font-family: 'Press Start 2P', monospace; font-size: 12px; color: #e0e0e0; 
             text-shadow: 2px 2px 0 #000; margin-bottom: 4px; display: inline-block;
             position: relative;
         }
@@ -106,12 +107,12 @@
         
         #boss-name-toast {
             position: absolute; top: 65px; width: 100%; text-align: center; color: #ff1744; 
-            font-family: inherit; font-weight: bold; font-size: 24px; letter-spacing: 2px;
+            font-family: 'Press Start 2P', monospace; font-size: 24px; letter-spacing: 2px;
             text-shadow: 3px 3px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000;
             opacity: 0; transition: opacity 1.5s ease-in-out; z-index: 10; pointer-events: none;
         }
         
-        .system-message { position: absolute; top: 105px; width: 100%; text-align: center; font-family: inherit; font-weight: bold; font-size: 12px; opacity: 0; pointer-events: none; transition: opacity 0.5s; text-shadow: 2px 2px 0 #000; z-index: 4; }
+        .system-message { position: absolute; top: 105px; width: 100%; text-align: center; font-family: 'Press Start 2P', 'DotGothic16', monospace; font-size: 10px; opacity: 0; pointer-events: none; transition: opacity 0.5s; text-shadow: 2px 2px 0 #000; z-index: 4; }
 
         .card-container { display: flex; flex-direction: column; gap: 12px; width: 95%; max-width: 320px; }
         
@@ -126,11 +127,11 @@
         .upgrade-card:active { transform: translate(4px, 4px); box-shadow: 0 0 0 transparent; filter: brightness(1); }
         
         .card-info { flex: 1; padding-right: 8px; }
-        .card-title { margin-bottom: 6px; font-size: 12px; font-weight: bold; display: flex; justify-content: space-between; align-items:center;}
-        .card-desc { color: #aaa; line-height: 1.4; font-size: 10px; }
+        .card-title { margin-bottom: 6px; font-size: 10px; display: flex; justify-content: space-between; align-items:center;}
+        .card-desc { color: #aaa; line-height: 1.4; font-size: 8px; }
         .card-cost-box { display: flex; flex-direction: column; justify-content: center; align-items: center; background: rgba(0,0,0,0.4); padding: 5px 8px; min-width: 45px; text-align:center; border-radius: 4px;}
-        .card-cost { font-size: 12px; font-weight: bold; margin-bottom: 4px; font-family: inherit;}
-        .card-max { font-size: 10px; color: #ccc; font-family: inherit;}
+        .card-cost { font-size: 10px; font-weight: bold; margin-bottom: 4px; font-family: 'Press Start 2P', monospace;}
+        .card-max { font-size: 6px; color: #ccc; font-family: 'Press Start 2P', monospace;}
         .upgrade-card.disabled { opacity: 0.6; filter: grayscale(80%); cursor: not-allowed; }
         .upgrade-card.disabled:active { transform: none; box-shadow: 4px 4px 0 #000; filter: grayscale(80%); }
         
@@ -150,10 +151,10 @@
 
         .empty-slot {
             background: rgba(255,255,255,0.05); border: 3px dashed #444; border-radius: 6px; width: calc(50% - 3px); height: 32px; 
-            display: flex; justify-content: center; align-items: center; color: #555; font-size: 14px; font-family: inherit; font-weight: bold;
+            display: flex; justify-content: center; align-items: center; color: #555; font-size: 14px; font-family: monospace;
         }
 
-        .tab-btn { flex: 1; padding: 10px; background: #222; color: #888; border: 3px solid #444; font-family: inherit; font-size: 12px; font-weight: bold; cursor: pointer; border-radius: 6px; transition: all 0.2s;}
+        .tab-btn { flex: 1; padding: 10px; background: #222; color: #888; border: 3px solid #444; font-family: inherit; font-size: 10px; cursor: pointer; border-radius: 6px; transition: all 0.2s;}
         .tab-btn:hover:not(.active) { filter: brightness(1.2); }
         .tab-btn.active { background: #00b0ff; color: #fff; border-color: #80d8ff; }
         .tab-content { width: 100%; display: flex; flex-direction: column; align-items: center; }
@@ -215,7 +216,7 @@
             <button class="btn btn-blue" onclick="openSettings('PAUSED')">系统设置</button>
             <button class="btn btn-dark" onclick="quitGame()">中止任务(主屏)</button>
         </div>
-        <div id="pause-score-display" style="margin-top: 20px; font-size: 12px; color:#ffea00; font-family: inherit; font-weight: bold;">得分: 0 PTS</div>
+        <div id="pause-score-display" style="margin-top: 20px; font-size: 10px; color:#ffea00; font-family: 'Press Start 2P', monospace;">得分: 0 PTS</div>
     </div>
 
     <div id="settings-menu" class="overlay">
@@ -231,10 +232,10 @@
             </div>
         </div>
         <div id="tab-control" class="tab-content">
-            <p style="color:#aaa; font-size:10px; margin-bottom:10px; font-weight: bold;">控制纵向偏移 (触控区域划动)</p>
+            <p style="color:#aaa; font-size:10px; margin-bottom:10px;">控制纵向偏移 (触控区域划动)</p>
             <div id="offset-widget" style="position:relative; width:80px; height:80px; margin:0 auto; touch-action:none; background:rgba(0,0,0,0.5); border-radius: 50%; box-shadow: inset 0 0 0 4px #444, 4px 4px 0 #000;">
                 <canvas id="offsetCanvas" width="80" height="80"></canvas>
-                <div id="offset-val" style="position:absolute; top:0; left:0; width:100%; height:100%; display:flex; justify-content:center; align-items:center; font-family:inherit; font-weight: bold; font-size:18px;">90</div>
+                <div id="offset-val" style="position:absolute; top:0; left:0; width:100%; height:100%; display:flex; justify-content:center; align-items:center; font-family:'Press Start 2P'; font-size:16px;">90</div>
             </div>
         </div>
         <div class="btn-group" style="margin-top:30px;">
@@ -243,20 +244,20 @@
     </div>
 
     <div id="loadout-menu" class="overlay">
-        <h2 style="color: #ffffff; margin-bottom:10px; font-size:14px;">战术总线 (LOADOUT)</h2>
+        <h2 style="color: #ffffff; margin-bottom:10px; font-size:12px;">战术总线 (LOADOUT)</h2>
         <div style="width: 95%; max-width: 320px; background: rgba(0,0,0,0.6); border: 4px solid #555; border-radius: 6px; padding: 10px; margin-bottom: 10px;">
             <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
-                <span style="color:#00b0ff; font-size:10px; font-weight:bold;">■ 核心插槽 (CORE)</span>
-                <span id="loadout-slots-text" style="color:#fff; font-size:10px; font-family:inherit; font-weight:bold;">0 / 3</span>
+                <span style="color:#00b0ff; font-size:8px;">■ 核心插槽 (CORE)</span>
+                <span id="loadout-slots-text" style="color:#fff; font-size:8px; font-family:monospace;">0 / 3</span>
             </div>
             <div id="core-slots-grid" style="display:flex; gap:6px; flex-wrap:wrap; min-height: 34px; margin-bottom:10px;"></div>
             <div style="display:flex; justify-content:space-between; margin-bottom:10px; border-top: 2px dashed #444; padding-top: 10px;">
-                <span style="color:#ab47bc; font-size:10px; font-weight:bold;">■ 外部协处理 (EXT)</span>
+                <span style="color:#ab47bc; font-size:8px;">■ 外部协处理 (EXT)</span>
             </div>
             <div id="ext-slots-grid" style="display:flex; gap:6px; flex-wrap:wrap; min-height: 20px;"></div>
         </div>
         <div style="width: 95%; max-width: 320px; text-align: left; margin-bottom:5px;">
-            <span style="color:#888; font-size:10px; font-weight:bold;">▼ 闲置库 (INVENTORY)</span>
+            <span style="color:#888; font-size:8px;">▼ 闲置库 (INVENTORY)</span>
         </div>
         <div class="card-container" id="loadout-inventory-list" style="overflow-y:auto; max-height:28%; padding-bottom:10px;"></div>
         <div class="btn-group" style="margin-top:10px;">
@@ -266,19 +267,19 @@
 
     <div id="shop-menu" class="overlay">
         <h1 style="color: #00b0ff; text-shadow: 2px 4px 0 #005a80;">黑客商店</h1>
-        <h2 style="color: #fff; font-size: 12px; margin-bottom: 20px;">
-            可用资产: <span id="shop-pts" style="color:#00e676; font-size: 16px; font-family:inherit; font-weight:bold;">0.0</span> <span style="font-family:inherit; font-weight:bold;">PT</span>
+        <h2 style="color: #fff; font-size: 10px; margin-bottom: 20px;">
+            可用资产: <span id="shop-pts" style="color:#00e676; font-size: 14px; font-family:'Press Start 2P', monospace;">0.0</span> <span style="font-family:'Press Start 2P', monospace;">PT</span>
         </h2>
         <div class="card-container" id="shop-cards" style="overflow-y:auto; max-height:48%; padding-bottom:10px;"></div>
         <div class="btn-group" style="margin-top:15px; flex-direction: row; justify-content: center; width: 95%; max-width:320px;">
-            <button id="refresh-btn" class="btn btn-dark" style="flex: 1; padding: 12px; font-size:12px;" onclick="refreshShop()">刷新 (-1.0)</button>
-            <button class="btn" style="flex: 1; padding: 12px; font-size:12px;" onclick="closeShop()">离开</button>
+            <button id="refresh-btn" class="btn btn-dark" style="flex: 1; padding: 12px; font-size:10px;" onclick="refreshShop()">刷新 (-1.0)</button>
+            <button class="btn" style="flex: 1; padding: 12px; font-size:10px;" onclick="closeShop()">离开</button>
         </div>
     </div>
 
     <div id="game-over-screen" class="overlay">
         <h1 style="color:#e60050" id="game-over-title">连接丢失</h1>
-        <p id="final-score" style="color:#fff; font-size:12px; line-height:2; font-weight:bold;">最终得分: 0 PTS<br>存活时间: 00:00</p>
+        <p id="final-score" style="color:#fff; font-size:12px; line-height:2">最终得分: 0 PTS<br>存活时间: 00:00</p>
         <div class="btn-group" style="margin-top: 15px;">
             <button class="btn btn-red" onclick="startGame(currentLevel)">重新部署</button>
             <button class="btn btn-dark" onclick="quitGame()">返回主屏</button>

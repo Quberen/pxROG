@@ -2,10 +2,10 @@
 const config = { dmgText: true, shake: true, controlOffsetY: 90 };
 
 const DIFF_CONFIG = [
-    { name: "新兵", desc: "简单：新手教学，无集群敌人。", hpMod: 0.8, dmgMod: 1.0, spawnMod: 0.8, ptMod: 1.2, p_hp: 100, p_dmg: 12 },
-    { name: "老手", desc: "普通：标准战斗，基础生存环境。", hpMod: 1.0, dmgMod: 1.0, spawnMod: 1.0, ptMod: 1.0, p_hp: 100, p_dmg: 12 },
-    { name: "精英", desc: "困难：高压集群，敌人规模极大增加。", hpMod: 1.5, dmgMod: 1.0, spawnMod: 1.5, ptMod: 1.0, p_hp: 100, p_dmg: 12 },
-    { name: "深渊", desc: "深渊：残血开局，极高物价与承伤！", hpMod: 1.5, dmgMod: 1.25, spawnMod: 1.5, ptMod: 0.8, p_hp: 80,  p_dmg: 8 }
+    { name: "新兵", desc: "简单：新手教学，无集群敌人。", hpMod: 0.8, dmgMod: 1.0, spawnMod: 0.8, ptMod: 1.2, p_hp: 100, p_dmg: 12, maxEnemies: 20 },
+    { name: "老手", desc: "普通：标准战斗，基础生存环境。", hpMod: 1.0, dmgMod: 1.0, spawnMod: 1.0, ptMod: 1.0, p_hp: 100, p_dmg: 12, maxEnemies: 35 },
+    { name: "精英", desc: "困难：高压集群，敌人规模极大增加。", hpMod: 1.5, dmgMod: 1.0, spawnMod: 1.5, ptMod: 1.0, p_hp: 100, p_dmg: 12, maxEnemies: 50 },
+    { name: "深渊", desc: "深渊：残血开局，极高物价与承伤！", hpMod: 1.5, dmgMod: 1.25, spawnMod: 1.5, ptMod: 0.8, p_hp: 80,  p_dmg: 8, maxEnemies: 70 }
 ];
 
 const RARITY = { C: { name: '普通', color: '#fff', weight: 50 }, R: { name: '稀有', color: '#00b0ff', weight: 30 }, E: { name: '史诗', color: '#ab47bc', weight: 15 }, L: { name: '传说', color: '#ffea00', weight: 5 } };
@@ -129,20 +129,15 @@ const LEVELS = {
         id: 'debug', shopItems: 'ALL', timeHpMultiplier: (sec) => 1 + Math.pow(sec/100, 1.2) * 0.5,
         spawnLoop: function() {
             if (gameTimeSeconds < 10 && directorPoints < 2) directorPoints = 2; 
-            if (frameCount % 20 === 0 && enemies.length < 60) {
+            
+            let maxE = DIFF_CONFIG[currentDifficulty].maxEnemies;
+            
+            // 只有当场上怪物未达上限时，才允许产怪
+            if (frameCount % 20 === 0 && enemies.length < maxE) {
                 if (directorPoints >= 0) {
+                    
                     if (directorState === 'COOLDOWN') {
-                        // 补给波次直接随机变异，不再手动指定特定类型
-                        if (healWaveEnemyType && directorPoints > healWaveEnemyType.weight * 0.5) {
-                            let x = Math.random() * (width - 60) + 30; let e = null;
-                            if(healWaveEnemyType.type === 'Locator') e = new Locator(x, -40, false, true);
-                            else if(healWaveEnemyType.type === 'WandererLow') e = new Wanderer(x, -40, false, null, false, true);
-                            else e = new Wanderer(x, -40, true, null, false, true);
-                            
-                            if(e) {
-                                e.hp *= 2; e.maxHp *= 2; e.scale = 1.2; enemies.push(e); directorPoints -= healWaveEnemyType.weight;
-                            }
-                        }
+                        // 导演休息阶段不再强制产怪，由 main.js 控制静默清场，清完才进入下一阶段
                         return;
                     }
 
@@ -150,11 +145,21 @@ const LEVELS = {
                     if (currentDifficulty === 0) unlocked = unlocked.filter(t => !t.type.includes('Swarm') && !t.type.includes('Spec'));
 
                     let purchases = 0;
-                    while (unlocked.length > 0 && purchases < 2 && directorPoints > 0) {
+                    
+                    // 【高压智能调控】：如果点数大量积压，或者快触及怪物数量上限，就指数级放大高危怪物的抽取概率！
+                    let pointPressure = directorPoints / 20.0;
+                    
+                    while (unlocked.length > 0 && purchases < 2 && directorPoints > 0 && enemies.length < maxE) {
                         let totalInverseWeight = 0;
                         unlocked.forEach(t => {
                             let drawProb = 100 / t.weight;
                             if (currentDifficulty >= 2 && t.type.includes('Swarm')) drawProb *= 3; 
+                            
+                            // 压力越大，高花费(大体重)怪物的概率越高
+                            if (pointPressure > 1.0) {
+                                drawProb *= Math.pow(t.weight, pointPressure * 0.8); 
+                            }
+                            
                             t.drawProb = drawProb; totalInverseWeight += drawProb;
                         });
 
@@ -166,7 +171,6 @@ const LEVELS = {
                             let side = null; if (Math.random() < 0.15) side = Math.random() < 0.5 ? 'left' : 'right';
                             let enemyInstance = null;
                             
-                            // 移除旧版 spawnLoop 里的 isBattery 强制标记，交由 entities.js 里的构造函数概率决定
                             switch(selected.type) {
                                 case 'Locator': enemyInstance = new Locator(x, -40, false, false); break;
                                 case 'LocatorSwarm': 
@@ -219,7 +223,6 @@ function initSprites() {
     sprites.player = createPixelTexture([[0,0,0,0,0,1,0,0,0,0,0],[0,0,0,0,1,2,1,0,0,0,0],[0,0,0,0,1,2,1,0,0,0,0],[0,0,1,1,1,2,1,1,1,0,0],[0,1,2,2,1,2,1,2,2,1,0],[1,2,2,2,2,3,2,2,2,2,1],[1,1,1,1,1,1,1,1,1,1,1],[1,0,0,1,0,3,0,1,0,0,1]], ['#ffffff', '#00b0ff', '#00e676'], pSize);
     sprites.hp = createPixelTexture([[0,1,0],[1,2,1],[0,1,0]], ['#00e676', '#ffffff'], pSize);
     
-    // 【掉落物系统更新】：碎屑、核心、能量水晶
     sprites.pt_shard = createPixelTexture([[1]], ['#eeeeee'], 3);
     sprites.pt_core = createPixelTexture([[0,1,0],[1,2,1],[0,1,0]], ['#ffffff', '#e0e0e0'], 3);
     sprites.energy_crystal = createPixelTexture([[0,1,0],[1,2,1],[0,1,0]], ['#00e5ff', '#ffffff'], 3);

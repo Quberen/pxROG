@@ -189,11 +189,12 @@ function activateSkill() {
     }
 }
 
+// 增强弹性系数，为接下来的高速位移做准备
 function applyElastic(obj, targetNode) {
-    obj.vx -= obj.x * 0.5; 
-    obj.vy -= obj.y * 0.5;
-    obj.vx *= 0.65;        
-    obj.vy *= 0.65;
+    obj.vx -= obj.x * 0.7; 
+    obj.vy -= obj.y * 0.7;
+    obj.vx *= 0.6;        
+    obj.vy *= 0.6;
     obj.x += obj.vx; obj.y += obj.vy;
     targetNode.style.transform = `translate(${obj.x}px, ${obj.y}px)`;
 }
@@ -228,8 +229,11 @@ function updateHUD() {
     else if (hpPercent > 0.2) hpColor = '#ff9800';
 
     ui.hpVal.style.color = hpColor;
-    ui.hpVal.innerText = `${Math.floor(hpPercent * 100)}%`;
+    
+    // 【新设定】：血量永远显示实际数值的百分比，可以直接突破100%
+    ui.hpVal.innerText = `${Math.floor(player.hp)}%`;
 
+    // 【新设定】：无尽模式渐变色危险指示灯
     let indColor = '#00e676';
     if (currentLevel === 'sector1') {
         let progress = Math.min(1, gameTimeSeconds / LEVELS['sector1'].duration);
@@ -237,9 +241,22 @@ function updateHUD() {
         else if(progress > 0.8) indColor = '#ff9800';
         else if(progress > 0.4) indColor = '#ffea00';
     } else {
-        if(directorState === 'PEAK') indColor = '#ff1744';
-        else if(directorState === 'COOLDOWN') indColor = '#00e676';
-        else indColor = '#ffea00';
+        if (directorState === 'COOLDOWN') {
+            if (!healWaveEnemyType) indColor = '#ffea00'; // 黄色：停火警戒，等待清场
+            else indColor = '#00e5ff'; // 科技蓝：补给波次正在下达
+        } else {
+            // BUILDUP：根据压力指数，进行丝滑的 绿 -> 黄 -> 红 渐变
+            let pressure = Math.min(1, directorPoints / 25);
+            let r = 0, g = 0;
+            if (pressure < 0.5) {
+                r = Math.floor(0 + 255 * (pressure * 2));
+                g = 230;
+            } else {
+                r = 255;
+                g = Math.floor(230 * (1 - (pressure - 0.5) * 2));
+            }
+            indColor = `rgb(${r}, ${g}, 50)`;
+        }
     }
     drawIndicator(indColor);
     updatePixelButtons();
@@ -453,7 +470,6 @@ function buyUpgrade(id) {
 }
 
 function getPlayerPowerScore() {
-    // 【核心 Bug 修复】：移除了未定义的 player.level，避免了计算出 NaN 导致系统死锁！
     let power = (player.damage * (player.equipment['debt_protocol'].equipped ? 0.8 : 1.0) - 12) * 0.2;
     if(player.equipment.speed.equipped) power += 3; 
     if(player.equipment.spread.equipped) power += 5; 
@@ -461,6 +477,7 @@ function getPlayerPowerScore() {
     return isNaN(power) ? 0 : Math.max(0, power);
 }
 
+// 【核心机制】：AI导演状态机与等待清场逻辑
 function updateDifficultyMetrics() {
     if (frameCount % 60 === 0) { 
         gameTimeSeconds++; 
@@ -468,14 +485,27 @@ function updateDifficultyMetrics() {
         
         if (currentLevel !== 'sector1') {
             directorStateTimer++;
+            
             if (directorState === 'COOLDOWN') {
-                if (directorStateTimer > 15) { directorState = 'BUILDUP'; directorStateTimer = 0; }
-            } else if (directorState === 'BUILDUP' && directorStateTimer > 20 && Math.random() < 0.05 && gameTimeSeconds > 60) {
-                directorState = 'COOLDOWN'; directorStateTimer = 0;
-                let possible = ENEMY_TYPES.filter(t => ['Locator', 'WandererLow', 'WandererHigh'].includes(t.type));
-                healWaveEnemyType = possible[Math.floor(Math.random() * possible.length)];
-                showSystemMessage("[系统提示] 导演介入: 补给波次降临，抓紧修复", "#00e676");
-                directorPoints += 20; 
+                if (!healWaveEnemyType) {
+                    // 等待清场阶段：只要场上少于4只怪，或者等了太久(20秒)，就强行派出特种波次
+                    if (enemies.length <= 4 || directorStateTimer > 20) {
+                        let possible = ENEMY_TYPES.filter(t => ['Locator', 'WandererLow', 'WandererHigh'].includes(t.type));
+                        healWaveEnemyType = possible[Math.floor(Math.random() * possible.length)];
+                        directorPoints += 20; 
+                    }
+                } else {
+                    // 特种波次持续期间，到期自动恢复常规出怪
+                    if (directorStateTimer > 30) { 
+                        directorState = 'BUILDUP'; 
+                        directorStateTimer = 0; 
+                        healWaveEnemyType = null; 
+                    }
+                }
+            } else if (directorState === 'BUILDUP' && directorStateTimer > 30 && Math.random() < 0.05 && gameTimeSeconds > 60) {
+                directorState = 'COOLDOWN'; 
+                directorStateTimer = 0;
+                healWaveEnemyType = null; // 置空以触发“等待清场”阶段
             }
         }
 
@@ -484,6 +514,8 @@ function updateDifficultyMetrics() {
         difficultyScore = baseDiff; 
         updateHUD(); 
     }
+    
+    // 资金注入
     directorPoints += (difficultyScore * DIFF_CONFIG[currentDifficulty].spawnMod) / 25;
 }
 
@@ -649,7 +681,7 @@ function loop() {
         ctx.save(); let color = comboCount >= 200 ? '#e60050' : (comboCount >= 100 ? '#ffea00' : '#00b0ff');
         ctx.fillStyle = color; ctx.globalAlpha = Math.min(1, comboTimer / 30); 
         let scale = 1 + (comboTimer / maxComboTimer) * 0.3; if (comboCount >= 100) scale += Math.sin(frameCount * 0.3) * 0.15; 
-        ctx.translate(width - 20, 85); ctx.scale(scale, scale); ctx.font = '10px "Press Start 2P", "Courier New", "SimSun", monospace';
+        ctx.translate(width - 20, 85); ctx.scale(scale, scale); ctx.font = '10px "Press Start 2P", "DotGothic16", monospace';
         ctx.textAlign = 'right'; ctx.fillText(comboCount + 'X', 0, 0); ctx.restore();
         if (isPlaying && hitStopFrames <= 0) { comboTimer--; if (comboTimer <= 0) comboCount = 0; }
     }

@@ -176,6 +176,7 @@ class Player {
         else if (isKamikaze && !isSpecial) textColor = '#ffea00'; 
         else if (isSwarm) textColor = '#ab47bc'; 
         
+        // 传递 true 表示这是玩家受到的伤害，会触发极速飘字
         if(config.dmgText) pushFloatingText(this.x, this.y-20, Math.floor(actualAmount), textColor, true);
         comboCount = Math.floor(comboCount / 2);
         
@@ -261,7 +262,7 @@ class BaseEnemy {
         this.active = true; this.isHealer = false; this.isSwarm = false; this.isKamikaze = false; this.isSpecial = false; this.isBoss = false; this.isBossMinion = false;
         
         this.isBattery = false; 
-        this._initMods = false; // 用于延迟判断标签
+        this._initMods = false; 
         
         this.particleColor = particleColor || '#757575'; 
         this.scale = 1.0; this.isElite = false; this.eliteFireTimer = 0;
@@ -297,7 +298,7 @@ class BaseEnemy {
         } 
     }
     baseUpdate() {
-        // 第一帧初始化修饰符，确保与医疗兵互斥、Boss免疫
+        // 【核心】：第一帧判定标签，与治疗兵互斥，且Boss完全免疫
         if (!this._initMods) {
             this._initMods = true;
             if (!this.isBoss && !this.isBossMinion && !this.isHealer && !this.isSpecial) {
@@ -322,9 +323,9 @@ class BaseEnemy {
         
         if(this.isElite) { ctx.shadowBlur = 15; ctx.shadowColor = '#ff1744'; }
         
-        // 移除光晕，使用原生的色彩翻转滤镜，赋予其科技蓝色调！
+        // 【核心】：不发边缘光，直接使用原生滤镜翻转色彩，呈现纯正蓝调！
         if(this.isBattery && !this.isElite) {
-            ctx.filter = 'hue-rotate(210deg) brightness(1.5)';
+            ctx.filter = 'hue-rotate(210deg)'; 
         }
         
         ctx.scale(this.scale, this.scale); ctx.drawImage(this.sprite, -this.w/2, -this.h/2); ctx.restore();
@@ -669,7 +670,7 @@ class Item {
             else if (this.type === 'energy') {
                 player.skillEnergy = Math.min(player.maxSkillEnergy, player.skillEnergy + this.value);
                 pushFloatingText(skillBtnRect.x, skillBtnRect.y - 30, `+ENG`, '#00e5ff', false, false, "", 8);
-                updateHUD(); // 触发UI更新，能量条瞬间填色
+                updateHUD(); 
             }
         }
         if (this.y > height + 50) this.active = false;
@@ -678,7 +679,6 @@ class Item {
         if(this.type === 'combo_reward') return; 
         ctx.save();
         
-        // 只有掉落物（绿血包、蓝能量包）才会发光
         if (this.type === 'hp') { ctx.shadowBlur = 12; ctx.shadowColor = '#00e676'; }
         else if (this.type === 'energy') { ctx.shadowBlur = 12; ctx.shadowColor = '#00e5ff'; }
         
@@ -697,10 +697,22 @@ class DamageText {
     constructor(x, y, amountStr, colorStr, isPlayerDamage = false, isCrit = false, prefix = "", fontSize = 10) { 
         this.x = x; this.y = y; this.fontSize = fontSize;
         let disp = amountStr;
-        if(typeof amountStr === 'number') { disp = Math.floor(amountStr); } // 去除一切小数
+        if(typeof amountStr === 'number') { disp = Math.floor(amountStr); } 
         this.text = (isPlayerDamage ? "-" : prefix) + disp + (isCrit && typeof amountStr === 'number' ? "!" : ""); 
         this.color = colorStr || '#ffffff'; this.life = 45; this.maxLife = 45;
-        this.vx = (Math.random() - 0.5) * 2; this.vy = -3 - Math.random() * 2; this.gravity = 0.2; this.active = true; this.isCrit = isCrit;
+        
+        // 【核心】：大幅提升玩家受击时的飙血数字物理速度！
+        if (isPlayerDamage) {
+            this.vx = (Math.random() - 0.5) * 6; 
+            this.vy = -6 - Math.random() * 4; 
+            this.gravity = 0.4;
+        } else {
+            this.vx = (Math.random() - 0.5) * 2; 
+            this.vy = -3 - Math.random() * 2; 
+            this.gravity = 0.2;
+        }
+        
+        this.active = true; this.isCrit = isCrit;
     }
     update() { this.x += this.vx; this.y += this.vy; this.vy += this.gravity; this.life--; if (this.life <= 0) this.active = false; }
     draw(ctx) { 
@@ -708,7 +720,8 @@ class DamageText {
         let scale = progress < 0.2 ? 1 + (progress / 0.2) * 0.5 : 1.5 - ((progress - 0.2) / 0.8) * 0.5;
         if(this.isCrit) scale *= 1.3;
         ctx.save(); ctx.translate(this.x, this.y); ctx.scale(scale, scale);
-        ctx.fillStyle = this.color; ctx.font = `${this.fontSize}px "Press Start 2P", "Courier New", "SimSun", monospace`; ctx.textAlign = 'center'; 
+        // 使用在线完美像素字体
+        ctx.fillStyle = this.color; ctx.font = `${this.fontSize}px "Press Start 2P", "DotGothic16", monospace`; ctx.textAlign = 'center'; 
         ctx.lineWidth = 3; ctx.strokeStyle = "#000"; ctx.strokeText(this.text, 0, 0); ctx.fillText(this.text, 0, 0);
         ctx.restore(); ctx.globalAlpha = 1; 
     }
