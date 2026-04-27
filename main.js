@@ -23,6 +23,7 @@ const screens = {
     loadout: document.getElementById('loadout-menu'), gameOver: document.getElementById('game-over-screen') 
 };
 
+// 【修复点】：彻底移除了 topRightCont 幽灵引用
 const ui = { 
     hpVal: document.getElementById('hud-hp-val'), ptVal: document.getElementById('hud-pt-val'), 
     indCvs: document.getElementById('hud-indicator'),
@@ -32,8 +33,8 @@ const ui = {
     loadoutSlotsText: document.getElementById('loadout-slots-text'), coreSlotsGrid: document.getElementById('core-slots-grid'), extSlotsGrid: document.getElementById('ext-slots-grid'), inventoryList: document.getElementById('loadout-inventory-list'),
     sysMessage: document.getElementById('system-message'),
     topLeftCont: document.getElementById('hud-top-left'),
-    topRightCont: document.getElementById('hud-top-right'),
-    sideBtns: document.getElementById('side-btns-container')
+    sideBtns: document.getElementById('side-btns-container'),
+    inflationText: document.getElementById('inflation-text'), inflationFill: document.getElementById('inflation-bar-fill')
 };
 
 let shopBtnRect = {x:0, y:0}; let skillBtnRect = {x:0, y:0};
@@ -58,10 +59,65 @@ let isBossSpawned = false;
 let directorState = 'BUILDUP'; let directorStateTimer = 0;
 let healWaveEnemyType = null;
 
-let uiOffsets = { hp: {x:0, y:0}, pt: {x:0, y:0} };
+let uiOffsets = { hp: {x:0, y:0, vx:0, vy:0}, pt: {x:0, y:0, vx:0, vy:0}, skill: {x:0, y:0, vx:0, vy:0} };
 
 const BASE_REFRESH_COST = 1.0; let currentRefreshCost = BASE_REFRESH_COST; let currentShopItems = [];
 let taggedItemId = null; 
+let shopInflation = 0.0; 
+let wasSkillFull = false;
+
+window.spawnEnemyByType = function(type, x, options = {}) {
+    let side = (x < width/2) ? 'left' : 'right';
+    let forceHeal = options.forceHeal || false;
+    
+    if (type.startsWith('Formation_')) {
+        if (type === 'Formation_V_Strike') {
+            let cx = Math.max(80, Math.min(width - 80, x));
+            enemies.push(new Locator(cx, -40, false, false, 2.0));
+            enemies.push(new Locator(cx - 35, -75, false, false, 2.0));
+            enemies.push(new Locator(cx + 35, -75, false, forceHeal, 2.0));
+            enemies.push(new Locator(cx - 70, -110, false, false, 2.0));
+            enemies.push(new Locator(cx + 70, -110, false, false, 2.0));
+        } else if (type === 'Formation_Turret_Wall') {
+            let cx = Math.max(80, Math.min(width - 80, x));
+            enemies.push(new Turret(cx - 50, -40, false, false));
+            enemies.push(new Turret(cx + 50, -40, false, forceHeal));
+            enemies.push(new Turret(cx, -80, false, false));
+        } else if (type === 'Formation_Ambush') {
+            enemies.push(new Wanderer(0, -40, true, 0, false, false, 'left'));
+            enemies.push(new Wanderer(0, -80, true, 0, false, forceHeal, 'left'));
+            enemies.push(new Wanderer(width, -40, true, Math.PI, false, false, 'right'));
+            enemies.push(new Wanderer(width, -80, true, Math.PI, false, false, 'right'));
+        }
+        return;
+    }
+
+    let e = null;
+    switch(type) {
+        case 'Locator': e = new Locator(x, -40, false, forceHeal); break;
+        case 'LocatorSwarm': 
+            for(let i=-2; i<=2; i++) enemies.push(new Locator(x + i*35, -40, true, false, 1.8)); return;
+        case 'WandererLow': e = new Wanderer(x, -40, false, null, false, forceHeal, side); break;
+        case 'WandererHigh': e = new Wanderer(x, -40, true, null, false, forceHeal, side); break;
+        case 'WandererSwarm': 
+            let ph = Math.random() * Math.PI * 2; 
+            for(let i=0; i<4; i++) enemies.push(new Wanderer(x, -40 - i*35, false, ph, true, false, side)); return;
+        case 'Kamikaze': e = new Kamikaze(x, -40); break;
+        case 'KamikazeSwarm': 
+            for(let i=0; i<5; i++) enemies.push(new Kamikaze(x + i*40*(Math.random()>0.5?1:-1), -40 - i*45, 'swarm')); return;
+        case 'KamikazeSpec': e = new Kamikaze(x, -40, 'special'); break;
+        case 'ArcFlyer': e = new ArcFlyer(0, -20, Math.random() > 0.5); break;
+        case 'ArcFlyerSwarm': 
+            let isL = Math.random() > 0.5; 
+            for(let i=0; i<3; i++) enemies.push(new ArcFlyer(0, -20, isL, -0.15 * i, true)); return;
+        case 'Turret': e = new Turret(x, -40, false, forceHeal); break;
+        case 'TurretSwarm': 
+            enemies.push(new Turret(x - 35, -40, true)); enemies.push(new Turret(x + 35, -40, true)); return;
+        case 'Tank': e = new Tank(x, -40); break;
+        case 'TankSwarm': e = new Tank(x, -40, false, true); break;
+    }
+    if (e) enemies.push(e);
+};
 
 function initDifficultyUI() {
     if(unlockedDifficulty >= 2) document.getElementById('diff-nightmare').classList.remove('locked');
@@ -175,12 +231,19 @@ window.addEventListener('touchmove', e => {
 }, {passive: false});
 window.addEventListener('touchend', () => widgetDragging = null);
 
-function switchSettingsTab(tabId) {
-    document.getElementById('tab-game').classList.add('hidden'); document.getElementById('tab-control').classList.add('hidden');
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.getElementById('tab-' + tabId).classList.remove('hidden');
-    document.querySelector(`.tab-btn[onclick="switchSettingsTab('${tabId}')"]`).classList.add('active');
-    if (tabId === 'control') { drawOffsetWidget(); drawSensWidget(); }
+function enterSettingsSub(sub) {
+    document.getElementById('settings-main-list').classList.add('ctrl-hidden');
+    document.getElementById('settings-sub-game').classList.add('ctrl-hidden');
+    document.getElementById('settings-sub-control').classList.add('ctrl-hidden');
+    document.getElementById('settings-sub-' + sub).classList.remove('ctrl-hidden');
+    document.getElementById('settings-title').innerText = (sub === 'control') ? "操控设定" : "系统与画面";
+    if(sub === 'control') { drawOffsetWidget(); drawSensWidget(); }
+}
+function backToSettingsMain() {
+    document.getElementById('settings-sub-game').classList.add('ctrl-hidden');
+    document.getElementById('settings-sub-control').classList.add('ctrl-hidden');
+    document.getElementById('settings-main-list').classList.remove('ctrl-hidden');
+    document.getElementById('settings-title').innerText = "系统设置";
 }
 
 function triggerShake(intensity, duration) { if (!config.shake) return; shakeIntensity = intensity; shakeTimer = duration; }
@@ -214,23 +277,15 @@ function activateSkill() {
         triggerShake(10, 10);
         flashScreenTimer = 15;
         flashScreenColor = '0, 229, 255';
+        wasSkillFull = false;
         updateHUD();
     }
 }
 
-// 【暴力物理插值】：血量UI回弹极快，无视幅度
 function applyElastic(obj, targetNode) {
     let dx = -obj.x; let dy = -obj.y;
-    let dist = Math.sqrt(dx*dx + dy*dy);
-    if(dist > 0.5) {
-        // 保证最小回弹速度为极速 10
-        let speed = Math.max(10, dist * 0.4); 
-        if(speed > dist) speed = dist;
-        obj.x += (dx/dist) * speed;
-        obj.y += (dy/dist) * speed;
-    } else {
-        obj.x = 0; obj.y = 0;
-    }
+    obj.x += dx * 0.25; 
+    obj.y += dy * 0.25;
     targetNode.style.transform = `translate(${obj.x}px, ${obj.y}px)`;
 }
 
@@ -238,6 +293,9 @@ function updatePixelButtons() {
     if(!player) return;
     let skProg = player.skillActiveTimer > 0 ? (player.skillActiveTimer/600) : (player.skillCdTimer > 0 ? (1 - player.skillCdTimer/900) : player.skillEnergy / player.maxSkillEnergy);
     let skColor = player.skillActiveTimer > 0 ? '#00e5ff' : (player.skillCdTimer > 0 ? '#ff1744' : (player.skillEnergy >= player.maxSkillEnergy ? '#ffea00' : '#00b0ff'));
+    
+    let btnCvs = document.getElementById('skill-btn-cvs');
+    applyElastic(uiOffsets.skill, btnCvs);
     
     drawPixelButton('skill-btn-cvs', sprites.i_skill, skProg, skColor);
     drawPixelButton('loadout-btn-cvs', sprites.i_loadout, 0, '#fff');
@@ -250,6 +308,18 @@ function updateHUD() {
 
     applyElastic(uiOffsets.hp, ui.hpVal);
     
+    if (player.hp / player.maxHp < 0.3 && frameCount % 4 === 0) {
+        uiOffsets.hp.x += (Math.random()-0.5)*8;
+        uiOffsets.hp.y += (Math.random()-0.5)*8;
+    }
+
+    let isFullNow = (player.skillEnergy >= player.maxSkillEnergy);
+    if(isFullNow && !wasSkillFull && player.skillCdTimer <= 0) {
+        uiOffsets.skill.x = (Math.random() > 0.5 ? 1 : -1) * 15;
+        uiOffsets.skill.y = (Math.random() > 0.5 ? 1 : -1) * 15;
+    }
+    wasSkillFull = isFullNow;
+
     ui.ptVal.innerText = `${player.pt.toFixed(1)} PT`;
     const hpPercent = Math.max(0, player.hp / player.maxHp);
     
@@ -289,11 +359,15 @@ function updateHUD() {
 }
 
 function getShopCost(opt) {
+    let baseCst = 0;
     if (opt.type === 'equip') {
-        let baseCst = (!player.equipment[opt.id].owned) ? opt.initialCost : opt.cost + player.equipment[opt.id].level * opt.costStep;
-        return parseFloat((baseCst * (currentDifficulty === 3 ? 1.2 : 1.0)).toFixed(1));
-    } 
-    return parseFloat((opt.cost * (currentDifficulty === 3 ? 1.2 : 1.0)).toFixed(1));
+        baseCst = (!player.equipment[opt.id].owned) ? opt.initialCost : opt.cost + player.equipment[opt.id].level * opt.costStep;
+    } else {
+        baseCst = opt.cost;
+    }
+    let diffMult = currentDifficulty === 3 ? 1.2 : 1.0;
+    let inflationMult = 1.0 + (shopInflation / 100.0);
+    return parseFloat((baseCst * diffMult * inflationMult).toFixed(1));
 }
 
 function getWeightedRandomItem(excludeIds) {
@@ -414,6 +488,15 @@ function toggleEquipment(id) {
 
 function renderShopCards() {
     ui.shopPts.innerText = player.pt.toFixed(1); ui.shopCards.innerHTML = '';
+    
+    if (ui.inflationText && ui.inflationFill) {
+        ui.inflationText.innerText = `+${Math.floor(shopInflation)}%`;
+        ui.inflationFill.style.width = `${Math.min(100, shopInflation)}%`;
+        if (shopInflation > 50) ui.inflationText.style.color = '#ff1744';
+        else if (shopInflation > 20) ui.inflationText.style.color = '#ff9800';
+        else ui.inflationText.style.color = '#aaa';
+    }
+
     currentShopItems.forEach(opt => {
         let itemCost = getShopCost(opt); const canBuy = player.pt >= itemCost;
         const el = document.createElement('div'); const rData = RARITY[opt.rarity]; const tData = TYPE_TAGS[opt.type] || TYPE_TAGS['stat'];
@@ -423,7 +506,10 @@ function renderShopCards() {
         let isTagged = (taggedItemId === opt.id);
         el.className = `upgrade-card ${canBuy ? '' : 'disabled'} ${isTagged ? 'tagged-item' : ''}`; el.style.borderColor = rData.color;
         let lvText = opt.max === 999 ? '∞' : `Lv.${currentLv}/${opt.max}`; let titleText = isUpgrade ? `▲ ${opt.name} 升级` : `${opt.name}`;
-        el.innerHTML = `<div class="card-info"><div class="card-title" style="color: ${rData.color}"><span>${isTagged ? '★ ' : ''}<span style="color:#aaa; font-size:8px; margin-right:4px;">[${tData.label}]</span>${titleText}</span><span style="font-size:8px; opacity:0.8">[${rData.name}]</span></div><div class="card-desc">${opt.desc}</div></div><div class="card-cost-box" style="background: ${rData.color}33"><div class="card-cost" style="color: ${rData.color}">${itemCost.toFixed(1)}</div><div class="card-max" style="color: ${rData.color}">${lvText}</div></div>`;
+        
+        let costColor = shopInflation > 20 ? '#ff5252' : rData.color;
+
+        el.innerHTML = `<div class="card-info"><div class="card-title" style="color: ${rData.color}"><span>${isTagged ? '★ ' : ''}<span style="color:#aaa; font-size:8px; margin-right:4px;">[${tData.label}]</span>${titleText}</span><span style="font-size:8px; opacity:0.8">[${rData.name}]</span></div><div class="card-desc">${opt.desc}</div></div><div class="card-cost-box" style="background: ${rData.color}33"><div class="card-cost" style="color: ${costColor}">${itemCost.toFixed(1)}</div><div class="card-max" style="color: ${rData.color}">${lvText}</div></div>`;
         el.onclick = function() { 
             if (canBuy) { 
                 if (taggedItemId === opt.id) taggedItemId = null; 
@@ -453,10 +539,11 @@ function refreshShop() {
 function buyUpgrade(id) {
     let opt = currentShopItems.find(i => i.id === id); let itemCost = getShopCost(opt);
     if (!opt || player.pt < itemCost) return;
-    player.pt -= itemCost; 
     
-    // 【完美修复】：每次消费，累计积分都要增加，确保神装能被顺利解锁！
+    player.pt -= itemCost; 
     player.totalUpgradePoints += itemCost;
+    
+    shopInflation += Math.max(5, itemCost * 0.5);
     
     if (opt.type === 'equip') {
         if (!player.equipment[id].owned) {
@@ -511,12 +598,16 @@ function updateDifficultyMetrics() {
         gameTimeSeconds++; 
         levelHpMultiplier = LEVELS[currentLevel].timeHpMultiplier(gameTimeSeconds);
         
+        if (shopInflation > 0) {
+            shopInflation = Math.max(0, shopInflation - 0.5);
+            if(gameState === 'SHOP') renderShopCards(); 
+        }
+        
         if (currentLevel !== 'sector1') {
             directorStateTimer++;
             
             if (directorState === 'COOLDOWN') {
                 if (!healWaveEnemyType) {
-                    // 等待清场阶段：只要场上少于4只怪，或者等了太久(20秒)，就立刻切入蓝色补给波次
                     if (enemies.length <= 4 || directorStateTimer > 20) {
                         let possible = ENEMY_TYPES.filter(t => ['Locator', 'WandererLow', 'WandererHigh'].includes(t.type));
                         healWaveEnemyType = possible[Math.floor(Math.random() * possible.length)];
@@ -547,22 +638,32 @@ function updateDifficultyMetrics() {
 
 function resize() { width = window.innerWidth; height = window.innerHeight; canvas.width = width; canvas.height = height; ctx.imageSmoothingEnabled = false; updateUIRects(); }
 
+// 【修复错误点】：彻底移除 showScreen 里不存在的 topRightCont
 function showScreen(screenId) {
     Object.values(screens).forEach(s => s.classList.remove('active'));
     if(screenId) screens[screenId].classList.add('active');
-    const inGameUIElements = [ui.topLeftCont, ui.topRightCont, ui.sideBtns];
+    
+    const inGameUIElements = [ui.topLeftCont, ui.sideBtns];
     if(screenId === 'start' || screenId === 'gameOver') {
-        inGameUIElements.forEach(el => el.classList.add('hud-hidden')); ui.bossHpCont.style.opacity = 0;
+        inGameUIElements.forEach(el => { if(el) el.classList.add('hud-hidden'); }); 
+        if(ui.bossHpCont) ui.bossHpCont.style.opacity = 0;
     } else {
-        inGameUIElements.forEach(el => el.classList.remove('hud-hidden'));
-        if(isBossSpawned) ui.bossHpCont.style.opacity = 1;
+        inGameUIElements.forEach(el => { if(el) el.classList.remove('hud-hidden'); });
+        if(isBossSpawned && ui.bossHpCont) ui.bossHpCont.style.opacity = 1;
     }
     updateUIRects();
 }
 
 function toggleSetting(key) { config[key] = !config[key]; ui.dmgBtn.innerText = `伤害飘字: ${config.dmgText ? '开' : '关'}`; ui.shakeBtn.innerText = `屏幕震动: ${config.shake ? '开' : '关'}`; }
 
-function openSettings(fromState) { overlayHistory = fromState; gameState = 'SETTINGS'; switchSettingsTab('control'); showScreen('settings'); }
+function openSettings(fromState) { 
+    overlayHistory = fromState; gameState = 'SETTINGS'; 
+    document.getElementById('settings-sub-game').classList.add('ctrl-hidden');
+    document.getElementById('settings-sub-control').classList.add('ctrl-hidden');
+    document.getElementById('settings-main-list').classList.remove('ctrl-hidden');
+    document.getElementById('settings-title').innerText = "系统设置";
+    showScreen('settings'); 
+}
 function closeSettings() { gameState = overlayHistory; if (gameState === 'START') showScreen('start'); else if (gameState === 'PAUSED') showScreen('pause'); else showScreen(null); }
 
 function togglePause() { 
@@ -580,12 +681,35 @@ function startGame(levelId) {
     isBossSpawned = false; taggedItemId = null; ui.bossHpCont.style.opacity = 0; ui.bossToast.style.opacity = 0;
     specialKamikazeMisses = 0; levelHpMultiplier = 1.0; directorState = 'BUILDUP'; directorStateTimer = 0; ui.sysMessage.style.opacity = 0;
     
-    uiOffsets = {hp:{x:0,y:0}, pt:{x:0,y:0}};
+    shopInflation = 0.0; wasSkillFull = false;
+    uiOffsets = {hp:{x:0,y:0,vx:0,vy:0}, pt:{x:0,y:0,vx:0,vy:0}, skill:{x:0,y:0,vx:0,vy:0}};
 
     updateHUD(); gameState = 'PLAYING'; showScreen(null);
 }
 
-// 【全新触摸操作系统】：支持绝对控制和相对滑动牵引控制
+function gameOver(title, isVictory) {
+    gameState = 'GAMEOVER'; let m = Math.floor(gameTimeSeconds / 60).toString().padStart(2, '0'); let s = (gameTimeSeconds % 60).toString().padStart(2, '0');
+    
+    let fancyTitle = title;
+    let isAbyssClear = isVictory && currentDifficulty === 3;
+    
+    const titleEl = document.getElementById('game-over-title');
+    titleEl.className = '';
+    if (isAbyssClear) {
+        fancyTitle = "ABYSS CLEARED";
+        titleEl.classList.add('abyss-clear-title');
+    } else {
+        titleEl.style.color = isVictory ? "#00e676" : "#e60050";
+    }
+    
+    titleEl.innerText = fancyTitle; 
+    
+    let extraText = isAbyssClear ? "<br><br><span style='color:#00b0ff'>[DATABASE UNLOCKED]</span>" : "";
+    ui.finalScore.innerHTML = `战绩结算: ${score} PTS<br>存活时间: ${m}:${s}${extraText}`; 
+    
+    showScreen('gameOver');
+}
+
 let isTouchActive = false;
 let touchStartX = 0; let touchStartY = 0;
 
@@ -605,7 +729,6 @@ function handleTouchMove(clientX, clientY) {
         player.targetX = clientX; 
         player.targetY = clientY - config.controlOffsetY;
     } else {
-        // 相对牵引模式：根据灵敏度放大或缩小移动距离
         let dx = clientX - touchStartX;
         let dy = clientY - touchStartY;
         player.targetX += dx * config.controlSens;
@@ -629,8 +752,14 @@ function processGroup(group, isPlaying) { for (let i = group.length - 1; i >= 0;
 function loop() {
     requestAnimationFrame(loop);
     if (gameState === 'START') { ctx.fillStyle = '#050510'; ctx.fillRect(0, 0, width, height); updateAndDrawStars(ctx, true); return; }
-    const isPlaying = (gameState === 'PLAYING');
     
+    if (gameState === 'GAMEOVER') {
+        ctx.fillStyle = '#050510'; ctx.fillRect(0, 0, width, height); updateAndDrawStars(ctx, false);
+        if(player && player.hp > 0) player.draw(ctx);
+        processGroup(enemies, false); processGroup(particles, false); return;
+    }
+
+    const isPlaying = (gameState === 'PLAYING');
     ctx.fillStyle = '#050510'; ctx.fillRect(0, 0, width, height); updateAndDrawStars(ctx, isPlaying);
     
     ctx.save(); 
@@ -706,7 +835,8 @@ function loop() {
             if (endingTimer === 60 && enemies[0]) { createExplosion(enemies[0].x, enemies[0].y, '#ffffff', 200); flashScreenTimer = 30; flashScreenColor = '255,255,255'; enemies = []; ui.bossHpCont.style.opacity = 0; }
         }
         if (endingTimer <= 0) {
-            if (endingState === 'playerDead') gameOver('连接丢失', false); else if (endingState === 'bossDead') { unlockNextDifficulty(); gameOver('区域清剿完成！', true); }
+            if (endingState === 'playerDead') gameOver('连接丢失', false); 
+            else if (endingState === 'bossDead') { unlockNextDifficulty(); gameOver('区域清剿完成！', true); }
             endingState = 'none';
         }
     }

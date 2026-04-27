@@ -159,11 +159,11 @@ class Player {
 
         this.hp -= actualAmount; this.invincible = 20; 
         
-        // 【暴力 UI 位移】：保底给出极大的位移系数，结合 main.js 里的高频插值，实现闪电般的回弹手感
-        let dmgMag = 35 + Math.min(25, actualAmount * 0.5);
+        // 【极速回弹】：直接赋予坐标绝对位移，无论扣血多少速度永远是最大，只有振幅受影响
+        let dmgMag = 15 + Math.min(20, actualAmount * 0.6);
         let dmgAng = Math.random() * Math.PI * 2;
-        uiOffsets.hp.vx += Math.cos(dmgAng) * dmgMag;
-        uiOffsets.hp.vy += Math.sin(dmgAng) * dmgMag;
+        uiOffsets.hp.x += Math.cos(dmgAng) * dmgMag;
+        uiOffsets.hp.y += Math.sin(dmgAng) * dmgMag;
         
         let pColor = isSpecial ? '#424242' : '#9e9e9e'; let pCount = isSpecial ? 40 : (isKamikaze ? 30 : 12);
         createExplosion(this.x, this.y, pColor, pCount);
@@ -298,7 +298,7 @@ class BaseEnemy {
         } 
     }
     baseUpdate() {
-        // 【标签互斥与独立贴图】：第一帧进行判定。治疗兵、特种兵和Boss免疫；允许Boss衍生物变异。
+        // 【机制】：第一帧检查变异。治疗、自爆特种和Boss免疫；但不再限制Boss小怪！
         if (!this._initMods) {
             this._initMods = true;
             if (!this.isHealer && !this.isSpecial && !this.isBoss) {
@@ -307,7 +307,7 @@ class BaseEnemy {
                 }
             }
             
-            // 【无滤镜渲染】：如果是能量怪，自动将本体贴图替换为 config 里的电池专属贴图
+            // 【纯净贴图替换】：不再用滤镜，直接挂载原生蓝调纹理
             if (this.isBattery) {
                 if (this.sprite === sprites.locator || this.sprite === sprites.locator_swarm) this.sprite = sprites.locator_battery;
                 else if (this.sprite === sprites.wanderer || this.sprite === sprites.wanderer_swarm) this.sprite = sprites.wanderer_battery;
@@ -330,7 +330,6 @@ class BaseEnemy {
         
         if(this.isElite) { ctx.shadowBlur = 15; ctx.shadowColor = '#ff1744'; }
         
-        // 彻底移除了这里的 filter 滤镜
         ctx.scale(this.scale, this.scale); ctx.drawImage(this.sprite, -this.w/2, -this.h/2); ctx.restore();
     }
     takeDamage(amount, showText=true, isCrit=false, damageType='normal') {
@@ -704,11 +703,11 @@ class DamageText {
         this.text = (isPlayerDamage ? "-" : prefix) + disp + (isCrit && typeof amountStr === 'number' ? "!" : ""); 
         this.color = colorStr || '#ffffff'; this.life = 45; this.maxLife = 45;
         
-        // 【暴力物理弹射】：极速爆射的初始速度！
+        // 【视觉优化】：降低玩家受伤时的飘字夸张程度，回归常规动量
         if (isPlayerDamage) {
-            this.vx = (Math.random() - 0.5) * 8; 
-            this.vy = -8 - Math.random() * 5; 
-            this.gravity = 0.5;
+            this.vx = (Math.random() - 0.5) * 3; 
+            this.vy = -4 - Math.random() * 2; 
+            this.gravity = 0.25;
         } else {
             this.vx = (Math.random() - 0.5) * 2; 
             this.vy = -3 - Math.random() * 2; 

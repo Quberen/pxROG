@@ -1,7 +1,7 @@
 // === config.js ===
 
-// 增加全新的操控模式配置 (absolute: 绝对定位, relative: 滑动牵引)
-const config = { dmgText: true, shake: true, controlOffsetY: 90, controlMode: 'absolute', controlSens: 1.5 };
+// 加入了相对滑动(relative)设定与灵敏度(controlSens)
+const config = { dmgText: true, shake: true, controlOffsetY: 90, controlMode: 'relative', controlSens: 1.5 };
 
 const DIFF_CONFIG = [
     { name: "新兵", desc: "简单：新手教学，无集群敌人。", hpMod: 0.8, dmgMod: 1.0, spawnMod: 0.8, ptMod: 1.2, p_hp: 100, p_dmg: 12, maxEnemies: 20 },
@@ -39,27 +39,34 @@ function getHpMaxBoost(level) {
     if(level === 0) return 0; if(level === 1) return 30; if(level === 2) return 60; return 100;
 }
 
-// 【为导演代币系统做准备】：新增 role 标签，以便未来的生成逻辑可以分类抽取
+// 【加入阵型代币】：大幅提升精英怪权重，并引入独立的阵型单位
 const ENEMY_TYPES = [
     { type: 'Locator',       weight: 1,  unlockTime: 0,   role: 'fodder' },
     { type: 'WandererLow',   weight: 3,  unlockTime: 5,   role: 'fodder' }, 
     { type: 'Kamikaze',      weight: 4,  unlockTime: 20,  role: 'special' },
     { type: 'LocatorSwarm',  weight: 6,  unlockTime: 20,  role: 'swarm' }, 
-    { type: 'WandererHigh',  weight: 8,  unlockTime: 15,  role: 'elite' },  
+    // 显著提升精英游荡者权重
+    { type: 'WandererHigh',  weight: 12, unlockTime: 15,  role: 'elite' },  
     { type: 'Turret',        weight: 10, unlockTime: 45,  role: 'elite' },
     { type: 'ArcFlyer',      weight: 12, unlockTime: 30,  role: 'special' },
     { type: 'WandererSwarm', weight: 15, unlockTime: 25,  role: 'swarm' },  
     { type: 'KamikazeSwarm', weight: 16, unlockTime: 40,  role: 'swarm' },
     { type: 'ArcFlyerSwarm', weight: 20, unlockTime: 50,  role: 'swarm' },
     { type: 'TurretSwarm',   weight: 22, unlockTime: 70,  role: 'swarm' },
-    { type: 'KamikazeSpec',  weight: 25, unlockTime: 60,  role: 'elite' },
+    { type: 'KamikazeSpec',  weight: 30, unlockTime: 60,  role: 'elite' },
     { type: 'Tank',          weight: 30, unlockTime: 85,  role: 'tank' },
-    { type: 'TankSwarm',     weight: 40, unlockTime: 100, role: 'tank' }
+    { type: 'TankSwarm',     weight: 40, unlockTime: 100, role: 'tank' },
+    
+    // 【全新机制】：复合阵型卡！
+    { type: 'Formation_V_Strike', weight: 12, unlockTime: 20, role: 'formation' },
+    { type: 'Formation_Turret_Wall', weight: 25, unlockTime: 50, role: 'formation' },
+    { type: 'Formation_Ambush', weight: 28, unlockTime: 65, role: 'formation' }
 ];
 
 const LEVELS = {
+    // 【完全重构的第一关】：纯粹的无人机(Drone)与定卫者派系，移除游荡者
     'sector1': {
-        id: 'sector1', duration: 150, shopItems: ['damage', 'speed', 'spread', 'heal'],
+        id: 'sector1', duration: 150, shopItems: ['damage', 'speed', 'spread', 'heal', 'hp_max', 'magnet', 'crit_rate'], 
         timeHpMultiplier: (sec) => 1 + (sec / 150) * 1.5, 
         spawnLoop: function() {
             if (isBossSpawned) return;
@@ -69,62 +76,38 @@ const LEVELS = {
             }
             
             let sec = gameTimeSeconds + (frameCount % 60) / 60;
-            let diffMod = DIFF_CONFIG[currentDifficulty].spawnMod;
             let isEasy = currentDifficulty === 0;
             
-            let checkInt = (f) => frameCount % Math.max(10, Math.floor(f / diffMod)) === 0;
+            // 前45秒：手工设计的新手引导节奏
+            if (sec < 20) { 
+                if (frameCount % 120 === 0) window.spawnEnemyByType('Locator', Math.random()*(width-60)+30); 
+                if (sec > 10 && frameCount % 180 === 0) window.spawnEnemyByType('Locator', Math.random()*(width-60)+30, {forceHeal: true}); 
+            } else if (sec < 45) { 
+                if (frameCount % 150 === 0) window.spawnEnemyByType('Formation_V_Strike', Math.random()*(width-100)+50); 
+                if (frameCount % 200 === 0) window.spawnEnemyByType('Turret', Math.random()*(width-60)+30); 
+            } else {
+                // 45秒后：接管给导演系统，但严格锁定兵种池，营造统一的派系观感
+                if (directorState === 'COOLDOWN' && !healWaveEnemyType) return; // 导演指令：等待清场
+                
+                let allowed = ['Locator', 'LocatorSwarm', 'Turret', 'TurretSwarm', 'ArcFlyer', 'ArcFlyerSwarm', 'Tank', 'Formation_V_Strike', 'Formation_Turret_Wall'];
+                let unlocked = ENEMY_TYPES.filter(t => allowed.includes(t.type) && gameTimeSeconds >= t.unlockTime && directorPoints >= t.weight);
+                if (isEasy) unlocked = unlocked.filter(t => !t.type.includes('Swarm') && !t.type.includes('Wall'));
 
-            let spawnLoc = (x, y, isHeal) => {
-                let e = new Locator(x, y, false, isHeal);
-                enemies.push(e);
-            }
-            let spawnV = (cx, y) => {
-                enemies.push(new Locator(cx, y)); enemies.push(new Locator(cx-35, y-35)); enemies.push(new Locator(cx+35, y-35));
-                enemies.push(new Locator(cx-70, y-70)); enemies.push(new Locator(cx+70, y-70));
-            };
-            let spawnG = (y, r, c) => {
-                for(let i=0; i<r; i++) for(let j=0; j<c; j++) {
-                    let px = width/2 - ((c-1)*35)/2 + j*35; enemies.push(new Locator(px, y - i*35, true, false, 0.8)); 
+                let pointPressure = directorPoints / 25.0;
+                if (frameCount % 30 === 0 && unlocked.length > 0 && directorPoints > 0 && enemies.length < DIFF_CONFIG[currentDifficulty].maxEnemies) {
+                    let totalW = 0;
+                    unlocked.forEach(t => {
+                        let drawProb = 100 / t.weight;
+                        if (pointPressure > 1.0) drawProb *= Math.pow(t.weight, pointPressure * 0.8); 
+                        t.drawProb = drawProb; totalW += drawProb;
+                    });
+                    let roll = Math.random() * totalW; let selected = null;
+                    for (let type of unlocked) { roll -= type.drawProb; if (roll <= 0) { selected = type; break; } }
+                    if (selected) {
+                        directorPoints -= selected.weight;
+                        window.spawnEnemyByType(selected.type, Math.random() * (width - 60) + 30);
+                    }
                 }
-            };
-
-            if (sec < 15) { 
-                if (checkInt(150)) spawnLoc(Math.random()*(width-60)+30, -40, Math.random()<0.2); 
-            } else if (sec < 30) { 
-                if (checkInt(240)) spawnV(Math.random()*(width-140)+70, -40); 
-                if (checkInt(180)) enemies.push(new Wanderer(Math.random()*(width-60)+30, -40, false, null, false, Math.random()<0.15)); 
-            } else if (sec < 50) { 
-                if (checkInt(180)) spawnV(width/2, -40); 
-                if (checkInt(200) && !isEasy) { 
-                    let bX = Math.max(80, Math.min(width - 80, Math.random()*width));
-                    for(let i=-2; i<=2; i++) enemies.push(new Locator(bX + i*35, -40, true, false, 1.8)); 
-                }
-            } else if (sec < 70) { 
-                if (checkInt(150)) enemies.push(new Wanderer(Math.random()*(width-60)+30, -40, true, null, false, false)); 
-            }
-            else if (sec >= 70 && sec < 71 && frameCount % 60 === 0) spawnG(-40, 3, 7); 
-            else if (sec < 85) { 
-                if (checkInt(120)) enemies.push(new Wanderer(Math.random()*(width-60)+30, -40, false, null, false, true)); 
-            }
-            else if (sec >= 85 && sec < 86 && frameCount % 60 === 0) { 
-                spawnG(-40, 4, 6); 
-                if(!isEasy) {
-                    let ph = Math.random() * Math.PI * 2; 
-                    for(let i=0; i<4; i++) enemies.push(new Wanderer(width/2, -180 - i*35, false, ph, true));
-                }
-            }
-            else if (sec >= 95 && sec < 105) {
-                if (frameCount % 45 === 0) {
-                    let e = new Locator(Math.random()*(width-60)+30, -40, false, true, 1.2);
-                    e.hp *= 2; e.maxHp *= 2; e.scale = 1.2; enemies.push(e);
-                }
-            }
-            else if (sec >= 105 && sec < 140) { 
-                if (checkInt(180)) {
-                    for(let i=0; i<3; i++) enemies.push(new Wanderer(width/2, -40-i*40, true, i, false, false, 'left'));
-                }
-                if (checkInt(120)) spawnLoc(Math.random()*(width-60)+30, -40, true); 
-                if (checkInt(150)) spawnV(Math.random()*(width-140)+70, -40); 
             }
         }
     },
@@ -132,39 +115,35 @@ const LEVELS = {
         id: 'debug', shopItems: 'ALL', timeHpMultiplier: (sec) => 1 + Math.pow(sec/100, 1.2) * 0.5,
         spawnLoop: function() {
             if (gameTimeSeconds < 10 && directorPoints < 2) directorPoints = 2; 
-            
             let maxE = DIFF_CONFIG[currentDifficulty].maxEnemies;
             
             if (frameCount % 20 === 0 && enemies.length < maxE) {
                 if (directorPoints >= 0) {
                     
                     if (directorState === 'COOLDOWN') {
-                        // 修正：只有当指令已下达(healWaveEnemyType不为空)时，才强行买入补给怪
+                        // 如果有补给波次指令，直接执行
                         if (healWaveEnemyType && directorPoints > healWaveEnemyType.weight * 0.5) {
-                            let x = Math.random() * (width - 60) + 30; let e = null;
-                            if(healWaveEnemyType.type === 'Locator') e = new Locator(x, -40, false, true);
-                            else if(healWaveEnemyType.type === 'WandererLow') e = new Wanderer(x, -40, false, null, false, true);
-                            else e = new Wanderer(x, -40, true, null, false, true);
-                            
-                            if(e) {
-                                e.hp *= 2; e.maxHp *= 2; e.scale = 1.2; enemies.push(e); directorPoints -= healWaveEnemyType.weight;
-                            }
+                            window.spawnEnemyByType(healWaveEnemyType.type, Math.random() * (width - 60) + 30, {forceHeal: true});
+                            directorPoints -= healWaveEnemyType.weight;
                         }
-                        return;
+                        return; // 处于清场等待期，不刷出普通怪
                     }
 
                     let unlocked = ENEMY_TYPES.filter(type => gameTimeSeconds >= type.unlockTime && directorPoints >= type.weight);
-                    if (currentDifficulty === 0) unlocked = unlocked.filter(t => !t.type.includes('Swarm') && !t.type.includes('Spec'));
+                    if (currentDifficulty === 0) unlocked = unlocked.filter(t => !t.type.includes('Swarm') && !t.type.includes('Spec') && !t.type.includes('Formation'));
 
                     let purchases = 0;
-                    let pointPressure = directorPoints / 20.0;
+                    let pointPressure = directorPoints / 25.0; // 压力阀值
                     
                     while (unlocked.length > 0 && purchases < 2 && directorPoints > 0 && enemies.length < maxE) {
                         let totalInverseWeight = 0;
                         unlocked.forEach(t => {
                             let drawProb = 100 / t.weight;
-                            if (currentDifficulty >= 2 && t.type.includes('Swarm')) drawProb *= 3; 
+                            if (currentDifficulty >= 2 && t.role === 'swarm') drawProb *= 3; 
+                            
+                            // 【智能高压发牌】：导演钱多花不掉时，极大幅度提升高危阵型和精英的概率
                             if (pointPressure > 1.0) drawProb *= Math.pow(t.weight, pointPressure * 0.8); 
+                            
                             t.drawProb = drawProb; totalInverseWeight += drawProb;
                         });
 
@@ -172,39 +151,9 @@ const LEVELS = {
                         for (let type of unlocked) { roll -= type.drawProb; if (roll <= 0) { selected = type; break; } }
                         
                         if (selected) {
-                            let x = Math.random() * (width - 60) + 30;
-                            let side = null; if (Math.random() < 0.15) side = Math.random() < 0.5 ? 'left' : 'right';
-                            let enemyInstance = null;
-                            
-                            switch(selected.type) {
-                                case 'Locator': enemyInstance = new Locator(x, -40, false, false); break;
-                                case 'LocatorSwarm': 
-                                    let formType = Math.floor(Math.random() * 3); let baseX = Math.max(80, Math.min(width - 80, x)); let swarmSpeed = 1.6 + Math.random() * 0.4; 
-                                    if (formType === 0) { enemies.push(new Locator(baseX, -40, true, false, swarmSpeed)); enemies.push(new Locator(baseX - 35, -75, true, false, swarmSpeed)); enemies.push(new Locator(baseX + 35, -75, true, false, swarmSpeed)); enemies.push(new Locator(baseX - 70, -110, true, false, swarmSpeed)); enemies.push(new Locator(baseX + 70, -110, true, false, swarmSpeed)); } 
-                                    else if (formType === 1) { for(let i=-2; i<=2; i++) enemies.push(new Locator(baseX + i*35, -40, true, false, swarmSpeed)); } 
-                                    else { let dir = Math.random() > 0.5 ? 1 : -1; if (baseX + 4*35*dir > width - 20) dir = -1; if (baseX + 4*35*dir < 20) dir = 1; for(let i=0; i<5; i++) enemies.push(new Locator(baseX + i*35*dir, -40 - i*35, true, false, swarmSpeed)); } break;
-                                case 'WandererLow': enemyInstance = new Wanderer(x, -40, false, null, false, false, side); break;
-                                case 'WandererHigh': enemyInstance = new Wanderer(x, -40, true, null, false, false, side); break;
-                                case 'WandererSwarm': let phase = Math.random() * Math.PI * 2; for(let i=0; i<4; i++) enemies.push(new Wanderer(x, -40 - i*35, false, phase, true, false, side)); break;
-                                case 'Kamikaze': enemyInstance = new Kamikaze(x, -40); break;
-                                case 'KamikazeSwarm': 
-                                    let kDir = Math.random() > 0.5 ? 1 : -1; let kStartX = Math.max(80, Math.min(width - 80, x)); 
-                                    if (kStartX + 4*40*kDir > width - 20) kDir = -1; if (kStartX + 4*40*kDir < 20) kDir = 1; 
-                                    for(let i=0; i<5; i++) enemies.push(new Kamikaze(kStartX + i*40*kDir, -40 - i*45, 'swarm')); break;
-                                case 'KamikazeSpec': enemies.push(new Kamikaze(x, -40, 'special')); break;
-                                case 'ArcFlyer': enemies.push(new ArcFlyer(0, -20, Math.random() > 0.5)); break;
-                                case 'ArcFlyerSwarm': let isLeft = Math.random() > 0.5; for(let i=0; i<3; i++) enemies.push(new ArcFlyer(0, -20, isLeft, -0.15 * i, true)); break;
-                                case 'Turret': enemyInstance = new Turret(x, -40, false, false); break;
-                                case 'TurretSwarm': enemies.push(new Turret(x - 35, -40, true)); enemies.push(new Turret(x + 35, -40, true)); break;
-                                case 'Tank': enemyInstance = new Tank(x, -40); break;
-                                case 'TankSwarm': enemyInstance = new Tank(x, -40, false, true); break;
-                            }
-                            
-                            if (enemyInstance) { 
-                                if (Math.random() < 0.05 && gameTimeSeconds > 45) enemyInstance.makeElite(); 
-                                enemies.push(enemyInstance); 
-                            }
-                            directorPoints -= selected.weight; purchases++; 
+                            directorPoints -= selected.weight; purchases++;
+                            // 所有的生成逻辑全部收束到全局的 spawnEnemyByType 函数中
+                            window.spawnEnemyByType(selected.type, Math.random() * (width - 60) + 30);
                             unlocked = unlocked.filter(type => directorPoints >= type.weight);
                         }
                     }
@@ -232,7 +181,7 @@ function initSprites() {
     sprites.pt_core = createPixelTexture([[0,1,0],[1,2,1],[0,1,0]], ['#ffffff', '#e0e0e0'], 3);
     sprites.energy_crystal = createPixelTexture([[0,1,0],[1,2,1],[0,1,0]], ['#00e5ff', '#ffffff'], 3);
     
-    // 【手工独立绘制】：纯正的深蓝科技调能量怪贴图！抛弃了滤镜
+    // 原生绘制的深蓝科技贴图
     sprites.locator = createPixelTexture([[1,0,0,0,1],[0,1,2,1,0],[1,2,3,2,1],[0,1,2,1,0],[0,1,0,1,0]], ['#546e7a', '#90a4ae', '#ff1744'], 3);
     sprites.locator_swarm = createPixelTexture([[1,0,0,0,1],[0,1,2,1,0],[1,2,3,2,1],[0,1,2,1,0],[0,1,0,1,0]], ['#4a148c', '#ab47bc', '#00b0ff'], 3); 
     sprites.locator_healer = createPixelTexture([[1,0,0,0,1],[0,1,2,1,0],[1,2,3,2,1],[0,1,2,1,0],[0,1,0,1,0]], ['#1b5e20', '#4caf50', '#b2ff59'], 3);
