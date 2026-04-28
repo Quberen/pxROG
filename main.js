@@ -66,7 +66,6 @@ let taggedItemId = null;
 let shopInflation = 0.0; 
 let wasSkillFull = false;
 
-// 【极客工坊终端】：实时暴露 JSON 并热注入系统
 function openWorkshop() {
     Object.values(screens).forEach(s => s.classList.remove('active'));
     screens.workshop.classList.add('active');
@@ -75,16 +74,13 @@ function openWorkshop() {
     document.getElementById('workshop-status').style.color = "#00e676";
 }
 
-function closeWorkshop() {
-    showScreen('start');
-}
+function closeWorkshop() { showScreen('start'); }
 
 function applyWorkshopData() {
     try {
         let newData = JSON.parse(document.getElementById('workshop-textarea').value);
         Object.assign(WORKSHOP.data, newData);
         
-        // 动态重组内存中的物品池与敌人池
         upgradePool.length = 0;
         baseUpgradePool.forEach(item => { upgradePool.push({ ...item, ...(WORKSHOP.data.items[item.id] || {}) }); });
         ENEMY_TYPES.length = 0;
@@ -98,15 +94,12 @@ function applyWorkshopData() {
     }
 }
 
-// 【阵型递归生成器】
 window.spawnEnemyByType = function(type, x, options = {}) {
     let side = (x < width/2) ? 'left' : 'right';
-    let forceHeal = options.forceHeal || false;
-    let speedOver = options.speedOverride || null;
+    let forceHeal = options.forceHeal || false; let speedOver = options.speedOverride || null;
     
     if (type.startsWith('Formation_')) {
-        let formName = type.replace('Formation_', '');
-        let formDef = WORKSHOP.formations[formName];
+        let formName = type.replace('Formation_', ''); let formDef = WORKSHOP.formations[formName];
         if (formDef) {
             let cx = Math.max(80, Math.min(width - 80, x));
             formDef.forEach(en => {
@@ -138,14 +131,14 @@ window.spawnEnemyByType = function(type, x, options = {}) {
     if (e) { if(speedOver !== null && e.speed !== undefined) e.speed = speedOver; enemies.push(e); }
 };
 
+// 【满血复活的难度 UI 初始化函数】
 function initDifficultyUI() {
     if(unlockedDifficulty >= 2) document.getElementById('diff-nightmare').classList.remove('locked');
     selectDifficulty(Math.min(currentDifficulty, unlockedDifficulty >= 2 ? 3 : 2));
 }
 
 function selectDifficulty(level) {
-    if (level === 3 && unlockedDifficulty < 2) return; 
-    currentDifficulty = level;
+    if (level === 3 && unlockedDifficulty < 2) return; currentDifficulty = level;
     document.querySelectorAll('.diff-btn').forEach((btn, idx) => { if(idx === level) btn.classList.add('selected'); else btn.classList.remove('selected'); });
     document.getElementById('diff-desc').innerText = DIFF_CONFIG[level].desc;
     if(level === 3) document.getElementById('diff-desc').style.color = '#ff1744'; else document.getElementById('diff-desc').style.color = '#ffeb3b';
@@ -157,28 +150,16 @@ function unlockNextDifficulty() {
 }
 
 function drawIndicator(color) {
-    let ic = ui.indCvs.getContext('2d'); ic.clearRect(0,0,16,16);
-    ic.fillStyle = '#222'; ic.beginPath(); ic.arc(8,8,6,0,Math.PI*2); ic.fill();
-    ic.fillStyle = color; ic.beginPath(); ic.arc(8,8,4,0,Math.PI*2); ic.fill();
-    ic.fillStyle = '#fff'; ic.fillRect(6,5,2,2); 
+    let ic = ui.indCvs.getContext('2d'); ic.clearRect(0,0,16,16); ic.fillStyle = '#222'; ic.beginPath(); ic.arc(8,8,6,0,Math.PI*2); ic.fill();
+    ic.fillStyle = color; ic.beginPath(); ic.arc(8,8,4,0,Math.PI*2); ic.fill(); ic.fillStyle = '#fff'; ic.fillRect(6,5,2,2); 
 }
 
 function drawPixelButton(id, icon, progress, color) {
     let cvs = document.getElementById(id); if(!cvs) return;
     let ctx = cvs.getContext('2d'); ctx.clearRect(0,0,48,48);
-    
     ctx.fillStyle = '#111'; ctx.fillRect(4,4,40,40);
-
-    if (progress > 0) {
-        ctx.fillStyle = color; ctx.globalAlpha = progress >= 1 ? 0.6 : 0.4;
-        let fillH = Math.floor(40 * Math.min(1, progress)); ctx.fillRect(4, 44 - fillH, 40, fillH); ctx.globalAlpha = 1.0;
-    }
-
-    ctx.fillStyle = '#555'; 
-    ctx.fillRect(4,0,40,4); ctx.fillRect(4,44,40,4); 
-    ctx.fillRect(0,4,4,40); ctx.fillRect(44,4,4,40); 
-    ctx.fillRect(2,2,4,4); ctx.fillRect(42,2,4,4); ctx.fillRect(2,42,4,4); ctx.fillRect(42,42,4,4); 
-
+    if (progress > 0) { ctx.fillStyle = color; ctx.globalAlpha = progress >= 1 ? 0.6 : 0.4; let fillH = Math.floor(40 * Math.min(1, progress)); ctx.fillRect(4, 44 - fillH, 40, fillH); ctx.globalAlpha = 1.0; }
+    ctx.fillStyle = '#555'; ctx.fillRect(4,0,40,4); ctx.fillRect(4,44,40,4); ctx.fillRect(0,4,4,40); ctx.fillRect(44,4,4,40); ctx.fillRect(2,2,4,4); ctx.fillRect(42,2,4,4); ctx.fillRect(2,42,4,4); ctx.fillRect(42,42,4,4); 
     if(icon) ctx.drawImage(icon, 24 - icon.width/2, 24 - icon.height/2);
 }
 
@@ -245,27 +226,73 @@ function startEnding(type) {
     else if (type === 'bossDead') { endingTimer = 240; triggerShake(25, 240); }
 }
 
-function initStars() { stars = []; for(let i=0; i<60; i++) stars.push({ x: Math.random() * width, y: Math.random() * height, speed: 0.4 + Math.random() * 2.5, size: Math.random() > 0.7 ? 2 : 1, alpha: 0.5 + Math.random() * 0.5 }); }
-function updateAndDrawStars(ctx, isPlaying) {
-    ctx.fillStyle = '#ffffff';
-    stars.forEach(star => { if(isPlaying && hitStopFrames <= 0) star.y += star.speed; if (star.y > height) { star.y = 0; star.x = Math.random() * width; } ctx.globalAlpha = star.alpha; ctx.fillRect(star.x, star.y, star.size, star.size); });
-    ctx.globalAlpha = 1;
+// 【重调色彩的幽暗星空】
+function initStars() { 
+    stars = []; 
+    // 图层 1 (远景)：极其幽暗的深紫与深蓝，若隐若现
+    const farColors = ['#0a0f24', '#120b1f', '#05111c']; 
+    for(let i=0; i<50; i++) { 
+        stars.push({ 
+            x: Math.random() * width, y: Math.random() * height, 
+            speed: 0.1 + Math.random()*0.1, size: 1, 
+            alpha: 0.15 + Math.random()*0.15, // 极低透明度
+            color: farColors[Math.floor(Math.random()*farColors.length)],
+            isStreaked: false 
+        }); 
+    } 
+    // 图层 2 (中景)：黯淡的青色与紫罗兰色
+    const middleColors = ['#1a334d', '#2d1a4d']; 
+    for(let i=0; i<20; i++) { 
+        stars.push({ 
+            x: Math.random() * width, y: Math.random() * height, 
+            speed: 0.4 + Math.random()*0.2, size: 2, 
+            alpha: 0.25 + Math.random()*0.15, 
+            color: middleColors[Math.floor(Math.random()*middleColors.length)],
+            isStreaked: false 
+        }); 
+    }
+    // 图层 3 (近景)：彻底去除纯白，改为低透明度的深邃幽蓝调光带
+    const nearColors = ['#0088cc', '#6600cc']; 
+    for(let i=0; i<6; i++) { 
+        stars.push({ 
+            x: Math.random() * width, y: Math.random() * height, 
+            speed: 2.0 + Math.random()*1.0, streakWidth: 1, streakMultiplier: 1.5, 
+            alpha: 0.3 + Math.random()*0.2, 
+            color: nearColors[Math.floor(Math.random()*nearColors.length)],
+            isStreaked: true 
+        }); 
+    }
 }
 
+function updateAndDrawStars(ctx, isPlaying) {
+    stars.forEach(star => { 
+        if(isPlaying && hitStopFrames <= 0) star.y += star.speed; 
+        if (star.y > height) { star.y = 0; star.x = Math.random() * width; } 
+        ctx.globalAlpha = star.alpha; ctx.fillStyle = star.color; 
+        if(star.isStreaked) {
+            // 【核心修正】：绘制一个单像素宽的垂直光带，模拟高速运动，不再是方块
+            ctx.fillRect(star.x, star.y, star.streakWidth, star.speed * star.streakMultiplier);
+        } else if (star.size === 2) {
+            // 绘制一个柔和的 1x2 像素组，增加中景星星的柔和度
+            ctx.fillRect(star.x, star.y, 1, 2);
+        } else {
+            // 绘制一个单像素点
+            ctx.fillRect(star.x, star.y, star.size, star.size); 
+        }
+    });
+    ctx.globalAlpha = 1;
+}
 function activateSkill() {
     if (player.skillEnergy >= player.maxSkillEnergy && player.skillCdTimer <= 0 && player.skillActiveTimer <= 0) {
         player.skillEnergy = 0; player.skillActiveTimer = 600; triggerShake(10, 10); flashScreenTimer = 15; flashScreenColor = '0, 229, 255'; wasSkillFull = false; updateHUD();
     }
 }
 
-// 【物理系统读取工坊数据】
 function applyElastic(obj, targetNode, type = 'hp') {
     if(obj.vx === undefined) { obj.vx = 0; obj.vy = 0; }
     let physConfig = WORKSHOP.data.physics;
-    obj.vx += -obj.x * physConfig.hp_bounce_force; 
-    obj.vy += -obj.y * physConfig.hp_bounce_force;
-    obj.vx *= physConfig.hp_damping; 
-    obj.vy *= physConfig.hp_damping;
+    obj.vx += -obj.x * physConfig.hp_bounce_force; obj.vy += -obj.y * physConfig.hp_bounce_force;
+    obj.vx *= physConfig.hp_damping; obj.vy *= physConfig.hp_damping;
     obj.x += obj.vx; obj.y += obj.vy;
     if(targetNode) targetNode.style.transform = `translate(${obj.x}px, ${obj.y}px)`;
 }
@@ -279,7 +306,6 @@ function updatePixelButtons() {
 
 function updateHUD() {
     if (!player) return;
-
     let isFullNow = (player.skillEnergy >= player.maxSkillEnergy);
     if(isFullNow && !wasSkillFull && player.skillCdTimer <= 0) {
         let force = WORKSHOP.data.physics.skill_vibrate_force;
@@ -293,9 +319,7 @@ function updateHUD() {
     ui.hpVal.style.color = hpColor; ui.hpVal.innerText = `${Math.floor(player.hp)}%`;
 
     let isProtected = gameTimeSeconds < DIFF_CONFIG[currentDifficulty].protectionTime;
-    let indColor = '#00e676';
-    let cassette = WORKSHOP.cassettes[currentLevel];
-    
+    let indColor = '#00e676'; let cassette = WORKSHOP.cassettes[currentLevel];
     if (cassette && cassette.name.includes("区域 1")) {
         let progress = Math.min(1, gameTimeSeconds / cassette.duration);
         if(isBossSpawned) indColor = '#ff1744'; else if(progress > 0.8) indColor = '#ff9800'; else if(progress > 0.4) indColor = '#ffea00';
@@ -304,8 +328,7 @@ function updateHUD() {
         else if (directorState === 'COOLDOWN') { if (!healWaveEnemyType) indColor = '#ffea00'; else indColor = '#00e5ff'; } 
         else {
             let pressure = Math.min(1, directorPoints / 25); let r = 0, g = 0;
-            if (pressure < 0.5) { r = Math.floor(0 + 255 * (pressure * 2)); g = 230; } 
-            else { r = 255; g = Math.floor(230 * (1 - (pressure - 0.5) * 2)); }
+            if (pressure < 0.5) { r = Math.floor(0 + 255 * (pressure * 2)); g = 230; } else { r = 255; g = Math.floor(230 * (1 - (pressure - 0.5) * 2)); }
             indColor = `rgb(${r}, ${g}, 50)`;
         }
     }
@@ -337,7 +360,6 @@ function openShop() { gameState = 'SHOP'; if (currentShopItems.length === 0) gen
 function closeShop() { gameState = 'PLAYING'; showScreen(null); }
 function openLoadout(fromState) { overlayHistory = fromState; gameState = 'LOADOUT'; renderLoadout(); showScreen('loadout'); }
 function closeLoadout() { gameState = overlayHistory; if(gameState === 'PLAYING') showScreen(null); else showScreen(overlayHistory.toLowerCase()); }
-
 function createIconCvs(id) { let iconCvs = document.createElement('canvas'); iconCvs.width = 12; iconCvs.height = 12; iconCvs.getContext('2d').drawImage(sprites.eqIcons[id] || sprites.eqIcons['default'], 0, 0); return iconCvs; }
 
 function renderLoadout() {
@@ -538,7 +560,7 @@ function openSettings(fromState) {
 }
 function closeSettings() { gameState = overlayHistory; if (gameState === 'START') showScreen('start'); else if (gameState === 'PAUSED') showScreen('pause'); else showScreen(null); }
 function togglePause() { if (gameState === 'PLAYING') { gameState = 'PAUSED'; ui.pauseScore.innerText = `当前战绩: ${score} PTS`; showScreen('pause'); } else if (gameState === 'PAUSED') { gameState = 'PLAYING'; showScreen(null); } }
-function quitGame() { gameState = 'START'; showScreen('start'); initDifficultyUI(); }
+function quitGame() { gameState = 'START'; showScreen('start'); initUI(); }
 
 function gameOver(title, isVictory) {
     gameState = 'GAMEOVER'; let m = Math.floor(gameTimeSeconds / 60).toString().padStart(2, '0'); let s = (gameTimeSeconds % 60).toString().padStart(2, '0');
@@ -560,26 +582,27 @@ function startGame(levelId) {
     updateHUD(); gameState = 'PLAYING'; showScreen(null);
 }
 
+const setupMultiTouchButtons = () => {
+    const btnMap = { 'pause-btn-cvs': togglePause, 'skill-btn-cvs': activateSkill, 'loadout-btn-cvs': () => openLoadout('PLAYING'), 'shop-btn-cvs': openShop };
+    for(let id in btnMap) { let el = document.getElementById(id); if(el) { el.addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); btnMap[id](); }, {passive: false}); } }
+};
+
+function initUI() { initDifficultyUI(); setControlMode(config.controlMode); setTouchMode(config.touchMode); setupMultiTouchButtons(); }
+
 let isTouchActive = false; let shipTouchId = null; let touchStartX = 0; let touchStartY = 0;
 function handleTouchStart(e) {
     if (gameState !== 'PLAYING' || endingState !== 'none') return;
     if (config.touchMode === 'multi') {
-        for(let i=0; i<e.changedTouches.length; i++) {
-            let touch = e.changedTouches[i];
-            if (shipTouchId === null) { shipTouchId = touch.identifier; isTouchActive = true; touchStartX = touch.clientX; touchStartY = touch.clientY; if (config.controlMode === 'absolute') { player.targetX = touchStartX; player.targetY = touchStartY - config.controlOffsetY; } break; }
-        }
+        for(let i=0; i<e.changedTouches.length; i++) { let touch = e.changedTouches[i]; if (shipTouchId === null) { shipTouchId = touch.identifier; isTouchActive = true; touchStartX = touch.clientX; touchStartY = touch.clientY; if (config.controlMode === 'absolute') { player.targetX = touchStartX; player.targetY = touchStartY - config.controlOffsetY; } break; } }
     } else {
-        isTouchActive = true; touchStartX = e.touches[0].clientX; touchStartY = e.touches[0].clientY;
-        if(config.controlMode === 'absolute') { player.targetX = touchStartX; player.targetY = touchStartY - config.controlOffsetY; }
+        isTouchActive = true; touchStartX = e.touches[0].clientX; touchStartY = e.touches[0].clientY; if(config.controlMode === 'absolute') { player.targetX = touchStartX; player.targetY = touchStartY - config.controlOffsetY; }
     }
 }
 function handleTouchMove(e) {
     if (!isTouchActive || gameState !== 'PLAYING' || endingState !== 'none') return;
     let clientX, clientY;
     if (config.touchMode === 'multi') {
-        let found = false;
-        for(let i=0; i<e.changedTouches.length; i++) { if (e.changedTouches[i].identifier === shipTouchId) { clientX = e.changedTouches[i].clientX; clientY = e.changedTouches[i].clientY; found = true; break; } }
-        if (!found) return; 
+        let found = false; for(let i=0; i<e.changedTouches.length; i++) { if (e.changedTouches[i].identifier === shipTouchId) { clientX = e.changedTouches[i].clientX; clientY = e.changedTouches[i].clientY; found = true; break; } } if (!found) return; 
     } else { clientX = e.touches[0].clientX; clientY = e.touches[0].clientY; }
     if (config.controlMode === 'absolute') { player.targetX = clientX; player.targetY = clientY - config.controlOffsetY; } 
     else { let dx = clientX - touchStartX; let dy = clientY - touchStartY; player.targetX += dx * config.controlSens; player.targetY += dy * config.controlSens; touchStartX = clientX; touchStartY = clientY; }
@@ -606,7 +629,7 @@ function loop(timestamp) {
     if (!lastFrameTime) lastFrameTime = timestamp; let dt = timestamp - lastFrameTime;
     if (dt < FPS_INTERVAL) return; lastFrameTime = timestamp - (dt % FPS_INTERVAL);
 
-    if (gameState === 'START' || gameState === 'SETTINGS') { ctx.fillStyle = '#050510'; ctx.fillRect(0, 0, width, height); updateAndDrawStars(ctx, true); return; }
+    if (gameState === 'START' || gameState === 'SETTINGS' || gameState === 'WORKSHOP') { ctx.fillStyle = '#050510'; ctx.fillRect(0, 0, width, height); updateAndDrawStars(ctx, true); return; }
     if (gameState === 'GAMEOVER') { ctx.fillStyle = '#050510'; ctx.fillRect(0, 0, width, height); updateAndDrawStars(ctx, false); if(player && player.hp > 0) player.draw(ctx); processGroup(enemies, false); processGroup(particles, false); return; }
 
     const isPlaying = (gameState === 'PLAYING');
@@ -615,9 +638,7 @@ function loop(timestamp) {
     ctx.save(); 
     if (shakeTimer > 0) { let dx = (Math.random() - 0.5) * shakeIntensity; let dy = (Math.random() - 0.5) * shakeIntensity; ctx.translate(dx, dy); if(isPlaying) shakeTimer--; }
     
-    if (isPlaying && hitStopFrames > 0) {
-        hitStopFrames--; 
-    } else if (isPlaying) {
+    if (isPlaying && hitStopFrames > 0) { hitStopFrames--; } else if (isPlaying) {
         frameCount++; if(player.hp > 0 && endingState !== 'playerDead') player.update(); 
         
         if (endingState === 'none') { 
@@ -631,9 +652,7 @@ function loop(timestamp) {
         if(player.skillActiveTimer > 0) { player.skillActiveTimer--; if(player.skillActiveTimer <= 0) player.skillCdTimer = 900; } 
         else if (player.skillCdTimer > 0) { player.skillCdTimer--; }
 
-        // 【极速回弹：60 帧 UI 物理全速启动】
-        applyElastic(uiOffsets.hp, ui.hpVal, 'hp');
-        applyElastic(uiOffsets.skill, document.getElementById('skill-btn-cvs'), 'skill');
+        applyElastic(uiOffsets.hp, ui.hpVal, 'hp'); applyElastic(uiOffsets.skill, document.getElementById('skill-btn-cvs'), 'skill');
 
         if (frameCount % 10 === 0) updateHUD(); 
 
@@ -652,8 +671,7 @@ function loop(timestamp) {
         if (player.wingmen > 0 && player.hp > 0 && endingState !== 'playerDead') {
             let wTime = frameCount * 0.05;
             for(let i=0; i<player.wingmen; i++) {
-                let angle = wTime + (i * Math.PI * 2 / player.wingmen); let wx = player.x + Math.cos(angle) * 35; let wy = player.y + Math.sin(angle) * 35;
-                ctx.fillStyle = '#ffea00'; ctx.fillRect(wx - 2, wy - 2, 4, 4);
+                let angle = wTime + (i * Math.PI * 2 / player.wingmen); let wx = player.x + Math.cos(angle) * 35; let wy = player.y + Math.sin(angle) * 35; ctx.fillStyle = '#ffea00'; ctx.fillRect(wx - 2, wy - 2, 4, 4);
                 if (frameCount % 45 === 0) bullets.push(new Bullet(wx, wy, 0, -18, 2, 8, player.damage * 0.4, 0, 1, player.critRate, player.critDamage, '#ffea00'));
             }
         }
@@ -682,4 +700,4 @@ function loop(timestamp) {
     ctx.restore(); 
 }
 
-initDifficultyUI(); showScreen('start'); resize(); initSprites(); initStars(); requestAnimationFrame(loop);
+initUI(); showScreen('start'); resize(); initSprites(); initStars(); requestAnimationFrame(loop);
