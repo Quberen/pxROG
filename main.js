@@ -119,6 +119,7 @@ let taggedItemId = null;
 
 // --- [6] 系统订阅 (Systems) ---
 
+// 1. 特效系统：负责屏幕震动、死亡爆炸粒子
 const FXSystem = {
     init() {
         EventBus.on('ENTITY_DAMAGED', (data) => {
@@ -134,6 +135,7 @@ const FXSystem = {
     }
 };
 
+// 2. 掉落系统：负责生成 PT 晶体、血包和电池
 const LootSystem = {
     init() {
         EventBus.on('ENTITY_DIED', (data) => {
@@ -152,6 +154,7 @@ const LootSystem = {
     }
 };
 
+// 3. 计分系统：负责连击逻辑与连击奖励
 const ScoreSystem = {
     init() {
         EventBus.on('ENTITY_DIED', (data) => {
@@ -172,13 +175,14 @@ const ScoreSystem = {
     }
 };
 
+// 4. UI 刷新系统：负责更新 HUD 界面数据
 const UIRefreshSystem = {
     init() {
         EventBus.on('UI_UPDATE_REQUESTED', () => { updateHUD(); });
     }
 };
 
-// 【全新独立模块：波次播报系统 (Wave Announcement System)】
+// 5. 波次播报系统：负责顶部浮现波次名称
 const WaveAnnouncementSystem = {
     timeoutId: null,
     init() {
@@ -186,31 +190,220 @@ const WaveAnnouncementSystem = {
             let name = waveMeta.name || "未知波次";
             let color = waveMeta.color || "#ffffff";
             
-            // 设置文字与发光效果
             ui.waveToast.innerText = `[ ${name} ]`;
             ui.waveToast.style.textShadow = `0 0 15px ${color}, 0 0 5px ${color}`;
             ui.waveToast.style.color = '#fff';
             
-            // 触发入场动画 (从上方微微落下)
+            // 动画重置与触发
+            ui.waveToast.style.transition = 'none';
             ui.waveToast.style.transform = 'translate(-50%, -30%)';
-            ui.waveToast.style.opacity = '1';
+            ui.waveToast.style.opacity = '0';
             
-            // 极其优雅的进场缓动动画
             requestAnimationFrame(() => {
+                ui.waveToast.style.transition = 'opacity 0.6s cubic-bezier(0.22, 1, 0.36, 1), transform 0.6s cubic-bezier(0.22, 1, 0.36, 1)';
                 ui.waveToast.style.transform = 'translate(-50%, -50%)';
+                ui.waveToast.style.opacity = '1';
             });
-            
-            // 清理上一个定时器，防止波次切换过快导致动画错乱
+
             if (this.timeoutId) clearTimeout(this.timeoutId);
-            
-            // 3秒后优雅淡出
             this.timeoutId = setTimeout(() => {
                 ui.waveToast.style.opacity = '0';
-                ui.waveToast.style.transform = 'translate(-50%, -70%)'; // 向上飘散
+                ui.waveToast.style.transform = 'translate(-50%, -70%)';
             }, 3000);
         });
     }
 };
+
+// 6. 终极音频引擎 (完美生命周期 + 平滑过渡打磨版)
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let globalAudioCtx = null;
+
+const AudioSystem = {
+    unlocked: false,
+    masterBus: null, sfxBus: null, bgmBus: null, compressor: null,
+    bgmFilter: null, 
+    buffers: {},
+    activeExplosions: 0,
+    currentBgmSource: null,
+    totalAssets: 0,
+    loadedCount: 0,
+
+    initGraph() {
+        if (globalAudioCtx) return;
+        globalAudioCtx = new AudioCtx({ latencyHint: 'interactive' });
+        
+        this.masterBus = globalAudioCtx.createGain();
+        this.sfxBus = globalAudioCtx.createGain();
+        this.bgmBus = globalAudioCtx.createGain();
+        
+        this.bgmFilter = globalAudioCtx.createBiquadFilter();
+        this.bgmFilter.type = 'lowpass';
+        this.bgmFilter.frequency.value = 20000; 
+
+        this.compressor = globalAudioCtx.createDynamicsCompressor();
+        this.compressor.threshold.value = -15;
+
+        this.sfxBus.connect(this.compressor);
+        this.compressor.connect(this.masterBus);
+        
+        this.bgmFilter.connect(this.bgmBus);
+        this.bgmBus.connect(this.masterBus);
+        
+        this.masterBus.connect(globalAudioCtx.destination);
+
+        this.masterBus.gain.value = 1.0;
+        this.sfxBus.gain.value = 0.8;
+        this.bgmBus.gain.value = 0.001; // 初始极低，准备淡入
+    },
+
+    async loadAudio(name, url) {
+        try {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error("HTTP error");
+            const arrayBuffer = await response.arrayBuffer();
+            const audioBuffer = await globalAudioCtx.decodeAudioData(arrayBuffer);
+            this.buffers[name] = audioBuffer;
+            this.loadedCount++;
+            
+            // 【简易 Loading 提示】：动态修改开始界面文本
+            let startBtn = document.getElementById('start-btn') || document.querySelector('.diff-btn');
+            if (startBtn && this.loadedCount < this.totalAssets) {
+                startBtn.innerText = `加载音频...(${this.loadedCount}/${this.totalAssets})`;
+            } else if (startBtn) {
+                startBtn.innerText = "新兵"; // 恢复按钮文字
+            }
+
+            console.log(`[AudioSystem] 成功解码资产: ${name}`);
+
+            if (name === 'bgm_main' && gameState === 'PLAYING') {
+                this.playMainBGM();
+                let currentWave = ui.waveToast ? ui.waveToast.innerText : "";
+                if (currentWave.includes("休整")) this.transitionBGMState('muffled', 2.0);
+                else this.transitionBGMState('open', 1.5);
+            }
+        } catch (e) {
+            console.warn(`[AudioSystem] 资产缺失, 将启用算法降级: ${name}`);
+        }
+    },
+
+    async preloadAllAssets() {
+        const manifest = [
+            { name: 'bgm_main', url: './assets/audio/bgm_main.mp3' }, 
+            { name: 'hit', url: './assets/audio/hit.wav' },
+            { name: 'exp_small', url: './assets/audio/exp_small.wav' },
+            { name: 'exp_large', url: './assets/audio/exp_large.wav' }
+        ];
+        this.totalAssets = manifest.length;
+        this.loadedCount = 0;
+        const promises = manifest.map(asset => this.loadAudio(asset.name, asset.url));
+        await Promise.all(promises);
+    },
+
+    playMainBGM() {
+        if (!globalAudioCtx || !this.buffers['bgm_main'] || this.currentBgmSource) return;
+        
+        let source = globalAudioCtx.createBufferSource();
+        source.buffer = this.buffers['bgm_main'];
+        source.loop = true;
+        source.connect(this.bgmFilter);
+        source.start(0);
+        this.currentBgmSource = source;
+
+        // 【优化】：完美的 BGM 淡入 (Fade-in) 效果
+        const t = globalAudioCtx.currentTime;
+        this.bgmBus.gain.setValueAtTime(0.001, t);
+        this.bgmBus.gain.exponentialRampToValueAtTime(0.6, t + 2.0);
+    },
+
+    stopMainBGM() {
+        if (!globalAudioCtx || !this.currentBgmSource) return;
+        
+        // 【优化】：退出关卡时的 BGM 淡出 (Fade-out) 效果
+        const t = globalAudioCtx.currentTime;
+        this.bgmBus.gain.setValueAtTime(this.bgmBus.gain.value || 0.6, t);
+        this.bgmBus.gain.exponentialRampToValueAtTime(0.001, t + 1.0);
+        
+        this.currentBgmSource.stop(t + 1.5);
+        this.currentBgmSource = null;
+    },
+
+    transitionBGMState(state, duration = 1.0) {
+        if (!globalAudioCtx || !this.bgmFilter) return;
+        const t = globalAudioCtx.currentTime;
+        
+        // 【核心修复】：必须先锚定当前频率，才能进行平滑过渡！
+        this.bgmFilter.frequency.setValueAtTime(Math.max(100, this.bgmFilter.frequency.value), t);
+
+        if (state === 'muffled') {
+            this.bgmFilter.frequency.exponentialRampToValueAtTime(600, t + duration); // 下潜更深
+        } else if (state === 'open') {
+            this.bgmFilter.frequency.exponentialRampToValueAtTime(20000, t + duration); // 瞬间或平滑拉开
+        }
+    },
+
+    playSFX(name, pitchRandomness = 0, volume = 1.0) {
+        if (!globalAudioCtx || !this.unlocked) return;
+        if (this.buffers[name]) {
+            let source = globalAudioCtx.createBufferSource();
+            let gain = globalAudioCtx.createGain();
+            source.buffer = this.buffers[name];
+            gain.gain.value = volume;
+            if (pitchRandomness > 0) source.playbackRate.value = 1.0 + (Math.random() * pitchRandomness * 2 - pitchRandomness);
+            source.connect(gain); gain.connect(this.sfxBus); source.start();
+        } else {
+            // 降级硬搓算法
+            let osc = globalAudioCtx.createOscillator(); let gain = globalAudioCtx.createGain(); let t = globalAudioCtx.currentTime;
+            if (name === 'hit') {
+                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(400 + Math.random()*200, t); osc.frequency.exponentialRampToValueAtTime(40, t + 0.1);
+                gain.gain.setValueAtTime(volume * 0.3, t); gain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
+                osc.start(t); osc.stop(t + 0.1);
+            } else if (name.startsWith('exp')) {
+                let isLarge = name === 'exp_large'; let dur = isLarge ? 0.3 : 0.15;
+                osc.type = 'square'; osc.frequency.setValueAtTime(isLarge ? 100 : 250 + (Math.random()-0.5)*50, t); osc.frequency.exponentialRampToValueAtTime(isLarge ? 20 : 50, t + dur);
+                gain.gain.setValueAtTime(volume * 0.3, t); gain.gain.exponentialRampToValueAtTime(0.01, t + dur);
+                osc.start(t); osc.stop(t + dur);
+            }
+            osc.connect(gain); gain.connect(this.sfxBus);
+        }
+    },
+
+    unlockAudio() {
+        this.initGraph();
+        if (globalAudioCtx.state === 'suspended') globalAudioCtx.resume();
+        this.unlocked = true;
+        this.preloadAllAssets();
+    },
+
+    init() {
+        window.addEventListener('pointerdown', () => { if (!this.unlocked) this.unlockAudio(); }, { once: true });
+
+        EventBus.on('ENTITY_DAMAGED', (data) => { 
+            this.playSFX('hit', 0.1, 0.4); 
+            // 【新增】：玩家受伤瞬间带来强烈的滤波压抑 (匹配20帧的无敌时间，约330ms)
+            if (data.isPlayer) {
+                this.transitionBGMState('muffled', 0.05); // 0.05秒极速发闷
+                setTimeout(() => {
+                    if (gameState === 'PLAYING') this.transitionBGMState('open', 0.8); // 平滑解压
+                }, 350); 
+            }
+        });
+
+        EventBus.on('ENTITY_DIED', (data) => {
+            if (this.activeExplosions > 4) return;
+            this.activeExplosions++;
+            let isLarge = (data.isElite || data.isBoss);
+            this.playSFX(isLarge ? 'exp_large' : 'exp_small', 0.2, isLarge ? 1.0 : 0.4);
+            setTimeout(() => { this.activeExplosions--; }, 200);
+        });
+
+        EventBus.on('WAVE_STARTED', (data) => {
+            this.playMainBGM(); 
+            if (data.name.includes("休整")) this.transitionBGMState('muffled', 2.0); 
+            else this.transitionBGMState('open', 1.5);    
+        });
+    }
+};
+
 
 // --- [7] 引擎底层函数 ---
 
@@ -575,32 +768,77 @@ function quitGame() { gameState = 'START'; showScreen('start'); initUI(); }
 
 function startGame(levelId) {
     currentLevel = levelId || 'debug';
-    resize(); initSprites(); initStars();
-    player = new Player();
-    enemies = []; bullets = []; enemyBullets = []; items = []; particles = []; floatingTexts = []; aoeEffects = [];
-    score = 0; frameCount = 0; gameTimeSeconds = 0;
-    shakeTimer = 0; hitStopFrames = 0; flashScreenTimer = 0;
-    comboCount = 0; comboTimer = 0; endingState = 'none'; endingTimer = 0;
-    currentRefreshCost = BASE_REFRESH_COST; currentShopItems = [];
-    directorPoints = 0; difficultyScore = 1.0;
-    isBossSpawned = false; taggedItemId = null;
-    ui.bossHpCont.style.opacity = 0; ui.bossToast.style.opacity = 0;
-    specialKamikazeMisses = 0; levelHpMultiplier = 1.0;
-    directorState = 'BUILDUP'; directorStateTimer = 0;
-    ui.sysMessage.style.opacity = 0;
-    shopInflation = 0.0; wasSkillFull = false;
-    isTouchActive = false; shipTouchId = null;
-    uiOffsets = { hp: { x: 0, y: 0, vx: 0, vy: 0 }, pt: { x: 0, y: 0, vx: 0, vy: 0 }, skill: { x: 0, y: 0, vx: 0, vy: 0 } };
+    resize(); 
+    initSprites(); 
+    initStars();
     
-    // 初始化系统
+    player = new Player();
+    enemies = []; 
+    bullets = []; 
+    enemyBullets = []; 
+    items = []; 
+    particles = []; 
+    floatingTexts = []; 
+    aoeEffects = [];
+    
+    score = 0; 
+    frameCount = 0; 
+    gameTimeSeconds = 0;
+    shakeTimer = 0; 
+    hitStopFrames = 0; 
+    flashScreenTimer = 0;
+    comboCount = 0; 
+    comboTimer = 0; 
+    endingState = 'none'; 
+    endingTimer = 0;
+    
+    currentRefreshCost = BASE_REFRESH_COST; 
+    currentShopItems = [];
+    directorPoints = 0; 
+    difficultyScore = 1.0;
+    isBossSpawned = false; 
+    taggedItemId = null;
+    
+    ui.bossHpCont.style.opacity = 0; 
+    ui.bossToast.style.opacity = 0;
+    ui.waveToast.style.opacity = 0; // 重置波次提示
+    
+    specialKamikazeMisses = 0; 
+    levelHpMultiplier = 1.0;
+    directorState = 'BUILDUP'; 
+    directorStateTimer = 0;
+    ui.sysMessage.style.opacity = 0;
+    shopInflation = 0.0; 
+    wasSkillFull = false;
+    isTouchActive = false; 
+    shipTouchId = null;
+    
+    uiOffsets = { 
+        hp: { x: 0, y: 0, vx: 0, vy: 0 }, 
+        pt: { x: 0, y: 0, vx: 0, vy: 0 }, 
+        skill: { x: 0, y: 0, vx: 0, vy: 0 } 
+    };
+    
+    // 【核心补全：在这里拧动所有系统的钥匙】
     EventBus.clear();
-    FXSystem.init(); LootSystem.init(); ScoreSystem.init(); UIRefreshSystem.init(); WaveAnnouncementSystem.init();
+    FXSystem.init();
+    LootSystem.init();
+    ScoreSystem.init();
+    UIRefreshSystem.init();
+    WaveAnnouncementSystem.init(); // 激活波次播报
+    AudioSystem.init();            // 激活音频系统
 
     let c = WORKSHOP.cassettes[currentLevel];
-    if (c && c.state) { c.state.currentWave = 0; c.state.waveTimer = 0; }
+    if (c && c.state) { 
+        c.state.currentWave = 0; 
+        c.state.waveTimer = 0; 
+    }
 
-    updateHUD(); gameState = 'PLAYING'; showScreen(null);
+    updateHUD(); 
+    gameState = 'PLAYING'; 
+    showScreen(null);
 }
+
 
 function initUI() { initDifficultyUI(); setControlMode(config.controlMode); setTouchMode(config.touchMode); setupMultiTouchButtons(); }
 
