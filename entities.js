@@ -12,9 +12,51 @@ class Player {
         this.targetY = this.y;
         
         let diffData = DIFF_CONFIG[currentDifficulty];
-        this.maxHp = diffData.p_hp;
-        this.hp = this.maxHp;
-        this.damage = diffData.p_dmg;
+
+        // 【全新架构：四维乘区属性解耦】
+        // 1. 基线属性 (Base) - 飞船出厂默认值
+        this.baseStats = {
+            maxHp: diffData.p_hp,
+            damage: diffData.p_dmg,
+            fireRate: 20,          // 射击间隔帧数 (越小越快)
+            critRate: 0.05,
+            critDamage: 1.5,
+            moveSpeed: 1.0,
+            magnetRadius: 150,
+            aoeRadius: 40,
+            healEfficiency: 1.0    // 恢复效率基数
+        };
+
+        // 2. 局外预设养成 (Meta) - 顾问、基因、飞船特质 (预留)
+        this.metaStats = {
+            inc_damage: 0.0,       // 增益百分比，例如 0.1 代表 +10%
+            inc_maxHp: 0.0,
+            inc_critRate: 0.0,
+            more_damage: []        // 独立乘区，极稀有
+        };
+
+        // 3. 局内科技树升级 (Tech/Blue Track) - 在战术终端中加点
+        this.sectorTech = {
+            inc_damage: 0.0,
+            inc_fireRate: 0.0,     // 正数代表攻速提升
+            inc_critRate: 0.0,
+            inc_magnet: 0.0,
+            flat_damage: 0,        // 固定值提升
+            flat_maxHp: 0
+        };
+
+        // 为了兼容旧版代码与红轨商店，保留 equipment，但其数值会接入新公式
+        this.equipment = {};
+        upgradePool.filter(i => i.type === 'equip').forEach(i => {
+            this.equipment[i.id] = { 
+                owned: false, equipped: false, slotCost: i.slotCost, 
+                name: i.name, level: 0, canUnequip: i.canUnequip !== false 
+            };
+        });
+
+        this.upgrades = { aoe: 0, wingman: 0 }; // 兼容旧版特定功能
+
+        this.hp = this.getStat('maxHp');
         this.pt = 0;
         this.totalUpgradePoints = 0;
         
@@ -23,33 +65,8 @@ class Player {
         this.skillActiveTimer = 0;
         this.skillCdTimer = 0;
         
-        this.healSpawnRate = 0.05;
-        this.healMultiplier = 0.10;
-        this.magnetRadius = 150;
-        this.wingmen = 0;
-        this.critRate = 0.05;
-        this.critDamage = 1.5;
-        
-        this.upgrades = { 
-            damage: 0, hp: 0, pierce: 0, magnet: 0, aoe: 0, 
-            wingman: 0, healer_rate: 0, heal_up: 0, slot: 0, 
-            caliber: 0, crit_rate: 0, crit_dmg: 0 
-        };
-        
         this.maxSlots = 3;
         this.usedSlots = 0;
-        this.equipment = {};
-        
-        upgradePool.filter(i => i.type === 'equip').forEach(i => {
-            this.equipment[i.id] = { 
-                owned: false, 
-                equipped: false, 
-                slotCost: i.slotCost, 
-                name: i.name, 
-                level: 0, 
-                canUnequip: i.canUnequip !== false 
-            };
-        });
         
         this.fireCooldown = 0;
         this.bursting = 0;
@@ -59,22 +76,52 @@ class Player {
         this.invincible = 0;
     }
 
+    // 【核心算力：动态乘区求解器】每次获取属性时，实时结算四维公式
+    getStat(statName) {
+        // 1. 基线计算 = Base + Flat
+        let base = (this.baseStats[statName] || 0) + (this.sectorTech[`flat_${statName}`] || 0);
+        
+        // 2. 加算乘区 (Increased) = 100% + Meta + Tech
+        let inc = 1.0 + (this.metaStats[`inc_${statName}`] || 0) + (this.sectorTech[`inc_${statName}`] || 0);
+        
+        // 兼容红轨装备带来的动态加减算
+        if (statName === 'damage') {
+            if (this.equipment.homing && this.equipment.homing.equipped) inc += (-0.4 + (this.equipment.homing.level - 1) * 0.15);
+            if (this.equipment.spread && this.equipment.spread.equipped) inc += (-0.2 + (this.equipment.spread.level - 1) * 0.05);
+        }
+        if (statName === 'critRate' && this.skillActiveTimer > 0) inc += 0.8; // 技能暴击极大提升
+
+        // 防止增益跌破底线
+        inc = Math.max(0.1, inc);
+        
+        // 射速逻辑特殊：inc 大于 1 代表攻速变快，冷却帧数应变小
+        let finalVal = (statName === 'fireRate') ? (base / inc) : (base * inc);
+
+        // 3. 独立乘区 (More Multipliers)
+        let moreList = (this.metaStats[`more_${statName}`] || []).concat(this.sectorTech[`more_${statName}`] || []);
+        moreList.forEach(mult => { finalVal *= mult; });
+
+        // 4. 最终修正 (Final Modifier - 绝对的代价法则)
+        if (statName === 'damage' && this.equipment.debt_protocol && this.equipment.debt_protocol.equipped) {
+            finalVal *= 0.8; // 恶魔剥削永远在最后削弱 20%
+        }
+        if (statName === 'critRate' && finalVal > 1.0) {
+            finalVal = 1.0; // 暴击率溢出修正
+        }
+
+        return finalVal;
+    }
+
     update() {
-        // 平滑移动
         this.x += (this.targetX - this.x) * 0.3;
         this.y += (this.targetY - this.y) * 0.3;
-        
-        // 边界限制
         this.x = Math.max(this.w / 2, Math.min(width - this.w / 2, this.x));
         this.y = Math.max(this.h / 2, Math.min(height - this.h / 2, this.y));
         
         this.processShooting();
         
-        if (this.invincible > 0) {
-            this.invincible--;
-        }
+        if (this.invincible > 0) this.invincible--;
         
-        // 技能粒子特效
         if (this.skillActiveTimer > 0) {
             if (frameCount % 2 === 0 && particles.length < 200) {
                 particles.push(new Particle(this.x, this.y + this.h / 2, '#00e5ff', (Math.random() - 0.5) * 5, 4 + Math.random() * 4, 20));
@@ -86,63 +133,46 @@ class Player {
 
     processShooting() {
         let eq = this.equipment;
-        let currentFireRate = 20;
         
-        if (eq.speed.equipped) {
+        // 获取实时动态计算的火控数据
+        let currentFireRate = this.getStat('fireRate');
+        let currentDamage = this.getStat('damage');
+        let actCritRate = this.getStat('critRate');
+        let actCritDmg = this.getStat('critDamage');
+        
+        if (eq.speed && eq.speed.equipped) {
             currentFireRate = Math.max(7, 16 - (eq.speed.level - 1) * 3);
         }
         
-        let baseDmg = this.damage;
-        if (eq.debt_protocol.equipped) {
-            baseDmg *= 0.8;
-        }
-        
-        let actCritRate = this.critRate;
-        let actCritDmg = this.critDamage;
-        
-        if (this.skillActiveTimer > 0) {
-            actCritRate += 0.8;
-        }
-        if (actCritRate > 1.0) {
-            actCritDmg += (actCritRate - 1.0);
-            actCritRate = 1.0;
-        }
-        
+        // 如果暴击率溢出，转化为暴伤 (机制保留)
+        let baseCritCalc = 0.05 + (this.skillActiveTimer > 0 ? 0.8 : 0) + (this.metaStats.inc_critRate || 0);
+        if (baseCritCalc > 1.0) actCritDmg += (baseCritCalc - 1.0);
+
         let homingTurn = 0;
-        if (eq.homing.equipped) {
-            baseDmg *= (0.6 + (eq.homing.level - 1) * 0.15);
-            homingTurn = 0.15 + (eq.homing.level - 1) * 0.1;
-        }
+        if (eq.homing && eq.homing.equipped) homingTurn = 0.15 + (eq.homing.level - 1) * 0.1;
         
-        if (eq.spread.equipped) {
-            baseDmg *= Math.min(1.0, 0.8 + (eq.spread.level - 1) * 0.05);
-        }
+        let cw = 4 + (this.sectorTech.inc_damage || 0) * 10;
+        let ch = 8 + (this.sectorTech.inc_damage || 0) * 20;
         
-        let cw = 4 + (this.upgrades.damage || 0) * 0.3;
-        let ch = 8 + (this.upgrades.damage || 0) * 0.6;
-        
-        let pCnt = 0;
-        let pRet = 1.0;
-        if (eq.pierce.equipped) {
+        let pCnt = 0; let pRet = 1.0;
+        if (eq.pierce && eq.pierce.equipped) {
             pCnt = eq.pierce.level >= 3 ? 2 : 1;
             pRet = eq.pierce.level >= 2 ? 0.8 : 0.5;
         }
         
         let spawnBullet = (vx, vy) => {
-            let b = new Bullet(this.x, this.y - this.h / 2, vx, vy, cw, ch, baseDmg, pCnt, pRet, actCritRate, actCritDmg, '#ffffff');
-            b.isHoming = eq.homing.equipped;
+            let b = new Bullet(this.x, this.y - this.h / 2, vx, vy, cw, ch, currentDamage, pCnt, pRet, actCritRate, actCritDmg, '#ffffff');
+            b.isHoming = eq.homing && eq.homing.equipped;
             b.homingTurn = homingTurn;
             bullets.push(b);
         };
         
         let doShoot = () => {
-            if (eq.laser.equipped) return;
-            if (eq.spread.equipped) {
+            if (eq.laser && eq.laser.equipped) return;
+            if (eq.spread && eq.spread.equipped) {
                 let count = Math.min(5, eq.spread.level + 1);
                 let startVx = -1.5 * (count - 1) / 2;
-                for (let i = 0; i < count; i++) {
-                    spawnBullet(startVx + 1.5 * i, -16);
-                }
+                for (let i = 0; i < count; i++) spawnBullet(startVx + 1.5 * i, -16);
             } else {
                 spawnBullet(0, -16);
             }
@@ -150,36 +180,26 @@ class Player {
         
         this.isFiringLaser = false;
         
-        if (eq.laser.equipped) {
-            if (eq.pulse.equipped) {
-                if (this.bursting > 0) this.isFiringLaser = true;
-            } else {
-                this.isFiringLaser = true;
-            }
+        if (eq.laser && eq.laser.equipped) {
+            if (eq.pulse && eq.pulse.equipped) { if (this.bursting > 0) this.isFiringLaser = true; } 
+            else { this.isFiringLaser = true; }
             
             if (this.isFiringLaser) {
                 this.laserTick++;
                 if (this.laserTick % 5 === 0) {
                     let laserMult = 0.25 + (eq.laser.level - 1) * 0.15;
-                    let laserDmg = baseDmg * laserMult;
+                    let laserDmg = currentDamage * laserMult;
                     
                     enemies.forEach(e => {
                         if (!e.active) return;
                         let hit = false;
-                        
-                        if (Math.abs(e.x - this.x) < e.w / 2 + 16 && e.y < this.y) {
-                            hit = true;
-                        }
-                        
-                        if (!hit && eq.spread.equipped) {
+                        if (Math.abs(e.x - this.x) < e.w / 2 + 16 && e.y < this.y) hit = true;
+                        if (!hit && eq.spread && eq.spread.equipped) {
                             let dy = this.y - e.y;
                             if (dy > 0) {
                                 let offset = dy * 0.15;
-                                if (Math.abs(e.x - (this.x - offset)) < e.w / 2 + 16) {
-                                    hit = true;
-                                } else if (Math.abs(e.x - (this.x + offset)) < e.w / 2 + 16) {
-                                    hit = true;
-                                }
+                                if (Math.abs(e.x - (this.x - offset)) < e.w / 2 + 16) hit = true;
+                                else if (Math.abs(e.x - (this.x + offset)) < e.w / 2 + 16) hit = true;
                             }
                         }
                         
@@ -188,59 +208,41 @@ class Player {
                             let finalDmg = isCrit ? laserDmg * actCritDmg : laserDmg;
                             e.takeDamage(finalDmg, true, isCrit, 'laser');
                             
-                            if (particles.length < 180) {
-                                particles.push(new Particle(e.x, e.y + e.h / 2, '#00e5ff', (Math.random() - 0.5) * 8, Math.random() * 5, 8));
-                            }
-                            if (this.upgrades.aoe > 0 && Math.random() < 0.1) {
-                                triggerAOE(e.x, e.y, finalDmg, 40);
-                            }
+                            if (particles.length < 180) particles.push(new Particle(e.x, e.y + e.h / 2, '#00e5ff', (Math.random() - 0.5) * 8, Math.random() * 5, 8));
+                            if (this.upgrades.aoe > 0 && Math.random() < 0.1) triggerAOE(e.x, e.y, finalDmg, 40);
                         }
                     });
                 }
             }
         }
         
-        if (eq.pulse.equipped) {
+        if (eq.pulse && eq.pulse.equipped) {
             let burstCount = eq.pulse.level >= 3 ? 4 : 3;
             let cdMult = 3.0 - (eq.pulse.level - 1) * 0.5;
             
             if (this.bursting > 0) {
                 this.burstTimer--;
-                if (this.burstTimer <= 0) {
-                    doShoot();
-                    this.bursting--;
-                    this.burstTimer = 5;
-                }
+                if (this.burstTimer <= 0) { doShoot(); this.bursting--; this.burstTimer = 5; }
             } else {
                 this.fireCooldown--;
-                if (this.fireCooldown <= 0) {
-                    this.bursting = burstCount;
-                    this.burstTimer = 0;
-                    this.fireCooldown = currentFireRate * cdMult;
-                }
+                if (this.fireCooldown <= 0) { this.bursting = burstCount; this.burstTimer = 0; this.fireCooldown = currentFireRate * cdMult; }
             }
         } else {
             this.fireCooldown--;
-            if (this.fireCooldown <= 0) {
-                doShoot();
-                this.fireCooldown = currentFireRate;
-            }
+            if (this.fireCooldown <= 0) { doShoot(); this.fireCooldown = currentFireRate; }
         }
     }
 
     draw(ctx) {
-        if (this.invincible % 4 < 2) {
-            ctx.drawImage(this.sprite, this.x - this.w / 2, this.y - this.h / 2);
-        }
+        if (this.invincible % 4 < 2) ctx.drawImage(this.sprite, this.x - this.w / 2, this.y - this.h / 2);
     }
 
     takeDamage(amount, isPercent = false, sourceStr = 'normal') {
         if (this.invincible > 0 || endingState !== 'none') return;
         
-        let actualAmount = isPercent ? Math.max(40, Math.floor(this.maxHp * amount)) : amount;
-        if (!isPercent && currentDifficulty === 3) {
-            actualAmount *= 1.25;
-        }
+        let currentMaxHp = this.getStat('maxHp');
+        let actualAmount = isPercent ? Math.max(40, Math.floor(currentMaxHp * amount)) : amount;
+        if (!isPercent && currentDifficulty === 3) actualAmount *= 1.25;
         
         this.hp -= actualAmount;
         this.invincible = 20;
@@ -250,24 +252,20 @@ class Player {
         uiOffsets.hp.x += Math.cos(dmgAng) * dmgMag;
         uiOffsets.hp.y += Math.sin(dmgAng) * dmgMag;
         
-        // 触发解耦事件
         EventBus.emit('ENTITY_DAMAGED', { isPlayer: true });
         
-        if (config.dmgText) {
-            pushFloatingText(this.x, this.y - 20, Math.floor(actualAmount), '#ff3333', true);
-        }
+        if (config.dmgText) pushFloatingText(this.x, this.y - 20, Math.floor(actualAmount), '#ff3333', true);
         
         comboCount = Math.floor(comboCount / 2);
         
-        if (this.hp <= 0) {
-            this.hp = 0;
-            startEnding('playerDead');
-        }
+        if (this.hp <= 0) { this.hp = 0; startEnding('playerDead'); }
         updateHUD();
     }
 
     heal(amount, isEliteDrop = false) {
-        let actualHeal = Math.min(amount, Math.max(0, this.maxHp - this.hp));
+        let currentMaxHp = this.getStat('maxHp');
+        let eff = this.getStat('healEfficiency');
+        let actualHeal = Math.min(amount * eff, Math.max(0, currentMaxHp - this.hp));
         this.hp += actualHeal;
         
         if (config.dmgText && actualHeal > 0) {
@@ -276,6 +274,7 @@ class Player {
         updateHUD();
     }
 }
+
 
 class Bullet {
     constructor(x, y, vx, vy, w, h, dmg, pCount, pRet, cRate, cDmg, color) {
