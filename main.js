@@ -315,6 +315,7 @@ const AudioSystem = {
             globalAudioCtx.resume(); 
         }
     }
+    
 };
 
 const unlockAudio = () => {
@@ -324,6 +325,12 @@ const unlockAudio = () => {
 };
 document.addEventListener('touchstart', unlockAudio, { once: true });
 document.addEventListener('click', unlockAudio, { once: true });
+// 引擎启动时自动预加载外部资产
+if (typeof AudioSystem !== 'undefined') {
+    AudioSystem.initGraph();
+    AudioSystem.loadAsset('bgm', 'assets/audio/bgm.mp3');
+}
+
 
 
 
