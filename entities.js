@@ -88,13 +88,32 @@ class Player {
     get maxHp() { return this.getStat('maxHp'); }
     get damage() { return this.getStat('damage'); }
 
-        getStat(statName) {
+            getStat(statName) {
         let base = (this.baseStats[statName] || 0) + (this.sectorTech[`flat_${statName}`] || 0);
         let inc = 1.0 + (this.metaStats[`inc_${statName}`] || 0) + (this.sectorTech[`inc_${statName}`] || 0);
         
         if (statName === 'damage') {
             if (this.equipment.homing && this.equipment.homing.equipped) inc += (-0.4 + (this.equipment.homing.level - 1) * 0.15);
             if (this.equipment.spread && this.equipment.spread.equipped) inc += (-0.2 + (this.equipment.spread.level - 1) * 0.05);
+            
+            // 【L1 架构修复：高能弹药/伤害乘区接线】
+            // 兼容防错：无论你的 ID 叫 damage 还是 high_explosive
+            let dmgCore = this.equipment.damage || this.equipment.high_explosive;
+            if (dmgCore && dmgCore.equipped) {
+                // 提供 20% 加成，每级额外 10%
+                inc += 0.20 + (dmgCore.level - 1) * 0.10;
+            }
+        }
+        
+        if (statName === 'fireRate') {
+            // 【L1 架构修复：速射核心/射速乘区接线】
+            // 兼容防错：无论你的 ID 叫 speed 还是 burst_core
+            let speedCore = this.equipment.speed || this.equipment.burst_core;
+            if (speedCore && speedCore.equipped) {
+                // 按你 L2 设定的数值：+20%, +60%, +100%
+                let bonus = [0.20, 0.60, 1.00][Math.min(2, speedCore.level - 1)] || 0;
+                inc += bonus;
+            }
         }
 
         inc = Math.max(0.1, inc);
@@ -107,14 +126,15 @@ class Player {
             finalVal *= 0.8; 
         }
         
-        // 【L1 核心修复：暴击率绝对加成机制】
+        // 【遗漏修补：暴击率绝对加成机制】
         if (statName === 'critRate') {
-            if (this.skillActiveTimer > 0) finalVal += 0.80; // 技能提供真实的 80% 绝对暴击率
-            finalVal = Math.min(1.0, finalVal); // 暴击率最高 100%
+            if (this.skillActiveTimer > 0) finalVal += 0.80; // 技能期间提供真实的 80% 绝对暴击率
+            finalVal = Math.min(1.0, finalVal); 
         }
 
         return finalVal;
     }
+
 
 
     update() {
@@ -136,17 +156,16 @@ class Player {
         }
     }
 
-    processShooting() {
+       processShooting() {
         let eq = this.equipment;
+        
         let currentFireRate = this.getStat('fireRate');
         let currentDamage = this.getStat('damage');
         let actCritRate = this.getStat('critRate');
         let actCritDmg = this.getStat('critDamage');
         
-        if (eq.speed && eq.speed.equipped) {
-            currentFireRate = Math.max(7, 16 - (eq.speed.level - 1) * 3);
-        }
-        
+        // 【已剿灭旧版 eq.speed 强制覆盖逻辑，射速由四维引擎完美接管】
+
         let baseCritCalc = 0.05 + (this.skillActiveTimer > 0 ? 0.8 : 0) + (this.metaStats.inc_critRate || 0);
         if (baseCritCalc > 1.0) actCritDmg += (baseCritCalc - 1.0);
 
@@ -162,15 +181,14 @@ class Player {
             pRet = eq.pierce.level >= 2 ? 0.8 : 0.5;
         }
         
-                let spawnBullet = (vx, vy) => {
-            // [L2 技能视觉反馈：弹道变黄]
+        let spawnBullet = (vx, vy) => {
+            // [技能视觉反馈：弹道变黄]
             let bulletColor = this.skillActiveTimer > 0 ? '#ffeb3b' : '#ffffff';
             let b = new Bullet(this.x, this.y - this.h / 2, vx, vy, cw, ch, currentDamage, pCnt, pRet, actCritRate, actCritDmg, bulletColor);
             b.isHoming = eq.homing && eq.homing.equipped;
             b.homingTurn = homingTurn;
             bullets.push(b);
         };
-
         
         let doShoot = () => {
             if (eq.laser && eq.laser.equipped) return;
@@ -221,9 +239,11 @@ class Player {
             }
         }
         
-        if (eq.pulse && eq.pulse.equipped) {
-            let burstCount = eq.pulse.level >= 3 ? 4 : 3;
-            let cdMult = 3.0 - (eq.pulse.level - 1) * 0.5;
+        // 兼容脉冲核心的冷却逻辑
+        let pulseCore = eq.pulse;
+        if (pulseCore && pulseCore.equipped) {
+            let burstCount = pulseCore.level >= 3 ? 4 : 3;
+            let cdMult = 3.0 - (pulseCore.level - 1) * 0.5;
             
             if (this.bursting > 0) {
                 this.burstTimer--;
@@ -237,6 +257,7 @@ class Player {
             if (this.fireCooldown <= 0) { doShoot(); this.fireCooldown = currentFireRate; }
         }
     }
+
 
         draw(ctx) {
         if (this.invincible % 4 < 2) {

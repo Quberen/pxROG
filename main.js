@@ -789,22 +789,26 @@ function updateAndDrawStars(ctx, isPlaying) {
 
 // --- [11] 核心战斗函数 ---
 
-function activateSkill() {
+function activateSkill() { 
     if (!player) return;
-    if (player.skillEnergy >= player.maxSkillEnergy && player.skillCdTimer <= 0 && player.skillActiveTimer <= 0) {
-        player.skillEnergy = 0;
-        player.skillActiveTimer = 600;
-        triggerShake(10, 10);
-        flashScreenTimer = 15;
-        flashScreenColor = '0, 229, 255';
-        wasSkillFull = false;
-        updateHUD();
+    if (player.skillEnergy >= player.maxSkillEnergy && player.skillCdTimer <= 0 && player.skillActiveTimer <= 0) { 
+        player.skillEnergy = 0; 
+        
+        // 【L2 物理接线：读取黑市买到的 skill_duration 等级】
+        // 基础 600帧(10秒) + 每级额外增加 60帧(1秒)
+        let bonusFrames = (player.upgrades['skill_duration'] || 0) * 60;
+        player.skillActiveTimer = 600 + bonusFrames; 
+        
+        triggerShake(10, 10); 
+        flashScreenTimer = 15; 
+        flashScreenColor = '0, 229, 255'; 
+        wasSkillFull = false; 
+        updateHUD(); 
     } else {
-        // 【UI 补丁：能量不足时的物理拒止反馈】
         triggerShake(4, 4);
-        pushFloatingText(player.x, player.y - 30, "系统未就绪", "#ff1744", true);
     }
 }
+
 
 function applyElastic(obj, targetNode, type = 'hp') { 
     if (obj.vx === undefined) { obj.vx = 0; obj.vy = 0; } 
@@ -1430,50 +1434,45 @@ function switchTerminalTab(tabId) {
     }
 }
 
-// 挂载新的蓝轨升级逻辑
+// --- [蓝轨系统超频：唯一合法数据总线] ---
+// 请确保整个 main.js 中只有这一个 window.terminalBuyBlue
 window.terminalBuyBlue = function(key) {
+    if (!player) return;
     let lv = player.techLevels[key] || 0;
     let cfg = BLUE_TECH_TIERS[key];
-    if (lv >= cfg.values.length) return;
+    
+    // 防御性拦截：配置缺失或已满级
+    if (!cfg || lv >= cfg.values.length) return; 
     
     let cost = cfg.costs[lv];
     if (player.pt >= cost) {
-        player.pt -= cost;
+        player.pt -= cost; // 精准扣除阶梯点数
         let nextVal = cfg.values[lv];
         
+        // 动态注入四维引擎
         if (key === 'fireRate') player.sectorTech.inc_fireRate = nextVal;
         if (key === 'damage') player.sectorTech.flat_damage = nextVal;
         if (key === 'maxHp') { 
             let diff = nextVal - (lv > 0 ? cfg.values[lv-1] : 0);
             player.sectorTech.flat_maxHp = nextVal; 
-            player.hp += diff; // 阶梯增加的血量立刻回复
+            player.hp += diff; // 提升上限的同时补足血量
         }
+        
         player.techLevels[key]++;
-        switchTerminalTab('tech');
-        updateHUD();
+        switchTerminalTab('tech'); // 强制刷新终端 UI 显示
+        updateHUD(); // 强制刷新外界状态栏
     } else {
+        // 【架构净化】：余额不足时仅触发物理震动反馈，彻底剔除 Low 级飘字
         triggerShake(4, 4); 
     }
 };
+
 
 // --- 挂载至全局 Window 提供给 HTML ---
 window.terminalBuyRed = function(id) { buyUpgrade(id); };
 window.terminalRefreshShop = function() { refreshShop(); switchTerminalTab('shop'); };
 
-window.terminalBuyBlue = function(type) {
-    if (player.pt >= 5) {
-        player.pt -= 5;
-        if (type === 'fireRate') player.sectorTech.inc_fireRate += 0.05;
-        if (type === 'maxHp') { 
-            player.sectorTech.flat_maxHp += 20; 
-            player.hp += 20; 
-        }
-        switchTerminalTab('tech');
-        updateHUD();
-    } else {
-        triggerShake(4, 4); 
-    }
-};
+
 
 window.terminalToggleEquip = function(id) {
     let eq = player.equipment[id]; 
@@ -1486,25 +1485,7 @@ window.terminalToggleEquip = function(id) {
     updateHUD(); 
 };
 
-window.terminalBuyBlue = function(type) {
-    if (player.pt >= 5) {
-        player.pt -= 5;
-        if (type === 'fireRate') {
-            player.sectorTech.inc_fireRate += 0.05;
-            pushFloatingText(player.x, player.y - 30, "攻速 +5%", "#00e5ff", true);
-        }
-        if (type === 'maxHp') {
-            player.sectorTech.flat_maxHp += 20;
-            player.hp += 20;
-            pushFloatingText(player.x, player.y - 30, "生命上限 +20", "#00e676", true);
-        }
-        switchTerminalTab('tech');
-        updateHUD();
-    } else {
-        triggerShake(4, 4);
-        pushFloatingText(player.x, player.y - 30, "算力 PT 不足", "#ff1744", true);
-    }
-};
+
 
 function togglePause() { 
     if (gameState === 'PLAYING') { 
