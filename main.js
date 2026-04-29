@@ -20,6 +20,51 @@ const EventBus = {
         this.events = {};
     }
 };
+// --- [新增] 资产加载屏障 (绝对防死锁核载版) ---
+const AssetManager = {
+    promises: [],
+    add(promise) { this.promises.push(promise); },
+    async boot(callback) {
+        let statusEl = document.getElementById('boot-status');
+        let hasBooted = false;
+
+        // 核心点火引擎
+        const executeBoot = () => {
+            if (hasBooted) return;
+            hasBooted = true;
+            let loader = document.getElementById('boot-loader');
+            if (loader) loader.style.display = 'none';
+            callback(); // 正式切入游戏循环
+        };
+
+        if (!statusEl) { executeBoot(); return; }
+
+        // 【物理级强杀锁】：3秒后无论发生什么，强行撕裂黑幕进入游戏！
+        const fallbackTimer = setTimeout(() => {
+            if (!hasBooted) {
+                console.warn("[BOOT] 环境响应挂起，触发 3 秒超时强杀点火！");
+                statusEl.innerText = "环境超时，强制启动。";
+                executeBoot();
+            }
+        }, 3000);
+
+        try {
+            await Promise.all(this.promises);
+            if (!hasBooted) {
+                clearTimeout(fallbackTimer); // 如果3秒内正常加载完，取消强杀
+                statusEl.innerText = "自检完成。";
+                setTimeout(executeBoot, 300);
+            }
+        } catch (e) {
+            if (!hasBooted) {
+                clearTimeout(fallbackTimer);
+                statusEl.style.color = "#ff1744";
+                statusEl.innerText = "资产异常，强制启动。";
+                setTimeout(executeBoot, 300);
+            }
+        }
+    }
+};
 
 // --- [2] 核心变量定义 ---
 const canvas = document.getElementById('gameCanvas');
@@ -121,36 +166,22 @@ let wasSkillFull = false;
 const BASE_REFRESH_COST = 1.0;
 let taggedItemId = null;
 
-
-// --- [6] 核心组件：音频引擎 (Audio System) 重建防御与探针版 ---
+// --- [6] 核心组件：音频引擎 (原生 Audio 标签直读本地流) ---
 let globalAudioCtx = null;
 
 const AudioSystem = {
-    unlocked: false,
     masterBus: null, sfxBus: null, bgmBus: null,
     compressor: null, bgmFilter: null,
-    buffers: {},
-    currentBgmSource: null,
-    stopTimer: null,
-    dmgFilterTimer: null,
-    dmgFilterActive: false,
+    bgmAudioEl: null, bgmSourceNode: null, fallbackOsc: null,
+    stopTimer: null, dmgFilterTimer: null, dmgFilterActive: false,
     
-    config: {
-        normalFreq: 20000,     
-        uiMuffleFreq: 600,     
-        uiFadeTime: 0.1,       
-        dmgMuffleFreq: 300,    
-        dmgDuration: 250,      
-        dmgFadeOut: 0.8        
-    },
+    config: { normalFreq: 20000, uiMuffleFreq: 600, uiFadeTime: 0.1, dmgMuffleFreq: 300, dmgDuration: 250, dmgFadeOut: 0.8 },
 
     initGraph() {
         if (globalAudioCtx) return;
-        console.log("[DEBUG-AUDIO] 引擎点火：初始化音频图谱 (initGraph)");
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         if (!AudioContext) return;
         globalAudioCtx = new AudioContext({ latencyHint: 'interactive' });
-
         this.masterBus = globalAudioCtx.createGain();
         this.sfxBus = globalAudioCtx.createGain();
         this.bgmBus = globalAudioCtx.createGain(); 
@@ -164,26 +195,23 @@ const AudioSystem = {
 
         this.sfxBus.connect(this.compressor);
         this.compressor.connect(this.masterBus);
-
         this.bgmBus.connect(this.bgmFilter);
         this.bgmFilter.connect(this.masterBus);
         this.masterBus.connect(globalAudioCtx.destination);
-    },
-
-    loadAsset(key, url) {
-        if (!globalAudioCtx) this.initGraph();
-        fetch(url)
-            .then(res => res.arrayBuffer())
-            .then(data => globalAudioCtx.decodeAudioData(data))
-            .then(buffer => { 
-                this.buffers[key] = buffer; 
-                console.log(`[DEBUG-AUDIO] 资产解码成功: ${key}`);
-            })
-            .catch(err => { console.warn(`[DEBUG-AUDIO] 资源 ${url} 缺失，准备波形降级。`); });
+        
+        // 【绝对核心：用 HTML5 Audio 标签直读本地文件，免疫跨域拦截！】
+        this.bgmAudioEl = new Audio('assets/audio/bgm.mp3');
+        this.bgmAudioEl.loop = true;
+        
+        try {
+            // 将本地音频流接管进 Web Audio API 的滤镜管线 (完美保留时停滤波功能)
+            this.bgmSourceNode = globalAudioCtx.createMediaElementSource(this.bgmAudioEl);
+        } catch(e) {
+            console.warn("媒体流挂载受限", e);
+        }
     },
 
     bindEvents() {
-        console.log("[DEBUG-AUDIO] 神经中枢：绑定音频生命周期事件 (bindEvents)");
         EventBus.off('UI_OPENED', this.handleUIOpen);
         EventBus.off('UI_CLOSED', this.handleUIClosed);
         EventBus.off('SYS_LEVEL_EXITED', this.handleExit);
@@ -201,65 +229,55 @@ const AudioSystem = {
     },
 
     playBGM() {
-        console.log("[DEBUG-AUDIO] ---> [指令接收] 请求播放新 BGM (playBGM)");
         if (!globalAudioCtx) this.initGraph();
-        if (globalAudioCtx.state === 'suspended') {
-            console.log("[DEBUG-AUDIO] 音频上下文被锁死，尝试唤醒...");
-            globalAudioCtx.resume();
-        }
+        if (globalAudioCtx.state === 'suspended') globalAudioCtx.resume();
 
-        // 强杀所有定时器
-        if (this.stopTimer) {
-            console.log("[DEBUG-AUDIO] 拦截到上局残留的 stopTimer 斩杀线，已强制清除！");
-            clearTimeout(this.stopTimer);
-            this.stopTimer = null;
-        }
-        if (this.dmgFilterTimer) {
-            clearTimeout(this.dmgFilterTimer);
-            this.dmgFilterTimer = null;
-        }
+        if (this.stopTimer) clearTimeout(this.stopTimer);
+        if (this.dmgFilterTimer) clearTimeout(this.dmgFilterTimer);
         this.dmgFilterActive = false;
-
         this.stopBGM();
 
-        // 【核弹级防御机制】：彻底摧毁旧的 bgmBus，断绝所有幽灵曲线的寄生！
-        console.log("[DEBUG-AUDIO] 执行物理级轨道重建 (Destroy & Rebuild bgmBus)");
         if (this.bgmBus) {
             this.bgmBus.disconnect();
             this.bgmBus = globalAudioCtx.createGain();
             this.bgmBus.connect(this.bgmFilter);
-            this.bgmBus.gain.value = 1.0; // 绝对的满音量初始态
         }
 
         const t = globalAudioCtx.currentTime;
+        this.bgmBus.gain.setValueAtTime(0, t); 
+        this.bgmBus.gain.setTargetAtTime(1, t, 0.5); 
 
-        // 暴力重置滤波器
         this.bgmFilter.frequency.cancelScheduledValues(t);
         this.bgmFilter.frequency.setValueAtTime(this.config.normalFreq, t);
 
-        if (this.buffers['bgm']) {
-            console.log("[DEBUG-AUDIO] 启动真实资产播放");
-            let source = globalAudioCtx.createBufferSource();
-            source.buffer = this.buffers['bgm'];
-            source.loop = true;
-            source.connect(this.bgmBus);
-            source.start(0);
-            this.currentBgmSource = source;
+        if (this.bgmSourceNode && this.bgmAudioEl) {
+            this.bgmSourceNode.disconnect();
+            this.bgmSourceNode.connect(this.bgmBus);
+            
+            this.bgmAudioEl.currentTime = 0;
+            let p = this.bgmAudioEl.play();
+            if (p !== undefined) {
+                p.catch(e => {
+                    console.warn("本地音频解码失败或遭浏览器阻挡，启动备用音效:", e);
+                    this.playFallbackOsc(t);
+                });
+            }
         } else {
-            console.log("[DEBUG-AUDIO] 启动波形发生器 (Oscillator) 降级播放");
-            let osc = globalAudioCtx.createOscillator();
-            osc.type = 'sawtooth';
-            osc.frequency.setValueAtTime(146.83, t); // D3
-            osc.connect(this.bgmBus);
-            osc.start();
-            this.currentBgmSource = osc;
+            this.playFallbackOsc(t);
         }
+    },
+    
+    playFallbackOsc(t) {
+        this.fallbackOsc = globalAudioCtx.createOscillator();
+        this.fallbackOsc.type = 'sawtooth';
+        this.fallbackOsc.frequency.setValueAtTime(146.83, t); 
+        this.fallbackOsc.connect(this.bgmBus);
+        this.fallbackOsc.start();
     },
 
     transitionBGMState(state) {
         if (!this.bgmFilter || !globalAudioCtx) return;
         if (this.dmgFilterActive) return; 
-        console.log(`[DEBUG-AUDIO] 滤波器状态切换: ${state}`);
         this.bgmFilter.frequency.cancelScheduledValues(globalAudioCtx.currentTime);
         let targetFreq = (state === 'ui') ? this.config.uiMuffleFreq : this.config.normalFreq;
         this.bgmFilter.frequency.setTargetAtTime(targetFreq, globalAudioCtx.currentTime, this.config.uiFadeTime);
@@ -281,41 +299,21 @@ const AudioSystem = {
     },
 
     fadeOutAndStop() {
-        console.log("[DEBUG-AUDIO] ---> [指令接收] 触发关卡退出，开始淡出 (fadeOutAndStop)");
         if (!this.bgmBus || !globalAudioCtx) return;
-        
         const t = globalAudioCtx.currentTime;
-        console.log(`[DEBUG-AUDIO] 写入衰减曲线: gain->0 (t=${t})`);
         this.bgmBus.gain.cancelScheduledValues(t);
         this.bgmBus.gain.setTargetAtTime(0, t, 0.5); 
-
         if (this.stopTimer) clearTimeout(this.stopTimer);
-        this.stopTimer = setTimeout(() => { 
-            console.log("[DEBUG-AUDIO] 淡出结束，执行异步延迟拔管");
-            this.stopBGM(); 
-        }, 1000); 
+        this.stopTimer = setTimeout(() => { this.stopBGM(); }, 1000); 
     },
 
     stopBGM() {
-        if (this.currentBgmSource) {
-            console.log("[DEBUG-AUDIO] 拔管：物理销毁当前音源 (stopBGM)");
-            try { 
-                this.currentBgmSource.stop(); 
-                this.currentBgmSource.disconnect(); 
-                this.currentBgmSource = null; 
-            } catch(e) {
-                console.warn("[DEBUG-AUDIO] 拔管时出现静默异常:", e);
-            }
+        if (this.bgmAudioEl) this.bgmAudioEl.pause();
+        if (this.fallbackOsc) {
+            try { this.fallbackOsc.stop(); this.fallbackOsc.disconnect(); this.fallbackOsc = null; } catch(e) {}
         }
     },
-    
-    resumeContext() { 
-        if (globalAudioCtx && globalAudioCtx.state === 'suspended') {
-            console.log("[DEBUG-AUDIO] 用户交互触发，强行唤醒音频上下文");
-            globalAudioCtx.resume(); 
-        }
-    }
-    
+    resumeContext() { if (globalAudioCtx && globalAudioCtx.state === 'suspended') globalAudioCtx.resume(); }
 };
 
 const unlockAudio = () => {
@@ -325,11 +323,7 @@ const unlockAudio = () => {
 };
 document.addEventListener('touchstart', unlockAudio, { once: true });
 document.addEventListener('click', unlockAudio, { once: true });
-// 引擎启动时自动预加载外部资产
-if (typeof AudioSystem !== 'undefined') {
-    AudioSystem.initGraph();
-    AudioSystem.loadAsset('bgm', 'assets/audio/bgm.mp3');
-}
+
 
 
 
@@ -427,12 +421,20 @@ const WaveAnnouncementSystem = {
 // --- [8] 引擎底层函数 ---
 
 function updateUIRects() {
-    let sR = document.getElementById('shop-btn-cvs').getBoundingClientRect(); 
-    shopBtnRect = { x: sR.left + sR.width / 2, y: sR.top + sR.height / 2 };
+    // [架构修复] 废弃 shop-btn-cvs，将货币的吸收视觉终点安全重定向至终端入口
+    let termEl = document.getElementById('terminal-btn-cvs');
+    if (termEl) {
+        let sR = termEl.getBoundingClientRect(); 
+        shopBtnRect = { x: sR.left + sR.width / 2, y: sR.top + sR.height / 2 };
+    }
     
-    let skR = document.getElementById('skill-btn-cvs').getBoundingClientRect(); 
-    skillBtnRect = { x: skR.left + skR.width / 2, y: skR.top + skR.height / 2 };
+    let skEl = document.getElementById('skill-btn-cvs');
+    if (skEl) {
+        let skR = skEl.getBoundingClientRect(); 
+        skillBtnRect = { x: skR.left + skR.width / 2, y: skR.top + skR.height / 2 };
+    }
 }
+
 
 function openWorkshop() { 
     Object.values(screens).forEach(s => s.classList.remove('active')); 
@@ -634,8 +636,18 @@ function drawPixelButton(id, icon, progress, color) {
     } 
     ctx.fillStyle = '#555'; ctx.fillRect(4, 0, 40, 4); ctx.fillRect(4, 44, 40, 4); ctx.fillRect(0, 4, 4, 40); ctx.fillRect(44, 4, 4, 40); 
     ctx.fillRect(2, 2, 4, 4); ctx.fillRect(42, 2, 4, 4); ctx.fillRect(2, 42, 4, 4); ctx.fillRect(42, 42, 4, 4); 
-    if (icon) ctx.drawImage(icon, 24 - icon.width / 2, 24 - icon.height / 2); 
+       // [修改] 支持直接绘制 "+" 字符作为图标，保持像素画风
+    if (icon === '+') {
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 24px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('+', 24, 24);
+    } else if (icon) {
+        ctx.drawImage(icon, 24 - icon.width / 2, 24 - icon.height / 2); 
+    }
 }
+ 
 
 let offsetCanvas = document.getElementById('offsetCanvas'); 
 let offsetCtx = offsetCanvas.getContext('2d'); 
@@ -852,10 +864,26 @@ function updatePixelButtons() {
     let skColor = player.skillActiveTimer > 0 ? '#00e5ff' : (player.skillCdTimer > 0 ? '#ff1744' : (player.skillEnergy >= player.maxSkillEnergy ? '#ffea00' : '#00b0ff'));
     
     drawPixelButton('skill-btn-cvs', sprites.i_skill, skProg, skColor); 
-    drawPixelButton('loadout-btn-cvs', sprites.i_loadout, 0, '#fff'); 
-    drawPixelButton('shop-btn-cvs', sprites.i_shop, 0, '#fff'); 
     drawPixelButton('pause-btn-cvs', sprites.i_pause, 0, '#fff');
+    // [修改] 渲染终极统一入口 Terminal
+    drawPixelButton('terminal-btn-cvs', '+', 0, '#00e5ff'); 
 }
+
+const setupMultiTouchButtons = () => {
+    const btnMap = { 
+        'pause-btn-cvs': togglePause, 
+        'skill-btn-cvs': activateSkill, 
+        // [修改] 接入 Terminal 呼出逻辑
+        'terminal-btn-cvs': toggleTerminal 
+    };
+    for (let id in btnMap) { 
+        let el = document.getElementById(id); 
+        if (el) { 
+            el.onpointerdown = (e) => { e.preventDefault(); e.stopPropagation(); btnMap[id](); }; 
+        } 
+    }
+};
+
 
 // --- [12] 商店与背包逻辑 ---
 function getShopCost(opt) { 
@@ -1291,21 +1319,33 @@ function resize() {
     ctx.imageSmoothingEnabled = false; 
     updateUIRects(); 
 }
-
-const setupMultiTouchButtons = () => {
-    const btnMap = { 
-        'pause-btn-cvs': togglePause, 
-        'skill-btn-cvs': activateSkill, 
-        'loadout-btn-cvs': () => openLoadout('PLAYING'), 
-        'shop-btn-cvs': openShop 
-    };
-    for (let id in btnMap) { 
-        let el = document.getElementById(id); 
-        if (el) { 
-            el.onpointerdown = (e) => { e.preventDefault(); e.stopPropagation(); btnMap[id](); }; 
-        } 
+// --- [新增] 战术终端逻辑 ---
+function toggleTerminal() {
+    let terminalEl = document.getElementById('tactical-terminal');
+    if (gameState === 'PLAYING') {
+        gameState = 'TERMINAL';
+        terminalEl.classList.remove('hud-hidden');
+        EventBus.emit('UI_OPENED');
+        switchTerminalTab('shop');
+    } else if (gameState === 'TERMINAL') {
+        gameState = 'PLAYING';
+        terminalEl.classList.add('hud-hidden');
+        EventBus.emit('UI_CLOSED');
     }
-};
+}
+
+function switchTerminalTab(tabId) {
+    let view = document.getElementById('terminal-viewport');
+    if (tabId === 'shop') {
+        view.innerHTML = `<h3 style="color:#ff1744">黑市网络链接中... (红轨 PT 交易区)</h3><p>系统已就绪。当前拥有 PT: ${player ? player.pt.toFixed(1) : 0}</p>`;
+    } else if (tabId === 'tech') {
+        if (!player) return;
+        view.innerHTML = `<h3 style="color:#00e676">系统超频协议已授权 (蓝轨 SP 加点区)</h3><p>基线射速: ${player.baseStats.fireRate}</p><p>当前科技树攻速增益: ${(player.sectorTech.inc_fireRate * 100).toFixed(0)}%</p><p>实际射击间隔: ${player.getStat('fireRate').toFixed(1)} 帧</p>`;
+    } else if (tabId === 'loadout') {
+        view.innerHTML = `<h3>装备模块校验中...</h3><p>等待模块装配逻辑接入。</p>`;
+    }
+}
+
 
 function togglePause() { 
     if (gameState === 'PLAYING') { 
@@ -1402,4 +1442,11 @@ canvas.addEventListener('mouseup', () => { isTouchActive = false; });
 canvas.addEventListener('mouseleave', () => { isTouchActive = false; });
 window.addEventListener('resize', resize);
 
-initUI(); showScreen('start'); resize(); initSprites(); initStars(); requestAnimationFrame(loop);
+// 初始化同步渲染资产
+initUI(); showScreen('start'); resize(); initSprites(); initStars(); 
+
+// 字体与音频就绪后再点火主循环
+if (document.fonts && document.fonts.ready) AssetManager.add(document.fonts.ready);
+AssetManager.boot(() => {
+    requestAnimationFrame(loop);
+});
