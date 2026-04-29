@@ -20,51 +20,36 @@ const EventBus = {
         this.events = {};
     }
 };
-// --- [新增] 资产加载屏障 (绝对防死锁核载版) ---
+// --- [新增] 全局动态加载屏障 (免疫一切 HTML 缺失) ---
 const AssetManager = {
     promises: [],
+    loaderEl: null,
+    initDOM() {
+        this.loaderEl = document.createElement('div');
+        this.loaderEl.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#050510;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#00e5ff;font-family:monospace;transition:opacity 0.5s;';
+        this.loaderEl.innerHTML = '<h2 style="margin:0;letter-spacing:5px;">SYSTEM BOOTING</h2><p id="boot-status" style="color:#00e676;">装载核心资产库...</p>';
+        document.body.appendChild(this.loaderEl);
+    },
     add(promise) { this.promises.push(promise); },
     async boot(callback) {
+        this.initDOM();
         let statusEl = document.getElementById('boot-status');
-        let hasBooted = false;
-
-        // 核心点火引擎
-        const executeBoot = () => {
-            if (hasBooted) return;
-            hasBooted = true;
-            let loader = document.getElementById('boot-loader');
-            if (loader) loader.style.display = 'none';
-            callback(); // 正式切入游戏循环
-        };
-
-        if (!statusEl) { executeBoot(); return; }
-
-        // 【物理级强杀锁】：3秒后无论发生什么，强行撕裂黑幕进入游戏！
-        const fallbackTimer = setTimeout(() => {
-            if (!hasBooted) {
-                console.warn("[BOOT] 环境响应挂起，触发 3 秒超时强杀点火！");
-                statusEl.innerText = "环境超时，强制启动。";
-                executeBoot();
-            }
-        }, 3000);
-
         try {
-            await Promise.all(this.promises);
-            if (!hasBooted) {
-                clearTimeout(fallbackTimer); // 如果3秒内正常加载完，取消强杀
-                statusEl.innerText = "自检完成。";
-                setTimeout(executeBoot, 300);
-            }
+            const timeoutPromise = new Promise(resolve => setTimeout(() => resolve('TIMEOUT'), 3000));
+            const result = await Promise.race([Promise.all(this.promises), timeoutPromise]);
+            statusEl.innerText = result === 'TIMEOUT' ? "加载超时，启用后备协议。" : "系统自检完成。";
+            
+            setTimeout(() => {
+                this.loaderEl.style.opacity = '0';
+                setTimeout(() => { this.loaderEl.remove(); callback(); }, 500);
+            }, 300);
         } catch (e) {
-            if (!hasBooted) {
-                clearTimeout(fallbackTimer);
-                statusEl.style.color = "#ff1744";
-                statusEl.innerText = "资产异常，强制启动。";
-                setTimeout(executeBoot, 300);
-            }
+            statusEl.style.color = "#ff1744"; statusEl.innerText = "资产异常，强制启动。";
+            setTimeout(() => { this.loaderEl.remove(); callback(); }, 500);
         }
     }
 };
+
 
 // --- [2] 核心变量定义 ---
 const canvas = document.getElementById('gameCanvas');
@@ -144,6 +129,12 @@ const ui = {
 // --- [5] 游戏状态数据 ---
 let gameState = 'START';
 let player;
+// [L2 蓝轨超频阶梯配置]
+const BLUE_TECH_TIERS = {
+    fireRate: { values: [0.05, 0.08, 0.13, 0.20], costs: [0.8, 1.5, 2.5, 3.8] },
+    damage:   { values: [2, 3, 5, 8], costs: [0.4, 1.3, 3.0, 5.0] },
+    maxHp:    { values: [20, 50, 80, 120], costs: [1.2, 2.2, 3.8, 6.5] }
+};
 let bullets = [], enemyBullets = [], enemies = [], particles = [], items = [], floatingTexts = [], stars = [], aoeEffects = [];
 let score = 0, frameCount = 0, gameTimeSeconds = 0;
 let shakeTimer = 0, shakeIntensity = 0;
@@ -228,7 +219,7 @@ const AudioSystem = {
         EventBus.on('ENTITY_DAMAGED', this.handleDamage);
     },
 
-    playBGM() {
+    playBGM(trackKey = '') {
         if (!globalAudioCtx) this.initGraph();
         if (globalAudioCtx.state === 'suspended') globalAudioCtx.resume();
 
@@ -253,6 +244,14 @@ const AudioSystem = {
         if (this.bgmSourceNode && this.bgmAudioEl) {
             this.bgmSourceNode.disconnect();
             this.bgmSourceNode.connect(this.bgmBus);
+            
+            // [L2 架构：动态切换 Boss 音乐源]
+            let srcPath = trackKey === 'boss' ? 'assets/audio/boss.mp3' : 'assets/audio/bgm.mp3';
+            if (this.bgmAudioEl.getAttribute('src') !== srcPath) {
+                this.bgmAudioEl.src = srcPath;
+            }
+            
+
             
             this.bgmAudioEl.currentTime = 0;
             let p = this.bgmAudioEl.play();
@@ -636,17 +635,17 @@ function drawPixelButton(id, icon, progress, color) {
     } 
     ctx.fillStyle = '#555'; ctx.fillRect(4, 0, 40, 4); ctx.fillRect(4, 44, 40, 4); ctx.fillRect(0, 4, 4, 40); ctx.fillRect(44, 4, 4, 40); 
     ctx.fillRect(2, 2, 4, 4); ctx.fillRect(42, 2, 4, 4); ctx.fillRect(2, 42, 4, 4); ctx.fillRect(42, 42, 4, 4); 
-       // [修改] 支持直接绘制 "+" 字符作为图标，保持像素画风
+    
+    // 【L1 修复：白色的、尺寸与技能一致的原生像素加号】
     if (icon === '+') {
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 24px monospace';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('+', 24, 24);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(22, 16, 4, 16); 
+        ctx.fillRect(16, 22, 16, 4); 
     } else if (icon) {
         ctx.drawImage(icon, 24 - icon.width / 2, 24 - icon.height / 2); 
     }
 }
+
  
 
 let offsetCanvas = document.getElementById('offsetCanvas'); 
@@ -790,16 +789,21 @@ function updateAndDrawStars(ctx, isPlaying) {
 
 // --- [11] 核心战斗函数 ---
 
-function activateSkill() { 
-    if (player.skillEnergy >= player.maxSkillEnergy && player.skillCdTimer <= 0 && player.skillActiveTimer <= 0) { 
-        player.skillEnergy = 0; 
-        player.skillActiveTimer = 600; 
-        triggerShake(10, 10); 
-        flashScreenTimer = 15; 
-        flashScreenColor = '0, 229, 255'; 
-        wasSkillFull = false; 
-        updateHUD(); 
-    } 
+function activateSkill() {
+    if (!player) return;
+    if (player.skillEnergy >= player.maxSkillEnergy && player.skillCdTimer <= 0 && player.skillActiveTimer <= 0) {
+        player.skillEnergy = 0;
+        player.skillActiveTimer = 600;
+        triggerShake(10, 10);
+        flashScreenTimer = 15;
+        flashScreenColor = '0, 229, 255';
+        wasSkillFull = false;
+        updateHUD();
+    } else {
+        // 【UI 补丁：能量不足时的物理拒止反馈】
+        triggerShake(4, 4);
+        pushFloatingText(player.x, player.y - 30, "系统未就绪", "#ff1744", true);
+    }
 }
 
 function applyElastic(obj, targetNode, type = 'hp') { 
@@ -898,27 +902,38 @@ function getWeightedRandomItem(excludeIds) {
     let shopItems = cassette.shopItems || 'ALL'; 
     let availableItems = upgradePool.filter(item => { 
         if (excludeIds.includes(item.id)) return false; 
+        if (item.id === 'repair' || item.id === 'emergency_repair') return false; 
         if (shopItems !== 'ALL' && !shopItems.includes(item.id)) return false; 
         if (shopItems === 'ALL') { 
             if (player.totalUpgradePoints < item.unlockPT || gameTimeSeconds < item.unlockTime) return false; 
         } 
         if (item.type === 'equip') { 
-            if (!player.equipment[item.id].owned) return true; 
+            if (!player.equipment[item.id] || !player.equipment[item.id].owned) return true; 
             return player.equipment[item.id].level < item.max; 
         } 
         return (item.max === 999) ? true : ((player.upgrades[item.id] || 0) < item.max); 
     }); 
     
     if (availableItems.length === 0) return null; 
-    let totalWeight = availableItems.reduce((sum, item) => sum + RARITY[item.rarity].weight, 0); 
+    
+    // 【架构级修复：绝对防御机制】如果 RARITY 字典读取失败，默认赋予 10 点权重，绝不崩溃
+    let totalWeight = availableItems.reduce((sum, item) => {
+        let w = (typeof RARITY !== 'undefined' && RARITY[item.rarity]) ? RARITY[item.rarity].weight : 10;
+        return sum + w;
+    }, 0); 
+    
     let roll = Math.random() * totalWeight; 
     let weightSum = 0; 
     for (let item of availableItems) { 
-        weightSum += RARITY[item.rarity].weight; 
+        let w = (typeof RARITY !== 'undefined' && RARITY[item.rarity]) ? RARITY[item.rarity].weight : 10;
+        weightSum += w; 
         if (roll <= weightSum) return item; 
     } 
     return availableItems[availableItems.length - 1]; 
 }
+
+
+
 
 function generateShopItems() { 
     currentShopItems = []; 
@@ -1042,26 +1057,36 @@ function refreshShop() {
     } 
 }
 
-function buyUpgrade(id) { 
-    let opt = currentShopItems.find(i => i.id === id); 
+function buyUpgrade(index) { 
+    let opt = currentShopItems[index]; 
+    if (!opt || opt.soldOut) return;
+    
     let cost = getShopCost(opt); 
     if (player.pt >= cost) { 
         player.pt -= cost; 
         if (opt.type === 'equip') { 
-            if (!player.equipment[id].owned) { 
-                player.equipment[id].owned = true; 
-                player.equipment[id].level = 1; 
+            if (!player.equipment[opt.id].owned) { 
+                player.equipment[opt.id].owned = true; 
+                player.equipment[opt.id].level = 1; 
+                if (player.usedSlots + player.equipment[opt.id].slotCost <= player.maxSlots) {
+                    player.equipment[opt.id].equipped = true;
+                    player.usedSlots += player.equipment[opt.id].slotCost;
+                }
             } else { 
-                player.equipment[id].level++; 
+                player.equipment[opt.id].level++; 
             } 
         } else { 
-            player.upgrades[id] = (player.upgrades[id] || 0) + 1; 
+            player.upgrades[opt.id] = (player.upgrades[opt.id] || 0) + 1; 
         } 
-        generateShopItems(); 
-        renderShopCards(); 
+        
+        // [L1 经济学修复：买完后标记为售罄，绝不免费自动补货]
+        currentShopItems[index] = { soldOut: true };
+        
+        switchTerminalTab('shop'); 
         updateHUD(); 
     } 
 }
+
 
 function getPlayerPowerScore() { 
     let power = (player.damage * (player.equipment['debt_protocol'].equipped ? 0.8 : 1.0) - 12) * 0.2; 
@@ -1325,27 +1350,161 @@ function toggleTerminal() {
     if (gameState === 'PLAYING') {
         gameState = 'TERMINAL';
         terminalEl.classList.remove('hud-hidden');
-        EventBus.emit('UI_OPENED');
-        switchTerminalTab('shop');
+        EventBus.emit('UI_OPENED'); 
+        switchTerminalTab('shop');  
     } else if (gameState === 'TERMINAL') {
         gameState = 'PLAYING';
         terminalEl.classList.add('hud-hidden');
-        EventBus.emit('UI_CLOSED');
+        EventBus.emit('UI_CLOSED'); 
     }
 }
 
 function switchTerminalTab(tabId) {
     let view = document.getElementById('terminal-viewport');
+    if (!player) return;
+
     if (tabId === 'shop') {
-        view.innerHTML = `<h3 style="color:#ff1744">黑市网络链接中... (红轨 PT 交易区)</h3><p>系统已就绪。当前拥有 PT: ${player ? player.pt.toFixed(1) : 0}</p>`;
+        if (typeof currentShopItems === 'undefined' || currentShopItems.length === 0) generateShopItems();
+        let html = `<h3 style="color:#ff1744; margin-top:0;">[ 黑市网络 ]</h3>
+                    <p>算力: <span style="color:#ffea00;">${player.pt.toFixed(1)} PT</span></p>
+                    <div style="display:flex; gap:10px; margin-bottom: 20px;">`;
+        currentShopItems.forEach((opt, index) => {
+            if (opt.soldOut) {
+                html += `<div style="flex:1; border: 1px solid #333; padding: 10px; background: rgba(0,0,0,0.5); text-align: center;">
+                            <div style="color:#555; font-weight:bold; margin-top:15px;">[ 货柜已空 ]</div>
+                         </div>`;
+            } else {
+                let cost = getShopCost(opt);
+                let canBuy = player.pt >= cost;
+                html += `<div style="flex:1; border: 1px solid ${canBuy ? '#ff1744' : '#555'}; padding: 10px; background: rgba(255,23,68,0.1); cursor: ${canBuy ? 'pointer' : 'not-allowed'}; text-align: center;" onclick="${canBuy ? `terminalBuyRed(${index})` : ''}">
+                            <div style="font-weight:bold; color:#fff; font-size:12px;">${opt.name}</div>
+                            <div style="color:#ffea00; margin-top:10px;">${cost.toFixed(1)} PT</div>
+                         </div>`;
+            }
+        });
+        html += `</div><button onclick="terminalRefreshShop()" style="width:100%; padding:15px; background:rgba(17,17,17,0.8); color:#fff; border:1px solid #ff1744; cursor:pointer; font-family:inherit;">强制刷新 (1.0 PT)</button>`;
+        view.innerHTML = html;
+        
     } else if (tabId === 'tech') {
-        if (!player) return;
-        view.innerHTML = `<h3 style="color:#00e676">系统超频协议已授权 (蓝轨 SP 加点区)</h3><p>基线射速: ${player.baseStats.fireRate}</p><p>当前科技树攻速增益: ${(player.sectorTech.inc_fireRate * 100).toFixed(0)}%</p><p>实际射击间隔: ${player.getStat('fireRate').toFixed(1)} 帧</p>`;
+        let html = `<h3 style="color:#00e676; margin-top:0;">[ 蓝轨系统超频 ]</h3>
+                    <p>算力: <span style="color:#00e5ff;">${player.pt.toFixed(1)} PT</span></p>
+                    <table style="width:100%; text-align:left; border-collapse: collapse; margin-top:15px;">
+                        <tr style="border-bottom: 1px solid #00e676; color:#00e676;"><th style="padding-bottom:10px;">超频模块</th><th style="padding-bottom:10px;">当前增益</th><th style="padding-bottom:10px;">操作</th></tr>`;
+        
+        const renderRow = (key, name, unit) => {
+            let lv = player.techLevels[key] || 0;
+            let cfg = BLUE_TECH_TIERS[key];
+            let isMax = lv >= cfg.values.length;
+            let curVal = isMax ? cfg.values[cfg.values.length-1] : (lv > 0 ? cfg.values[lv-1] : 0);
+            let nextCost = isMax ? 'MAX' : cfg.costs[lv];
+            let canBuy = !isMax && player.pt >= nextCost;
+            
+            html += `<tr style="border-bottom: 1px dashed #555;">
+                        <td style="padding: 15px 0;">${name} (Lv.${lv})</td>
+                        <td style="color:#ffea00;">+${key === 'fireRate' ? (curVal*100).toFixed(0)+'%' : curVal+unit}</td>
+                        <td><button onclick="terminalBuyBlue('${key}')" style="background:${isMax ? '#333' : (canBuy ? '#00e676' : '#555')}; color:${isMax ? '#555' : '#000'}; border:none; padding:8px 15px; cursor:${isMax ? 'not-allowed' : 'pointer'}; font-weight:bold;">${isMax ? '已满级' : '超频 ('+nextCost+' PT)'}</button></td>
+                     </tr>`;
+        };
+        
+        renderRow('fireRate', '射击频率', '');
+        renderRow('damage', '基础火力', '');
+        renderRow('maxHp', '装甲韧性', ' HP');
+        html += `</table>`;
+        view.innerHTML = html;
+        
     } else if (tabId === 'loadout') {
-        view.innerHTML = `<h3>装备模块校验中...</h3><p>等待模块装配逻辑接入。</p>`;
+        // 装配逻辑保持不变
+        let html = `<h3 style="color:#00b0ff; margin-top:0;">[ 装备模块管理 ]</h3><p>算力槽位: ${player.usedSlots} / ${player.maxSlots}</p><div style="display:flex; flex-wrap:wrap; gap:10px;">`;
+        for (let id in player.equipment) {
+            let eq = player.equipment[id];
+            if (eq.owned) {
+                let canToggle = eq.equipped ? eq.canUnequip : (player.usedSlots + eq.slotCost <= player.maxSlots);
+                html += `<div onclick="${canToggle ? `terminalToggleEquip('${id}')` : ''}" style="border: 1px solid ${eq.equipped ? '#00b0ff' : '#555'}; padding: 10px; background: ${eq.equipped ? 'rgba(0,176,255,0.2)' : 'rgba(255,255,255,0.05)'}; cursor: ${canToggle ? 'pointer' : 'not-allowed'}; width: 45%;">
+                            <div style="color:${eq.equipped ? '#fff' : '#888'}; font-weight:bold;">${eq.name} Lv.${eq.level}</div>
+                            <div style="color:#aaa; font-size:10px; margin-top:5px;">占用: ${eq.slotCost}</div>
+                         </div>`;
+            }
+        }
+        html += `</div>`;
+        view.innerHTML = html;
     }
 }
 
+// 挂载新的蓝轨升级逻辑
+window.terminalBuyBlue = function(key) {
+    let lv = player.techLevels[key] || 0;
+    let cfg = BLUE_TECH_TIERS[key];
+    if (lv >= cfg.values.length) return;
+    
+    let cost = cfg.costs[lv];
+    if (player.pt >= cost) {
+        player.pt -= cost;
+        let nextVal = cfg.values[lv];
+        
+        if (key === 'fireRate') player.sectorTech.inc_fireRate = nextVal;
+        if (key === 'damage') player.sectorTech.flat_damage = nextVal;
+        if (key === 'maxHp') { 
+            let diff = nextVal - (lv > 0 ? cfg.values[lv-1] : 0);
+            player.sectorTech.flat_maxHp = nextVal; 
+            player.hp += diff; // 阶梯增加的血量立刻回复
+        }
+        player.techLevels[key]++;
+        switchTerminalTab('tech');
+        updateHUD();
+    } else {
+        triggerShake(4, 4); 
+    }
+};
+
+// --- 挂载至全局 Window 提供给 HTML ---
+window.terminalBuyRed = function(id) { buyUpgrade(id); };
+window.terminalRefreshShop = function() { refreshShop(); switchTerminalTab('shop'); };
+
+window.terminalBuyBlue = function(type) {
+    if (player.pt >= 5) {
+        player.pt -= 5;
+        if (type === 'fireRate') player.sectorTech.inc_fireRate += 0.05;
+        if (type === 'maxHp') { 
+            player.sectorTech.flat_maxHp += 20; 
+            player.hp += 20; 
+        }
+        switchTerminalTab('tech');
+        updateHUD();
+    } else {
+        triggerShake(4, 4); 
+    }
+};
+
+window.terminalToggleEquip = function(id) {
+    let eq = player.equipment[id]; 
+    if (eq.equipped) { 
+        if (eq.canUnequip) { eq.equipped = false; player.usedSlots -= eq.slotCost; }
+    } else { 
+        if (player.usedSlots + eq.slotCost <= player.maxSlots) { eq.equipped = true; player.usedSlots += eq.slotCost; } 
+    } 
+    switchTerminalTab('loadout');
+    updateHUD(); 
+};
+
+window.terminalBuyBlue = function(type) {
+    if (player.pt >= 5) {
+        player.pt -= 5;
+        if (type === 'fireRate') {
+            player.sectorTech.inc_fireRate += 0.05;
+            pushFloatingText(player.x, player.y - 30, "攻速 +5%", "#00e5ff", true);
+        }
+        if (type === 'maxHp') {
+            player.sectorTech.flat_maxHp += 20;
+            player.hp += 20;
+            pushFloatingText(player.x, player.y - 30, "生命上限 +20", "#00e676", true);
+        }
+        switchTerminalTab('tech');
+        updateHUD();
+    } else {
+        triggerShake(4, 4);
+        pushFloatingText(player.x, player.y - 30, "算力 PT 不足", "#ff1744", true);
+    }
+};
 
 function togglePause() { 
     if (gameState === 'PLAYING') { 

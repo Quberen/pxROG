@@ -23,7 +23,11 @@ const ENEMY_TYPES = Object.keys(WORKSHOP.data.enemies).map(key => {
 
 // 【数据混入】：保留静态描述，混入工坊里的价格与等级上限
 const baseUpgradePool = [
-    { id: 'damage', type: 'stat', name: '高能弹头', rarity: 'R', unlockPT: 0, unlockTime: 0, desc: '单发基础杀伤力+6，子弹略微变大。' },
+{ id: 'high_explosive', type: 'equip', name: '高能弹头', slotCost: 1, rarity: 'rare', initialCost: 3, cost: 2, costStep: 3, max: 4 }, 
+{ id: 'spread', type: 'equip', name: '散弹模组', slotCost: 2, rarity: 'epic', initialCost: 6, cost: 6, costStep: 6, max: 3 },
+{ id: 'skill_duration', type: 'upgrade', name: '超频运转', rarity: 'rare', cost: 3, max: 3 },
+{ id: 'burst_core', type: 'equip', name: '连发核心', slotCost: 1, rarity: 'epic', initialCost: 2, cost: 4, costStep: 2, max: 3 },
+
     { id: 'heal', type: 'utility', name: '紧急修复', rarity: 'C', unlockPT: 0, unlockTime: 0, desc: '立刻固定恢复20点耐久度。' },
     { id: 'heal_up', type: 'utility', name: '修复增幅', rarity: 'R', unlockPT: 0, unlockTime: 0, desc: '增加血包恢复量(+5%)。' },
     { id: 'magnet', type: 'utility', name: '引力场', rarity: 'C', unlockPT: 0, unlockTime: 0, desc: '扩大能量晶体与补给的拾取范围。' },
@@ -35,8 +39,6 @@ const baseUpgradePool = [
     { id: 'slot', type: 'utility', name: '系统插槽', rarity: 'L', unlockPT: 2.0, unlockTime: 0, desc: '背包容量扩充，+1 装备插槽。' }, 
     
     { id: 'hp_max', type: 'equip', name: '装甲重塑', rarity: 'E', slotCost: 1, unlockPT: 0, unlockTime: 0, desc: '提升血量上限(30-30-40)。获取时自动回复对应血量。' },
-    { id: 'speed', type: 'equip', name: '连发核心', rarity: 'R', slotCost: 1, unlockPT: 0, unlockTime: 0, desc: '提升基础射速。升级达到极致。' }, 
-    { id: 'spread', type: 'equip', name: '散弹模组', rarity: 'R', slotCost: 2, unlockPT: 3.0, unlockTime: 45, desc: '发射散弹。升级降低伤害惩罚。' },
     { id: 'homing', type: 'equip', name: '追踪模块', rarity: 'E', slotCost: 2, unlockPT: 5.0, unlockTime: 60, desc: '子弹弱追踪。升级提升制导。' },
     { id: 'pulse', type: 'equip', name: '脉冲发射', rarity: 'R', slotCost: 2, unlockPT: 4.0, unlockTime: 60, desc: '点射模式。升级缩短发射间隔。' },
     { id: 'laser', type: 'equip', name: '高能激光', rarity: 'L', slotCost: 3, unlockPT: 15.0, unlockTime: 120, desc: '发射贯穿屏障的高频光束。' },

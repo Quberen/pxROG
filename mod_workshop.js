@@ -112,6 +112,7 @@ window.WORKSHOP = {
     cassettes: {
         'sector1': {
             name: "区域 1: 废星边缘",
+            shopItems: ['high_explosive', 'spread', 'skill_duration', 'burst_core'],
             allowed_enemies: ['Locator', 'LocatorSwarm', 'Turret', 'TurretSwarm', 'ArcFlyer', 'Tank'],
             allowed_formations: ['V_Strike', 'Turret_Wall'],
             disable_director: true,

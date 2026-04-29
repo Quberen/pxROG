@@ -37,12 +37,20 @@ class Player {
         // 3. 局内科技树升级 (Tech/Blue Track)
         this.sectorTech = {
             inc_damage: 0.0,
-            inc_fireRate: 0.0,     
+            inc_fireRate: 0.0,
             inc_critRate: 0.0,
             inc_magnet: 0.0,
-            flat_damage: 0,        
+            flat_damage: 0,
             flat_maxHp: 0
         };
+
+        // 【架构修复：将阶梯等级状态回归到实体内部】
+        this.techLevels = {
+            fireRate: 0,
+            damage: 0,
+            maxHp: 0
+        };
+
 
         this.equipment = {};
         upgradePool.filter(i => i.type === 'equip').forEach(i => {
@@ -80,7 +88,7 @@ class Player {
     get maxHp() { return this.getStat('maxHp'); }
     get damage() { return this.getStat('damage'); }
 
-    getStat(statName) {
+        getStat(statName) {
         let base = (this.baseStats[statName] || 0) + (this.sectorTech[`flat_${statName}`] || 0);
         let inc = 1.0 + (this.metaStats[`inc_${statName}`] || 0) + (this.sectorTech[`inc_${statName}`] || 0);
         
@@ -88,10 +96,6 @@ class Player {
             if (this.equipment.homing && this.equipment.homing.equipped) inc += (-0.4 + (this.equipment.homing.level - 1) * 0.15);
             if (this.equipment.spread && this.equipment.spread.equipped) inc += (-0.2 + (this.equipment.spread.level - 1) * 0.05);
         }
-        if (statName === 'critRate' && this.skillActiveTimer > 0) inc += 0.8; 
-        
-        // 兼容旧版磁吸范围的直接乘区
-        if (statName === 'magnetRadius') inc += (this.upgrades.magnet * 0.2);
 
         inc = Math.max(0.1, inc);
         let finalVal = (statName === 'fireRate') ? (base / inc) : (base * inc);
@@ -102,11 +106,16 @@ class Player {
         if (statName === 'damage' && this.equipment.debt_protocol && this.equipment.debt_protocol.equipped) {
             finalVal *= 0.8; 
         }
-        if (statName === 'critRate' && finalVal > 1.0) {
-            finalVal = 1.0; 
+        
+        // 【L1 核心修复：暴击率绝对加成机制】
+        if (statName === 'critRate') {
+            if (this.skillActiveTimer > 0) finalVal += 0.80; // 技能提供真实的 80% 绝对暴击率
+            finalVal = Math.min(1.0, finalVal); // 暴击率最高 100%
         }
+
         return finalVal;
     }
+
 
     update() {
         this.x += (this.targetX - this.x) * 0.3;
@@ -153,12 +162,15 @@ class Player {
             pRet = eq.pierce.level >= 2 ? 0.8 : 0.5;
         }
         
-        let spawnBullet = (vx, vy) => {
-            let b = new Bullet(this.x, this.y - this.h / 2, vx, vy, cw, ch, currentDamage, pCnt, pRet, actCritRate, actCritDmg, '#ffffff');
+                let spawnBullet = (vx, vy) => {
+            // [L2 技能视觉反馈：弹道变黄]
+            let bulletColor = this.skillActiveTimer > 0 ? '#ffeb3b' : '#ffffff';
+            let b = new Bullet(this.x, this.y - this.h / 2, vx, vy, cw, ch, currentDamage, pCnt, pRet, actCritRate, actCritDmg, bulletColor);
             b.isHoming = eq.homing && eq.homing.equipped;
             b.homingTurn = homingTurn;
             bullets.push(b);
         };
+
         
         let doShoot = () => {
             if (eq.laser && eq.laser.equipped) return;
@@ -226,9 +238,19 @@ class Player {
         }
     }
 
-    draw(ctx) {
-        if (this.invincible % 4 < 2) ctx.drawImage(this.sprite, this.x - this.w / 2, this.y - this.h / 2);
+        draw(ctx) {
+        if (this.invincible % 4 < 2) {
+            let drawX = this.x - this.w / 2;
+            let drawY = this.y - this.h / 2;
+            // [L2 技能视觉反馈：引擎超载抖动]
+            if (this.skillActiveTimer > 0) {
+                drawX += (Math.random() - 0.5) * 4;
+                drawY += (Math.random() - 0.5) * 4;
+            }
+            ctx.drawImage(this.sprite, drawX, drawY);
+        }
     }
+
 
     takeDamage(amount, isPercent = false, sourceStr = 'normal') {
         if (this.invincible > 0 || endingState !== 'none') return;
@@ -455,19 +477,33 @@ class BaseEnemy {
     }
 
     baseUpdate() {
-        if (!this._initMods) {
-            this._initMods = true;
-            if (!this.isHealer && !this.isSpecial && !this.isBoss && !this.isAbyss && !this.isBattery) {
-                if (Math.random() < 0.15) {
-                    this.isBattery = true;
-                }
-            }
-            if (this.isBattery) {
-                if (this.sprite === sprites.locator) this.sprite = sprites.locator_battery;
-                else if (this.sprite === sprites.wanderer) this.sprite = sprites.wanderer_battery;
-                else if (this.sprite === sprites.turret) this.sprite = sprites.turret_battery;
-            }
+       if (!this._initMods) {
+    this._initMods = true;
+    if (!this.isHealer && !this.isSpecial && !this.isBoss && !this.isAbyss && !this.isBattery) {
+        // [L1 修复：动态感知补给波次，大幅提升医疗机和能量机概率]
+        let isSupply = false;
+        try {
+            let cassette = WORKSHOP.cassettes[currentLevel];
+            if (cassette && cassette.timeline[cassette.state.currentWave].type === 'supply') isSupply = true;
+        } catch (e) {}
+        
+        let rand = Math.random();
+        let healProb = isSupply ? 0.60 : 0.08;
+        let batteryProb = isSupply ? 0.90 : 0.23;
+        
+        if (rand < healProb) {
+            this.isHealer = true;
+            if (this.sprite === sprites.locator) this.sprite = sprites.locator_healer;
+            else if (this.sprite === sprites.wanderer) this.sprite = sprites.wanderer_healer;
+            else if (this.sprite === sprites.turret) this.sprite = sprites.turret_healer;
+        } else if (rand < batteryProb) {
+            this.isBattery = true;
+            if (this.sprite === sprites.locator) this.sprite = sprites.locator_battery;
+            else if (this.sprite === sprites.wanderer) this.sprite = sprites.wanderer_battery;
+            else if (this.sprite === sprites.turret) this.sprite = sprites.turret_battery;
         }
+    }
+}
         
         if (this.isElite && this.y > 0 && this.y < height * 0.8) {
             this.eliteFireTimer--;
@@ -803,6 +839,7 @@ class BossScrapDominator extends BaseEnemy {
         ui.bossToast.innerText = "废铁主宰者";
         ui.bossToast.style.opacity = 1;
         setTimeout(() => { ui.bossToast.style.opacity = 0; }, 4000);
+        if (typeof AudioSystem !== 'undefined') AudioSystem.playBGM('boss');
     }
 
     update() {
