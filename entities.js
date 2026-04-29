@@ -13,39 +13,37 @@ class Player {
         
         let diffData = DIFF_CONFIG[currentDifficulty];
 
-        // 【全新架构：四维乘区属性解耦】
-        // 1. 基线属性 (Base) - 飞船出厂默认值
+        // 1. 基线属性 (Base)
         this.baseStats = {
             maxHp: diffData.p_hp,
             damage: diffData.p_dmg,
-            fireRate: 20,          // 射击间隔帧数 (越小越快)
+            fireRate: 20,          
             critRate: 0.05,
             critDamage: 1.5,
             moveSpeed: 1.0,
             magnetRadius: 150,
             aoeRadius: 40,
-            healEfficiency: 1.0    // 恢复效率基数
+            healEfficiency: 1.0    
         };
 
-        // 2. 局外预设养成 (Meta) - 顾问、基因、飞船特质 (预留)
+        // 2. 局外预设养成 (Meta)
         this.metaStats = {
-            inc_damage: 0.0,       // 增益百分比，例如 0.1 代表 +10%
+            inc_damage: 0.0,       
             inc_maxHp: 0.0,
             inc_critRate: 0.0,
-            more_damage: []        // 独立乘区，极稀有
+            more_damage: []        
         };
 
-        // 3. 局内科技树升级 (Tech/Blue Track) - 在战术终端中加点
+        // 3. 局内科技树升级 (Tech/Blue Track)
         this.sectorTech = {
             inc_damage: 0.0,
-            inc_fireRate: 0.0,     // 正数代表攻速提升
+            inc_fireRate: 0.0,     
             inc_critRate: 0.0,
             inc_magnet: 0.0,
-            flat_damage: 0,        // 固定值提升
+            flat_damage: 0,        
             flat_maxHp: 0
         };
 
-        // 为了兼容旧版代码与红轨商店，保留 equipment，但其数值会接入新公式
         this.equipment = {};
         upgradePool.filter(i => i.type === 'equip').forEach(i => {
             this.equipment[i.id] = { 
@@ -54,7 +52,8 @@ class Player {
             };
         });
 
-        this.upgrades = { aoe: 0, wingman: 0 }; // 兼容旧版特定功能
+        // 【关键修复】：补全旧版 upgrade 字典，防止 Item 拾取时读取 heal_up 和 magnet 报错
+        this.upgrades = { aoe: 0, wingman: 0, heal_up: 0, magnet: 0 }; 
 
         this.hp = this.getStat('maxHp');
         this.pt = 0;
@@ -76,39 +75,36 @@ class Player {
         this.invincible = 0;
     }
 
-    // 【核心算力：动态乘区求解器】每次获取属性时，实时结算四维公式
+    // 【关键修复】：向后兼容的 Getter 代理。让掉落物能正确读取到计算后的磁吸范围和血量上限
+    get magnetRadius() { return this.getStat('magnetRadius'); }
+    get maxHp() { return this.getStat('maxHp'); }
+    get damage() { return this.getStat('damage'); }
+
     getStat(statName) {
-        // 1. 基线计算 = Base + Flat
         let base = (this.baseStats[statName] || 0) + (this.sectorTech[`flat_${statName}`] || 0);
-        
-        // 2. 加算乘区 (Increased) = 100% + Meta + Tech
         let inc = 1.0 + (this.metaStats[`inc_${statName}`] || 0) + (this.sectorTech[`inc_${statName}`] || 0);
         
-        // 兼容红轨装备带来的动态加减算
         if (statName === 'damage') {
             if (this.equipment.homing && this.equipment.homing.equipped) inc += (-0.4 + (this.equipment.homing.level - 1) * 0.15);
             if (this.equipment.spread && this.equipment.spread.equipped) inc += (-0.2 + (this.equipment.spread.level - 1) * 0.05);
         }
-        if (statName === 'critRate' && this.skillActiveTimer > 0) inc += 0.8; // 技能暴击极大提升
-
-        // 防止增益跌破底线
-        inc = Math.max(0.1, inc);
+        if (statName === 'critRate' && this.skillActiveTimer > 0) inc += 0.8; 
         
-        // 射速逻辑特殊：inc 大于 1 代表攻速变快，冷却帧数应变小
+        // 兼容旧版磁吸范围的直接乘区
+        if (statName === 'magnetRadius') inc += (this.upgrades.magnet * 0.2);
+
+        inc = Math.max(0.1, inc);
         let finalVal = (statName === 'fireRate') ? (base / inc) : (base * inc);
 
-        // 3. 独立乘区 (More Multipliers)
         let moreList = (this.metaStats[`more_${statName}`] || []).concat(this.sectorTech[`more_${statName}`] || []);
         moreList.forEach(mult => { finalVal *= mult; });
 
-        // 4. 最终修正 (Final Modifier - 绝对的代价法则)
         if (statName === 'damage' && this.equipment.debt_protocol && this.equipment.debt_protocol.equipped) {
-            finalVal *= 0.8; // 恶魔剥削永远在最后削弱 20%
+            finalVal *= 0.8; 
         }
         if (statName === 'critRate' && finalVal > 1.0) {
-            finalVal = 1.0; // 暴击率溢出修正
+            finalVal = 1.0; 
         }
-
         return finalVal;
     }
 
@@ -133,8 +129,6 @@ class Player {
 
     processShooting() {
         let eq = this.equipment;
-        
-        // 获取实时动态计算的火控数据
         let currentFireRate = this.getStat('fireRate');
         let currentDamage = this.getStat('damage');
         let actCritRate = this.getStat('critRate');
@@ -144,7 +138,6 @@ class Player {
             currentFireRate = Math.max(7, 16 - (eq.speed.level - 1) * 3);
         }
         
-        // 如果暴击率溢出，转化为暴伤 (机制保留)
         let baseCritCalc = 0.05 + (this.skillActiveTimer > 0 ? 0.8 : 0) + (this.metaStats.inc_critRate || 0);
         if (baseCritCalc > 1.0) actCritDmg += (baseCritCalc - 1.0);
 
@@ -252,14 +245,14 @@ class Player {
         uiOffsets.hp.x += Math.cos(dmgAng) * dmgMag;
         uiOffsets.hp.y += Math.sin(dmgAng) * dmgMag;
         
-        EventBus.emit('ENTITY_DAMAGED', { isPlayer: true });
+        if (typeof EventBus !== 'undefined') EventBus.emit('ENTITY_DAMAGED', { isPlayer: true });
         
         if (config.dmgText) pushFloatingText(this.x, this.y - 20, Math.floor(actualAmount), '#ff3333', true);
         
         comboCount = Math.floor(comboCount / 2);
         
         if (this.hp <= 0) { this.hp = 0; startEnding('playerDead'); }
-        updateHUD();
+        if (typeof updateHUD !== 'undefined') updateHUD();
     }
 
     heal(amount, isEliteDrop = false) {
@@ -271,9 +264,10 @@ class Player {
         if (config.dmgText && actualHeal > 0) {
             pushFloatingText(this.x, this.y - 20, Math.floor(actualHeal), isEliteDrop ? '#ffea00' : '#00e676', false, false, "+");
         }
-        updateHUD();
+        if (typeof updateHUD !== 'undefined') updateHUD();
     }
 }
+
 
 
 class Bullet {

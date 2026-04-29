@@ -122,41 +122,38 @@ const BASE_REFRESH_COST = 1.0;
 let taggedItemId = null;
 
 
-// --- [6] 核心组件：音频引擎 (Audio System) ---
+// --- [6] 核心组件：音频引擎 (Audio System) 重建防御与探针版 ---
 let globalAudioCtx = null;
 
 const AudioSystem = {
-    dmgFilterActive: false,
-    dmgFilterTimer: null,
-    stopTimer: null, 
     unlocked: false,
     masterBus: null, sfxBus: null, bgmBus: null,
     compressor: null, bgmFilter: null,
-    buffers: {}, // 【恢复】原始资产缓存池
+    buffers: {},
     currentBgmSource: null,
-    
-    // 高度可配的音频行为参数
-    config: {
-        normalFreq: 20000,     // 战斗时火力全开
-        uiMuffleFreq: 600,     // UI水下发闷频率
-        uiFadeTime: 0.1,       // UI切换阻尼时间
-        dmgMuffleFreq: 300,    // 受伤“耳鸣”深度
-        dmgDuration: 250,      // 耳鸣持续时间(ms)
-        dmgFadeOut: 0.8        // 耳鸣恢复缓动时间
-    },
-    
-    dmgFilterActive: false,
+    stopTimer: null,
     dmgFilterTimer: null,
+    dmgFilterActive: false,
+    
+    config: {
+        normalFreq: 20000,     
+        uiMuffleFreq: 600,     
+        uiFadeTime: 0.1,       
+        dmgMuffleFreq: 300,    
+        dmgDuration: 250,      
+        dmgFadeOut: 0.8        
+    },
 
     initGraph() {
         if (globalAudioCtx) return;
+        console.log("[DEBUG-AUDIO] 引擎点火：初始化音频图谱 (initGraph)");
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         if (!AudioContext) return;
         globalAudioCtx = new AudioContext({ latencyHint: 'interactive' });
 
         this.masterBus = globalAudioCtx.createGain();
         this.sfxBus = globalAudioCtx.createGain();
-        this.bgmBus = globalAudioCtx.createGain();
+        this.bgmBus = globalAudioCtx.createGain(); 
 
         this.bgmFilter = globalAudioCtx.createBiquadFilter();
         this.bgmFilter.type = 'lowpass';
@@ -173,22 +170,20 @@ const AudioSystem = {
         this.masterBus.connect(globalAudioCtx.destination);
     },
 
-    // 【核心恢复：异步资产加载管线】
     loadAsset(key, url) {
         if (!globalAudioCtx) this.initGraph();
         fetch(url)
             .then(res => res.arrayBuffer())
             .then(data => globalAudioCtx.decodeAudioData(data))
-            .then(buffer => {
-                this.buffers[key] = buffer;
-                console.log(`[AUDIO] 资产加载成功: ${key}`);
+            .then(buffer => { 
+                this.buffers[key] = buffer; 
+                console.log(`[DEBUG-AUDIO] 资产解码成功: ${key}`);
             })
-            .catch(err => {
-                console.warn(`[AUDIO] 未找到外部资产 ${url}，相关音频将执行自动降级。`);
-            });
+            .catch(err => { console.warn(`[DEBUG-AUDIO] 资源 ${url} 缺失，准备波形降级。`); });
     },
 
     bindEvents() {
+        console.log("[DEBUG-AUDIO] 神经中枢：绑定音频生命周期事件 (bindEvents)");
         EventBus.off('UI_OPENED', this.handleUIOpen);
         EventBus.off('UI_CLOSED', this.handleUIClosed);
         EventBus.off('SYS_LEVEL_EXITED', this.handleExit);
@@ -205,29 +200,45 @@ const AudioSystem = {
         EventBus.on('ENTITY_DAMAGED', this.handleDamage);
     },
 
-    // 【核心恢复：真实的资产播放与 Oscillator 降级】
     playBGM() {
+        console.log("[DEBUG-AUDIO] ---> [指令接收] 请求播放新 BGM (playBGM)");
         if (!globalAudioCtx) this.initGraph();
-        if (globalAudioCtx.state === 'suspended') globalAudioCtx.resume();
+        if (globalAudioCtx.state === 'suspended') {
+            console.log("[DEBUG-AUDIO] 音频上下文被锁死，尝试唤醒...");
+            globalAudioCtx.resume();
+        }
 
-        // 1. 强杀所有残留的生命周期定时器
-        if (this.stopTimer) clearTimeout(this.stopTimer);
-        if (this.dmgFilterTimer) clearTimeout(this.dmgFilterTimer);
+        // 强杀所有定时器
+        if (this.stopTimer) {
+            console.log("[DEBUG-AUDIO] 拦截到上局残留的 stopTimer 斩杀线，已强制清除！");
+            clearTimeout(this.stopTimer);
+            this.stopTimer = null;
+        }
+        if (this.dmgFilterTimer) {
+            clearTimeout(this.dmgFilterTimer);
+            this.dmgFilterTimer = null;
+        }
         this.dmgFilterActive = false;
 
-        this.stopBGM(); // 物理拔除旧节点
+        this.stopBGM();
+
+        // 【核弹级防御机制】：彻底摧毁旧的 bgmBus，断绝所有幽灵曲线的寄生！
+        console.log("[DEBUG-AUDIO] 执行物理级轨道重建 (Destroy & Rebuild bgmBus)");
+        if (this.bgmBus) {
+            this.bgmBus.disconnect();
+            this.bgmBus = globalAudioCtx.createGain();
+            this.bgmBus.connect(this.bgmFilter);
+            this.bgmBus.gain.value = 1.0; // 绝对的满音量初始态
+        }
 
         const t = globalAudioCtx.currentTime;
 
-        // 2. 暴力重置主音量：清除所有上一局遗留的淡出曲线，强制拉回 1
-        this.masterBus.gain.cancelScheduledValues(t);
-        this.masterBus.gain.setValueAtTime(1, t);
-
-        // 3. 暴力重置滤波器：清除死亡耳鸣或 UI 带来的发闷，强制拉回 20000Hz
+        // 暴力重置滤波器
         this.bgmFilter.frequency.cancelScheduledValues(t);
         this.bgmFilter.frequency.setValueAtTime(this.config.normalFreq, t);
 
         if (this.buffers['bgm']) {
+            console.log("[DEBUG-AUDIO] 启动真实资产播放");
             let source = globalAudioCtx.createBufferSource();
             source.buffer = this.buffers['bgm'];
             source.loop = true;
@@ -235,6 +246,7 @@ const AudioSystem = {
             source.start(0);
             this.currentBgmSource = source;
         } else {
+            console.log("[DEBUG-AUDIO] 启动波形发生器 (Oscillator) 降级播放");
             let osc = globalAudioCtx.createOscillator();
             osc.type = 'sawtooth';
             osc.frequency.setValueAtTime(146.83, t); // D3
@@ -242,12 +254,19 @@ const AudioSystem = {
             osc.start();
             this.currentBgmSource = osc;
         }
-    }
+    },
 
+    transitionBGMState(state) {
+        if (!this.bgmFilter || !globalAudioCtx) return;
+        if (this.dmgFilterActive) return; 
+        console.log(`[DEBUG-AUDIO] 滤波器状态切换: ${state}`);
+        this.bgmFilter.frequency.cancelScheduledValues(globalAudioCtx.currentTime);
+        let targetFreq = (state === 'ui') ? this.config.uiMuffleFreq : this.config.normalFreq;
+        this.bgmFilter.frequency.setTargetAtTime(targetFreq, globalAudioCtx.currentTime, this.config.uiFadeTime);
+    },
 
     triggerDamageFilter() {
         if (!this.bgmFilter || !globalAudioCtx) return;
-        
         this.dmgFilterActive = true;
         if (this.dmgFilterTimer) clearTimeout(this.dmgFilterTimer);
 
@@ -262,25 +281,39 @@ const AudioSystem = {
     },
 
     fadeOutAndStop() {
-        if (!this.masterBus || !globalAudioCtx) return;
-        this.masterBus.gain.cancelScheduledValues(globalAudioCtx.currentTime);
-        this.masterBus.gain.setTargetAtTime(0, globalAudioCtx.currentTime, 0.5); 
+        console.log("[DEBUG-AUDIO] ---> [指令接收] 触发关卡退出，开始淡出 (fadeOutAndStop)");
+        if (!this.bgmBus || !globalAudioCtx) return;
+        
+        const t = globalAudioCtx.currentTime;
+        console.log(`[DEBUG-AUDIO] 写入衰减曲线: gain->0 (t=${t})`);
+        this.bgmBus.gain.cancelScheduledValues(t);
+        this.bgmBus.gain.setTargetAtTime(0, t, 0.5); 
 
-        setTimeout(() => { this.stopBGM(); }, 1000); 
+        if (this.stopTimer) clearTimeout(this.stopTimer);
+        this.stopTimer = setTimeout(() => { 
+            console.log("[DEBUG-AUDIO] 淡出结束，执行异步延迟拔管");
+            this.stopBGM(); 
+        }, 1000); 
     },
 
     stopBGM() {
         if (this.currentBgmSource) {
-            try {
-                this.currentBgmSource.stop();
-                this.currentBgmSource.disconnect();
-                this.currentBgmSource = null;
-            } catch(e) {}
+            console.log("[DEBUG-AUDIO] 拔管：物理销毁当前音源 (stopBGM)");
+            try { 
+                this.currentBgmSource.stop(); 
+                this.currentBgmSource.disconnect(); 
+                this.currentBgmSource = null; 
+            } catch(e) {
+                console.warn("[DEBUG-AUDIO] 拔管时出现静默异常:", e);
+            }
         }
     },
-
-    resumeContext() {
-        if (globalAudioCtx && globalAudioCtx.state === 'suspended') globalAudioCtx.resume();
+    
+    resumeContext() { 
+        if (globalAudioCtx && globalAudioCtx.state === 'suspended') {
+            console.log("[DEBUG-AUDIO] 用户交互触发，强行唤醒音频上下文");
+            globalAudioCtx.resume(); 
+        }
     }
 };
 
@@ -292,11 +325,7 @@ const unlockAudio = () => {
 document.addEventListener('touchstart', unlockAudio, { once: true });
 document.addEventListener('click', unlockAudio, { once: true });
 
-// 引擎启动时自动预加载外部资产
-if (typeof AudioSystem !== 'undefined') {
-    AudioSystem.initGraph();
-    AudioSystem.loadAsset('bgm', 'assets/audio/bgm.mp3');
-}
+
 
 
 // --- [7] 系统订阅 (Systems) ---
@@ -1309,14 +1338,11 @@ function startGame(levelId) {
     isTouchActive = false; shipTouchId = null;
     uiOffsets = { hp: { x: 0, y: 0, vx: 0, vy: 0 }, pt: { x: 0, y: 0, vx: 0, vy: 0 }, skill: { x: 0, y: 0, vx: 0, vy: 0 } };
     
+        // 初始化系统
     EventBus.clear();
-    FXSystem.init(); 
-    LootSystem.init(); 
-    ScoreSystem.init(); 
-    UIRefreshSystem.init(); 
-    WaveAnnouncementSystem.init();
+    FXSystem.init(); LootSystem.init(); ScoreSystem.init(); UIRefreshSystem.init(); WaveAnnouncementSystem.init();
 
-    // 【终极挂载】唤醒音频引擎，播放真实资产或降级 Oscillator
+    // 【新增：唤醒并播放音频】
     if (typeof AudioSystem !== 'undefined') {
         AudioSystem.initGraph();
         AudioSystem.bindEvents();
@@ -1325,6 +1351,7 @@ function startGame(levelId) {
 
     let c = WORKSHOP.cassettes[currentLevel];
     if (c && c.state) { c.state.currentWave = 0; c.state.waveTimer = 0; }
+
 
     updateHUD(); 
     gameState = 'PLAYING'; 
