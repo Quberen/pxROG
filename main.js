@@ -265,7 +265,19 @@ const AudioSystem = {
             this.playFallbackOsc(t);
         }
     },
-    
+     // 【新增架构：绝对音频时钟】
+    getTrackTime() {
+        // 如果我们使用的是 HTML5 Audio 标签直读（之前为你接线的方案）
+        if (this.bgmAudioEl && !this.bgmAudioEl.paused) {
+            return this.bgmAudioEl.currentTime;
+        }
+        // 如果是 Web Audio API 缓冲播放
+        if (globalAudioCtx && globalAudioCtx.state === 'running' && this.currentBgmSource) {
+            if (!this._startTime) this._startTime = globalAudioCtx.currentTime;
+            return globalAudioCtx.currentTime - this._startTime;
+        }
+        return 0;
+    },
     playFallbackOsc(t) {
         this.fallbackOsc = globalAudioCtx.createOscillator();
         this.fallbackOsc.type = 'sawtooth';
@@ -414,6 +426,45 @@ const WaveAnnouncementSystem = {
                 ui.waveToast.style.transform = 'translate(-50%, -70%)';
             }, 3000);
         });
+    }
+};
+// --- [新增架构：微秒级时间轴导演系统] ---
+const DirectorSystem = {
+    currentEvents: [],
+    eventCursor: 0,
+    
+    // 装载磁带的“谱面”
+    loadChoreography(choreoArray) {
+        if (!choreoArray) { this.currentEvents = []; return; }
+        // 按照时间强制排序，防止你在 JSON 里写错顺序
+        this.currentEvents = choreoArray.sort((a, b) => a.time - b.time);
+        this.eventCursor = 0;
+    },
+    
+    // 被主循环的音频时钟驱动
+    update(sec) {
+        if (!this.currentEvents || this.eventCursor >= this.currentEvents.length) return;
+
+        // 核心逻辑：只要当前音频时间大于等于下一个事件的时间，就立即触发！
+        while (this.eventCursor < this.currentEvents.length && sec >= this.currentEvents[this.eventCursor].time) {
+            let evt = this.currentEvents[this.eventCursor];
+            this.executeEvent(evt);
+            this.eventCursor++;
+        }
+    },
+    
+    // 执行具体指令
+    executeEvent(evt) {
+        // console.log(`[DIRECTOR] 卡点触发: ${evt.action} @ ${evt.time}s`);
+        if (evt.action === 'SPAWN') {
+            let spawnX = evt.x !== undefined ? evt.x : (40 + Math.random() * (width - 80));
+            window.spawnEnemyByType(evt.type, spawnX, evt.options || {});
+        } else if (evt.action === 'MESSAGE') {
+            showSystemMessage(evt.text, evt.color || '#00e5ff');
+            triggerShake(2, 5);
+        } else if (evt.action === 'WAVE_TOAST') {
+            EventBus.emit('WAVE_STARTED', { name: evt.text, color: evt.color || '#ff1744' });
+        }
     }
 };
 
@@ -1244,22 +1295,45 @@ function loop(timestamp) {
         hitStopFrames--;
     } else if (isPlaying) {
         frameCount++;
-        if (player.hp > 0 && endingState !== 'playerDead') player.update();
+        if (player && player.hp > 0 && endingState !== 'playerDead') player.update();
 
+        // === [绝对音频时钟与导演系统] ===
+                // === [绝对音频时钟与导演系统] ===
         if (endingState === 'none') {
-            updateDifficultyMetrics();
+            let sec = (typeof AudioSystem !== 'undefined' && AudioSystem.getTrackTime() > 0) 
+                      ? AudioSystem.getTrackTime() 
+                      : (gameTimeSeconds + (frameCount % 60) / 60);
+            
+            gameTimeSeconds = Math.floor(sec);
+
+            if (frameCount % 60 === 0) {
+                levelHpMultiplier = 1 + Math.pow(sec / 100, 1.2) * 0.5;
+                if (shopInflation > 0) shopInflation = Math.max(0, shopInflation - WORKSHOP.data.economy.cooling_rate);
+            }
+
+            // 【修复：重新声明 cassette 变量，供后续逻辑读取】
             let cassette = WORKSHOP.cassettes[currentLevel] || WORKSHOP.cassettes['debug'];
-            let sec = gameTimeSeconds + (frameCount % 60) / 60;
-            if (cassette.script) cassette.script(sec, frameCount);
-            if (frameCount % 20 === 0 && !cassette.disable_director) doDirectorSpawns(sec);
+
+            // 高精度读谱器接管战场
+            if (typeof DirectorSystem !== 'undefined') {
+                DirectorSystem.update(sec);
+            }
+            
+            // 极简视觉律动引擎
+            let currentBPM = (cassette && cassette.bpm) ? cassette.bpm : 120; 
+            let beatInterval = 60 / currentBPM;
+            let beat = (sec % beatInterval) / beatInterval;
+            ctx.globalAlpha = 0.8 + 0.2 * (1 - beat);
         }
 
-        if (player.skillActiveTimer > 0) {
-            player.skillActiveTimer--; if (player.skillActiveTimer <= 0) player.skillCdTimer = 900;
-        } else if (player.skillCdTimer > 0) { player.skillCdTimer--; }
+
+        if (player) {
+            if (player.skillActiveTimer > 0) {
+                player.skillActiveTimer--; if (player.skillActiveTimer <= 0) player.skillCdTimer = 900;
+            } else if (player.skillCdTimer > 0) { player.skillCdTimer--; }
+        }
 
         applyElastic(uiOffsets.hp, ui.hpVal, 'hp'); applyElastic(uiOffsets.skill, document.getElementById('skill-btn-cvs'), 'skill');
-
         if (frameCount % 10 === 0) updateHUD();
 
         bullets.forEach(b => {
@@ -1273,19 +1347,19 @@ function loop(timestamp) {
                     let finalDmg = isCrit ? curDmg * b.critDamage : curDmg;
                     e.takeDamage(finalDmg, true, isCrit, 'bullet');
                     b.hitEnemies.add(e);
-                    if (player.upgrades.aoe > 0) triggerAOE(e.x, e.y);
+                    if (player.upgrades && player.upgrades.aoe > 0) triggerAOE(e.x, e.y);
                     if (b.hitEnemies.size > b.pierceCount) {
                         b.active = false;
-                        if(player.upgrades.aoe === 0) particles.push(new Particle(b.x, b.y, isCrit ? '#ffea00' : '#ffffff', (Math.random()-0.5)*4, (Math.random()-0.5)*4, 6));
+                        if(!player.upgrades || player.upgrades.aoe === 0) particles.push(new Particle(b.x, b.y, isCrit ? '#ffea00' : '#ffffff', (Math.random()-0.5)*4, (Math.random()-0.5)*4, 6));
                     }
                 }
             });
         });
 
-        if (player.wingmen > 0 && player.hp > 0 && endingState !== 'playerDead') {
+        if (player && player.upgrades && player.upgrades.wingman > 0 && player.hp > 0 && endingState !== 'playerDead') {
             let wTime = frameCount * 0.05;
-            for (let i = 0; i < player.wingmen; i++) {
-                let angle = wTime + (i * Math.PI * 2 / player.wingmen);
+            for (let i = 0; i < player.upgrades.wingman; i++) {
+                let angle = wTime + (i * Math.PI * 2 / player.upgrades.wingman);
                 let wx = player.x + Math.cos(angle) * 35; let wy = player.y + Math.sin(angle) * 35;
                 ctx.fillStyle = '#ffea00'; ctx.fillRect(wx - 2, wy - 2, 4, 4);
                 if (frameCount % 45 === 0) { bullets.push(new Bullet(wx, wy, 0, -18, 2, 8, player.damage * 0.4, 0, 1, player.critRate, player.critDamage, '#ffea00')); }
@@ -1294,9 +1368,11 @@ function loop(timestamp) {
     }
 
     if (player && player.hp > 0 && endingState !== 'playerDead') player.draw(ctx);
+    ctx.globalAlpha = 1.0; 
     
     processGroup(aoeEffects, isPlaying); processGroup(items, isPlaying); processGroup(bullets, isPlaying); processGroup(enemyBullets, isPlaying); processGroup(enemies, isPlaying); processGroup(particles, isPlaying); processGroup(floatingTexts, isPlaying);
 
+    // === [生死结算状态机：之前被遗漏覆盖的区域] ===
     if (isPlaying && endingState !== 'none') {
         endingTimer--;
         if (endingState === 'bossDead') {
@@ -1330,6 +1406,7 @@ function loop(timestamp) {
     }
     ctx.restore();
 }
+
 
 function processGroup(group, isPlaying) {
     for (let i = group.length - 1; i >= 0; i--) {
@@ -1514,36 +1591,41 @@ function startGame(levelId) {
     score = 0; frameCount = 0; gameTimeSeconds = 0;
     shakeTimer = 0; hitStopFrames = 0; flashScreenTimer = 0;
     comboCount = 0; comboTimer = 0; endingState = 'none'; endingTimer = 0;
-    currentRefreshCost = BASE_REFRESH_COST; currentShopItems = [];
+    shopInflation = 0.0; wasSkillFull = false;
     directorPoints = 0; difficultyScore = 1.0;
     isBossSpawned = false; taggedItemId = null;
     ui.bossHpCont.style.opacity = 0; ui.bossToast.style.opacity = 0;
     specialKamikazeMisses = 0; levelHpMultiplier = 1.0;
-    directorState = 'BUILDUP'; directorStateTimer = 0;
     ui.sysMessage.style.opacity = 0;
-    shopInflation = 0.0; wasSkillFull = false;
     isTouchActive = false; shipTouchId = null;
     uiOffsets = { hp: { x: 0, y: 0, vx: 0, vy: 0 }, pt: { x: 0, y: 0, vx: 0, vy: 0 }, skill: { x: 0, y: 0, vx: 0, vy: 0 } };
     
-        // 初始化系统
+    // 初始化系统
     EventBus.clear();
     FXSystem.init(); LootSystem.init(); ScoreSystem.init(); UIRefreshSystem.init(); WaveAnnouncementSystem.init();
 
-    // 【新增：唤醒并播放音频】
+    // 唤醒并播放音频
     if (typeof AudioSystem !== 'undefined') {
         AudioSystem.initGraph();
         AudioSystem.bindEvents();
         AudioSystem.playBGM();
     }
 
+    // 【架构修复：统一的装载逻辑，绝对杜绝重复声明】
     let c = WORKSHOP.cassettes[currentLevel];
-    if (c && c.state) { c.state.currentWave = 0; c.state.waveTimer = 0; }
-
+    if (c) { 
+        if (c.state) { c.state.currentWave = 0; c.state.waveTimer = 0; }
+        if (c.choreography) { DirectorSystem.loadChoreography(c.choreography); }
+        else { DirectorSystem.loadChoreography([]); }
+    } else {
+        DirectorSystem.loadChoreography([]);
+    }
 
     updateHUD(); 
     gameState = 'PLAYING'; 
     showScreen(null);
 }
+
 
 function initUI() { 
     initDifficultyUI(); 

@@ -110,7 +110,10 @@ window.WORKSHOP = {
     },
 
     cassettes: {
+        
+        
         'sector1': {
+            
             name: "区域 1: 废星边缘",
             shopItems: ['high_explosive', 'spread', 'skill_duration', 'burst_core'],
             allowed_enemies: ['Locator', 'LocatorSwarm', 'Turret', 'TurretSwarm', 'ArcFlyer', 'Tank'],
@@ -176,7 +179,171 @@ window.WORKSHOP = {
                 }
             }
         },
-        'debug': { name: "代号: 调试", duration: 9999, allowed_enemies: 'ALL', allowed_formations: 'ALL', disable_director: false, script: function(sec, frame) {} }
+        'debug': { name: "代号: 调试", duration: 9999, allowed_enemies: 'ALL', allowed_formations: 'ALL', disable_director: false, script: function(sec, frame) {} },
+                 'neon_crash': {
+            name: "霓虹幻灭 - 碰撞交响曲",
+            bpm: 120, // 假设值，可根据你的原曲微调
+            shopItems: ['damage', 'spread', 'skill_duration', 'speed'], 
+            
+            // 【引擎机制劫持】
+            overrides: {
+                disableCollisionDamage: true,   // 撞击免伤
+                rammingTriggersAOE: true,       // 撞击引发音波清屏 (需你在 takeDamage 中实装)
+                stats: { damage: 0.1 }          // 强行把子弹伤害削弱 90%
+            },
+            
+            choreography: [
+                { time: 1.0, action: 'MESSAGE', text: '>> 神经漫游者协议：已激活', color: '#00e676' },
+                { time: 2.0, action: 'MESSAGE', text: '>> 警告：武器伤害输出受限 (10%)', color: '#ff1744' },
+                { time: 3.0, action: 'MESSAGE', text: '>> 授权：动能撞击屏障 [在线]', color: '#00e5ff' },
+                { time: 4.959, action: "WAVE_TOAST", text: "DROP 01: 律动涌入", color: "#ffea00" },
+                
+                // [10s - 19s] 扫荡式波浪出怪 (引导玩家左右摇摆)
+                { time: 10.817, action: "SPAWN", type: "Locator", x: 50 },
+                { time: 11.183, action: "SPAWN", type: "Locator", x: 100 },
+                { time: 11.623, action: "SPAWN", type: "Locator", x: 150 },
+                { time: 12.005, action: "SPAWN", type: "Locator", x: 200 },
+                { time: 12.382, action: "SPAWN", type: "Locator", x: 250 },
+                { time: 12.84, action: "SPAWN", type: "Locator", x: 300 },
+                { time: 13.227, action: "SPAWN", type: "Locator", x: 350 },
+                { time: 13.62, action: "SPAWN", type: "Locator", x: 300 },
+                { time: 14.014, action: "SPAWN", type: "Locator", x: 250 },
+                { time: 14.421, action: "SPAWN", type: "Locator", x: 200 },
+                { time: 14.849, action: "SPAWN", type: "Locator", x: 150 },
+                { time: 15.254, action: "SPAWN", type: "Locator", x: 100 },
+                { time: 15.615, action: "SPAWN", type: "Locator", x: 50 },
+                { time: 15.989, action: "SPAWN", type: "Locator", x: 100 },
+                { time: 16.404, action: "SPAWN", type: "Locator", x: 150 },
+                { time: 16.802, action: "SPAWN", type: "Locator", x: 200 },
+                { time: 17.215, action: "SPAWN", type: "Locator", x: 250 },
+                { time: 17.589, action: "SPAWN", type: "Locator", x: 300 },
+                { time: 17.962, action: "SPAWN", type: "Locator", x: 350 },
+                { time: 18.31, action: "SPAWN", type: "Locator", x: 200 },
+                { time: 18.683, action: "SPAWN", type: "Locator", x: 100 },
+                { time: 19.098, action: "SPAWN", type: "Locator", x: 300 },
+
+                // [19s - 30s] 叹息之墙 (重音卡点，两侧锁死)
+                { time: 19.706, action: "SPAWN", type: "Tank", x: 50 },
+                { time: 20.399, action: "SPAWN", type: "Tank", x: 350 },
+                { time: 20.799, action: "SPAWN", type: "Tank", x: 50 },
+                { time: 20.837, action: "SPAWN", type: "Tank", x: 350 },
+                { time: 22.249, action: "SPAWN", type: "Tank", x: 200 }, // 中心重压
+                { time: 23.938, action: "SPAWN", type: "Tank", x: 100 },
+                { time: 25.339, action: "SPAWN", type: "Tank", x: 300 },
+                { time: 26.999, action: "SPAWN", type: "Tank", x: 50 },
+                { time: 28.642, action: "SPAWN", type: "Tank", x: 350 },
+                { time: 30.219, action: "SPAWN", type: "Tank", x: 200 },
+                
+                { time: 31.778, action: "SPAWN", type: "Locator", x: 150 },
+                { time: 32.244, action: "SPAWN", type: "Locator", x: 250 },
+                { time: 38.242, action: "SPAWN", type: "Tank", x: 200 },
+                
+                // 桥段前的小碎拍
+                { time: 40.049, action: "SPAWN", type: "Locator" },
+                { time: 40.353, action: "SPAWN", type: "Locator" },
+                { time: 41.478, action: "SPAWN", type: "Locator" },
+                { time: 41.773, action: "SPAWN", type: "Locator" },
+                { time: 43.17, action: "SPAWN", type: "Tank", x: 200 },
+                
+                // [43s - 56s] 真空休整期... 可以在此期间打开终端花掉积攒的 PT
+
+                { time: 56.204, action: "SPAWN", type: "Locator", x: 100 },
+                { time: 56.559, action: "SPAWN", type: "Locator", x: 300 },
+                { time: 56.979, action: "SPAWN", type: "Locator", x: 200 },
+                { time: 57.371, action: "SPAWN", type: "Locator", x: 200 },
+                
+                // [57s - 99s] 终极高潮：群狼战术与碰撞狂欢
+                { time: 57.813, action: "WAVE_TOAST", text: "FINAL DROP: 全员自毁协议", color: "#ff1744" },
+                
+                // 这里我将原本的单个怪升级为 Swarm(集群) 和特化怪，最大化撞击AOE的收益
+                { time: 64.329, action: "SPAWN", type: "LocatorSwarm", x: 200 },
+                { time: 64.475, action: "SPAWN", type: "Locator" },
+                { time: 64.665, action: "SPAWN", type: "Locator" },
+                { time: 64.859, action: "SPAWN", type: "Kamikaze" },
+                { time: 65.052, action: "SPAWN", type: "Kamikaze" },
+                { time: 65.242, action: "SPAWN", type: "Locator" },
+                { time: 65.426, action: "SPAWN", type: "Locator" },
+                { time: 65.615, action: "SPAWN", type: "Locator" },
+                { time: 65.811, action: "SPAWN", type: "Locator" },
+                { time: 66.02, action: "SPAWN", type: "LocatorSwarm", x: 100 },
+                { time: 66.212, action: "SPAWN", type: "LocatorSwarm", x: 300 },
+                { time: 66.404, action: "SPAWN", type: "Locator" },
+                { time: 66.597, action: "SPAWN", type: "Locator" },
+                { time: 66.833, action: "SPAWN", type: "Locator" },
+                { time: 66.967, action: "SPAWN", type: "Locator" },
+                { time: 67.159, action: "SPAWN", type: "Kamikaze" },
+                
+                // 坦克阵列压场
+                { time: 67.41, action: "SPAWN", type: "Tank", x: 50 },
+                { time: 67.588, action: "SPAWN", type: "Locator" },
+                { time: 67.801, action: "SPAWN", type: "Locator" },
+                { time: 67.971, action: "SPAWN", type: "Locator" },
+                { time: 68.2, action: "SPAWN", type: "Tank", x: 350 },
+                { time: 68.392, action: "SPAWN", type: "Locator" },
+                { time: 68.624, action: "SPAWN", type: "Locator" },
+                { time: 68.78, action: "SPAWN", type: "Locator" },
+                { time: 69.021, action: "SPAWN", type: "Tank", x: 200 },
+                { time: 69.201, action: "SPAWN", type: "Locator" },
+                { time: 69.393, action: "SPAWN", type: "Locator" },
+                { time: 69.523, action: "SPAWN", type: "Locator" },
+                { time: 69.584, action: "SPAWN", type: "Locator" },
+                { time: 69.836, action: "SPAWN", type: "Tank", x: 100 },
+                { time: 70.046, action: "SPAWN", type: "Tank", x: 300 },
+                { time: 70.251, action: "SPAWN", type: "Tank", x: 50 },
+                { time: 70.468, action: "SPAWN", type: "Tank", x: 350 },
+                { time: 70.696, action: "SPAWN", type: "Tank", x: 200 },
+                
+                // 尾奏散怪
+                { time: 73.864, action: "SPAWN", type: "Locator" },
+                { time: 74.615, action: "SPAWN", type: "Locator" },
+                { time: 75.349, action: "SPAWN", type: "Locator" },
+                { time: 76.195, action: "SPAWN", type: "Locator" },
+                { time: 76.995, action: "SPAWN", type: "Locator" },
+                { time: 77.808, action: "SPAWN", type: "Locator" },
+                { time: 78.608, action: "SPAWN", type: "Locator" },
+                { time: 79.407, action: "SPAWN", type: "Locator" },
+                { time: 80.185, action: "SPAWN", type: "Locator" },
+                { time: 81.021, action: "SPAWN", type: "Locator" },
+                { time: 81.765, action: "SPAWN", type: "Locator" },
+                { time: 82.609, action: "SPAWN", type: "Locator" },
+                { time: 83.484, action: "SPAWN", type: "Locator" },
+                { time: 84.247, action: "SPAWN", type: "Locator" },
+                { time: 85.015, action: "SPAWN", type: "Locator" },
+                
+                // 最终大混战
+                { time: 85.878, action: "SPAWN", type: "Tank", x: 100 },
+                { time: 86.3, action: "SPAWN", type: "Tank", x: 300 },
+                { time: 87.124, action: "SPAWN", type: "LocatorSwarm", x: 200 },
+                { time: 87.508, action: "SPAWN", type: "Locator" },
+                { time: 89.185, action: "SPAWN", type: "Locator" },
+                { time: 89.955, action: "SPAWN", type: "Locator" },
+                { time: 90.701, action: "SPAWN", type: "Locator" },
+                { time: 91.448, action: "SPAWN", type: "Tank", x: 50 },
+                { time: 91.85, action: "SPAWN", type: "Tank", x: 350 },
+                { time: 92.234, action: "SPAWN", type: "Tank", x: 150 },
+                { time: 92.626, action: "SPAWN", type: "Tank", x: 250 },
+                { time: 93.058, action: "SPAWN", type: "Locator" },
+                { time: 93.453, action: "SPAWN", type: "Locator" },
+                { time: 93.88, action: "SPAWN", type: "Locator" },
+                { time: 94.261, action: "SPAWN", type: "Locator" },
+                { time: 94.705, action: "SPAWN", type: "Tank", x: 200 },
+                { time: 95.531, action: "SPAWN", type: "Locator" },
+                { time: 96.301, action: "SPAWN", type: "Locator" },
+                { time: 97.277, action: "SPAWN", type: "Locator" },
+                { time: 97.677, action: "SPAWN", type: "Locator" },
+                { time: 97.727, action: "SPAWN", type: "Locator" },
+                { time: 98.198, action: "SPAWN", type: "Locator" },
+                { time: 98.601, action: "SPAWN", type: "Locator" },
+                { time: 98.647, action: "SPAWN", type: "Locator" },
+                { time: 98.699, action: "SPAWN", type: "Locator" },
+                { time: 98.751, action: "SPAWN", type: "Locator" },
+                { time: 99.406, action: "SPAWN", type: "Locator" },
+                { time: 99.763, action: "SPAWN", type: "Locator" },
+                
+                { time: 102.0, action: "MESSAGE", text: ">> 信号中断。残存敌军清理中...", color: "#00e676" }
+            ]
+        }
+
     }
 };
 
