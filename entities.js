@@ -257,7 +257,7 @@ class Player {
             if (this.fireCooldown <= 0) { doShoot(); this.fireCooldown = currentFireRate; }
         }
     }
-
+            
 
         draw(ctx) {
         if (this.invincible % 4 < 2) {
