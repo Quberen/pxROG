@@ -889,18 +889,31 @@ class BossScrapDominator extends BaseEnemy {
             this.state = 'HOVER';
             this.timer = 60;
         }
+        if (this.phase === 2 && this.hp < this.maxHp * 0.25) {
+            this.phase = 3;
+            triggerShake(30, 45);
+            createExplosion(this.x, this.y, '#ffea00', 60);
+            flashScreenTimer = 20;
+            flashScreenColor = '255, 23, 68';
+            this.state = 'HOVER';
+            this.timer = 30;
+        }
         
         if (this.state === 'ENTER') {
             this.y += 1;
             if (this.y >= 100) {
                 this.state = 'HOVER';
-                this.timer = 60;
+                this.timer = 45;
             }
         } else if (this.state === 'HOVER') {
             this.x += (this.targetX - this.x) * 0.02;
             this.timer--;
-            
+
             if (this.timer <= 0) {
+                // Phase 3：每次进入HOVER有30%概率额外召唤Kamikaze
+                if (this.phase === 3 && Math.random() < 0.3) {
+                    window.spawnEnemyByType('Kamikaze', Math.random() * (width - 80) + 40, { speedOverride: 2.5 });
+                }
                 let roll = Math.random();
                 if (this.phase === 1) {
                     if (roll < 0.4) {
@@ -910,20 +923,42 @@ class BossScrapDominator extends BaseEnemy {
                         this.state = 'ATTACK_RING';
                         this.timer = 60;
                     }
-                } else {
-                    if (roll < 0.25) {
+                } else if (this.phase === 2) {
+                    if (roll < 0.15) {
                         this.state = 'ATTACK_SPAWN';
-                        this.timer = 45;
-                    } else if (roll < 0.55) {
+                        this.timer = 40;
+                    } else if (roll < 0.40) {
                         this.state = 'ATTACK_RING';
                         this.timer = 60;
-                    } else if (roll < 0.8) {
+                    } else if (roll < 0.70) {
+                        this.state = 'ATTACK_SPIRAL';
+                        this.timer = 90; this.spiralAngle = 0;
+                    } else if (roll < 0.90) {
                         this.state = 'ATTACK_LASER';
-                        this.laserWarnTimer = 60;
+                        this.laserWarnTimer = 40;
                         this.laserFireTimer = 60;
                     } else {
                         this.state = 'ATTACK_TURRETS';
                         this.timer = 30;
+                    }
+                } else {
+                    // Phase 3：暴走模式
+                    if (roll < 0.20) {
+                        this.state = 'ATTACK_SPAWN';
+                        this.timer = 30;
+                    } else if (roll < 0.45) {
+                        this.state = 'ATTACK_RING';
+                        this.timer = 45;
+                    } else if (roll < 0.70) {
+                        this.state = 'ATTACK_SPIRAL';
+                        this.timer = 80; this.spiralAngle = 0;
+                    } else if (roll < 0.85) {
+                        this.state = 'ATTACK_RUSH';
+                        this.timer = 120; this.rushDir = null; this.rushCount = 0;
+                    } else {
+                        this.state = 'ATTACK_LASER';
+                        this.laserWarnTimer = 30;
+                        this.laserFireTimer = 60;
                     }
                 }
             }
@@ -958,19 +993,57 @@ class BossScrapDominator extends BaseEnemy {
         } else if (this.state === 'ATTACK_RING') {
             this.timer--;
             this.x += (this.targetX - this.x) * 0.005;
-            
+
             if (this.timer % 15 === 0) {
-                let bCount = this.phase === 1 ? 12 : 16;
+                let bCount = this.phase === 1 ? 12 : (this.phase === 2 ? 16 : 20);
                 let offset = (this.timer / 15) * 0.2;
                 for (let i = 0; i < bCount; i++) {
                     let angle = (Math.PI * 2 / bCount) * i + offset;
                     enemyBullets.push(new EnemyBullet(this.x, this.y, Math.cos(angle) * 3, Math.sin(angle) * 3, 'normal'));
                 }
             }
-            
+
             if (this.timer <= 0) {
                 this.state = 'HOVER';
-                this.timer = 90;
+                this.timer = this.phase === 1 ? 45 : (this.phase === 3 ? 20 : 60);
+            }
+        } else if (this.state === 'ATTACK_SPIRAL') {
+            this.timer--;
+            this.spiralAngle = (this.spiralAngle || 0) + 0.15;
+            this.x += (this.targetX - this.x) * 0.008;
+
+            if (this.timer % 8 === 0) {
+                let bCount = this.phase === 3 ? 8 : 6;
+                for (let i = 0; i < bCount; i++) {
+                    let angle = (Math.PI * 2 / bCount) * i + this.spiralAngle;
+                    enemyBullets.push(new EnemyBullet(this.x, this.y, Math.cos(angle) * 2.5, Math.sin(angle) * 2.5, 'normal'));
+                }
+            }
+
+            if (this.timer <= 0) {
+                this.state = 'HOVER';
+                this.timer = this.phase === 3 ? 20 : 60;
+            }
+        } else if (this.state === 'ATTACK_RUSH') {
+            if (!this.rushDir) this.rushDir = this.x < width / 2 ? 8 : -8;
+            this.x += this.rushDir;
+
+            if (this.x > width - 50 || this.x < 50) {
+                this.rushDir *= -1;
+                this.rushCount = (this.rushCount || 0) + 1;
+            }
+
+            if (this.timer % 15 === 0) {
+                for (let i = -2; i <= 2; i++) {
+                    enemyBullets.push(new EnemyBullet(this.x + i * 25, this.y + 20, i * 0.5, 4, 'normal'));
+                }
+            }
+
+            this.timer--;
+            if (this.timer <= 0 || (this.rushCount || 0) >= 2) {
+                this.state = 'HOVER';
+                this.timer = 20;
+                this.rushDir = null; this.rushCount = 0;
             }
         } else if (this.state === 'ATTACK_TURRETS') {
             this.timer--;
@@ -978,7 +1051,7 @@ class BossScrapDominator extends BaseEnemy {
                 window.spawnEnemyByType('TurretSwarm', 40, { y: 60, isDumbFire: true, fireInterval: 30 });
                 window.spawnEnemyByType('TurretSwarm', width - 40, { y: 60, isDumbFire: true, fireInterval: 30 });
                 this.state = 'HOVER';
-                this.timer = 90;
+                this.timer = 60;
             }
         } else if (this.state === 'ATTACK_LASER') {
             if (this.laserWarnTimer > 0) {
@@ -992,7 +1065,7 @@ class BossScrapDominator extends BaseEnemy {
                 triggerShake(3, 2);
             } else {
                 this.state = 'HOVER';
-                this.timer = 90;
+                this.timer = this.phase === 3 ? 20 : 60;
                 this.targetX = Math.random() * (width - 100) + 50;
             }
         }
@@ -1004,7 +1077,8 @@ class BossScrapDominator extends BaseEnemy {
         super.draw(ctx);
         if (this.state === 'ATTACK_LASER' && endingState === 'none') {
             if (this.laserWarnTimer > 0) {
-                ctx.fillStyle = `rgba(255, 23, 68, ${0.2 + (60 - this.laserWarnTimer) / 60 * 0.4})`;
+                let maxWarn = this.phase === 3 ? 30 : 40;
+                ctx.fillStyle = `rgba(255, 23, 68, ${0.2 + (maxWarn - this.laserWarnTimer) / maxWarn * 0.5})`;
                 ctx.fillRect(this.x - 30, this.y, 60, height);
             } else if (this.laserFireTimer > 0) {
                 ctx.save();

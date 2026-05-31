@@ -17,7 +17,7 @@ window.WORKSHOP = {
             "Formation_V_Strike":    { weight: 12, unlockTime: 20, role: 'formation' }, "Formation_Turret_Wall": { weight: 25, unlockTime: 50, role: 'formation' }, "Formation_Ambush": { weight: 28, unlockTime: 65, role: 'formation' }
         },
         items: {
-            "damage": { cost: 1.4, max: 20 }, "heal": { cost: 0.5, max: 999 }, "heal_up": { cost: 1.0, max: 10 }, "magnet": { cost: 1.0, max: 5 }, "crit_rate": { cost: 1.2, max: 10 }, "crit_dmg": { cost: 1.5, max: 10 }, "healer_rate": { cost: 1.4, max: 5 }, "aoe": { cost: 2.2, max: 3 }, "wingman": { cost: 3.5, max: 4 }, "slot": { cost: 1.8, max: 5 },
+            "damage": { cost: 1.4, max: 20 }, "heal": { cost: 0.5, max: 999 }, "heal_up": { cost: 1.0, max: 5 }, "magnet": { cost: 1.0, max: 5 }, "crit_rate": { cost: 1.2, max: 10 }, "crit_dmg": { cost: 1.5, max: 10 }, "healer_rate": { cost: 1.4, max: 5 }, "aoe": { cost: 2.2, max: 3 }, "wingman": { cost: 3.5, max: 4 }, "slot": { cost: 1.8, max: 5 },
             "hp_max": { initialCost: 1.8, cost: 1.5, costStep: 0.5, max: 3 }, "speed": { initialCost: 2.0, cost: 1.2, costStep: 0.4, max: 4 },
             "spread":  { initialCost: 4.0, cost: 4.0, costStep: 0.5, max: 4 },
             "homing":  { initialCost: 2.5, cost: 1.6, costStep: 0.4, max: 3 },
@@ -47,7 +47,10 @@ window.WORKSHOP = {
         "p7_synergy":   { name: "波次 7: 协同结阵",    color: "#ff9800" },
         "p8_boss":      { name: "警告: 废铁主宰者",    color: "#ff1744" },
         "p9_flanker":   { name: "波次 9: 双翼夹击",    color: "#ff9800" },
-        "p10_aerial":   { name: "波次 10: 空中打击",   color: "#ab47bc" }
+        "p10_aerial":   { name: "波次 10: 空中打击",   color: "#ab47bc" },
+        "p11_corridor": { name: "波次 11: 移动走廊",   color: "#00e5ff" },
+        "p12_crossfire":{ name: "波次 12: 交叉弹幕",   color: "#ff9800" },
+        "p13_blitz":    { name: "波次 13: 闪电压制",   color: "#ff1744" }
     },
 
     // 【核心黑科技】：波次导演的终极七印 + Boss
@@ -88,11 +91,14 @@ window.WORKSHOP = {
             if (sec === 1 && frame % 60 === 0) {
                 let sW = w / 6;
                 for (let r = 0; r < 4; r++) {
-                    for (let c = 1; c <= 5; c++) {
+                    for (let c = 1; c <= 3; c++) {
                         let rand = Math.random(); let opt = { speedOverride: 1.2, y: -40 - r * 40 };
                         if (rand < 0.25) opt.forceHeal = true; else if (rand < 0.6) opt.forceBattery = true;
                         spawn('Locator', sW * c, opt);
                     }
+                    // 后两列改为 WandererLow，提供更多PT收益
+                    spawn('WandererLow', sW * 4, { speedOverride: 0.8, forceHeal: true, y: -40 - r * 40 });
+                    spawn('WandererLow', sW * 5, { speedOverride: 0.8, y: -40 - r * 40 });
                 }
             }
         },
@@ -154,6 +160,52 @@ window.WORKSHOP = {
             if (sec >= 10 && frame % 100 === 0) {
                 spawn('Locator', Math.random() * (w - 80) + 40, { speedOverride: 1.4 });
             }
+        },
+
+        // 移动走廊：Turret 横排留缺口，考验位置预判
+        p11_corridor: function(sec, frame, diff, w) {
+            if (frame % 240 === 0) {
+                let gap = Math.floor(Math.random() * 5);
+                for (let col = 0; col < 5; col++) {
+                    if (col === gap) continue;
+                    spawn('Turret', w * (col + 0.5) / 5, { isDumbFire: true, fireInterval: 40, speedOverride: 0.6 });
+                }
+            }
+            if (sec >= 12 && frame % 90 === 0) {
+                spawn(diff >= 2 ? 'WandererHigh' : 'WandererLow', Math.random() > 0.5 ? w * 0.05 : w * 0.95, { speedOverride: 1.5 });
+            }
+        },
+
+        // 交叉弹幕：左右炮台射线交叉，子弹地狱入门
+        p12_crossfire: function(sec, frame, diff, w) {
+            if (sec === 1 && frame % 60 === 0) {
+                let n = diff >= 2 ? 3 : 2;
+                for (let i = 0; i < n; i++) {
+                    spawn('Turret', w * 0.08, { speedOverride: 0.4, y: -40 - i * 60, fireInterval: 50 + i * 10 });
+                    spawn('Turret', w * 0.92, { speedOverride: 0.4, y: -40 - i * 60, fireInterval: 55 + i * 10 });
+                }
+                if (diff >= 3) spawn('TurretSwarm', w * 0.5, { speedOverride: 0.3, fireInterval: 35 });
+            }
+            if (sec >= 5 && frame % 70 === 0) {
+                spawn('Locator', Math.random() * (w - 80) + 40, { speedOverride: 1.6 });
+            }
+        },
+
+        // 闪电压制：8秒节奏循环——冲锋→续压→恢复，考验技能时机
+        p13_blitz: function(sec, frame, diff, w) {
+            let cycle = sec % 8;
+            if (cycle === 0 && frame % 60 === 0) {
+                let cnt = diff >= 2 ? 5 : 3;
+                for (let i = 0; i < cnt; i++) {
+                    spawn('Kamikaze', w * (i + 0.5) / cnt, { speedOverride: 2.0 + diff * 0.3 });
+                }
+            }
+            if (cycle >= 2 && cycle <= 5 && frame % 100 === 0) {
+                spawn('WandererHigh', Math.random() * (w - 80) + 40, { speedOverride: 1.4 });
+            }
+            if (diff >= 2 && cycle >= 6 && frame % 120 === 0) {
+                spawn('KamikazeSwarm', Math.random() * (w - 80) + 40, { speedOverride: 1.8 });
+            }
         }
     },
 
@@ -177,18 +229,20 @@ window.WORKSHOP = {
                 { type: "p0_rest",       exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 8  }, { type: "clear_all", value: true }] } },
                 { type: "p5_supply",     duration: 12 },
                 { type: "p0_rest",       duration: 8 },
-                { type: "p2_cover",      duration: 30 },
+                { type: "p2_cover",      duration: 28 },
                 { type: "p0_rest",       exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 12 }, { type: "clear_all", value: true }] } },
                 { type: "p9_flanker",    duration: 22 },
                 { type: "p0_rest",       duration: 10 },
-                { type: "p3_gather",     duration: 28 },
+                { type: "p11_corridor",  duration: 22 },
                 { type: "p0_rest",       exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 12 }, { type: "clear_all", value: true }] } },
-                { type: "p10_aerial",    duration: 20 },
+                { type: "p3_gather",     duration: 25 },
                 { type: "p0_rest",       duration: 10 },
-                { type: "p4_swarm_cover",duration: 30 },
+                { type: "p12_crossfire", duration: 20 },
                 { type: "p0_rest",       exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 12 }, { type: "clear_all", value: true }] } },
-                { type: "p7_synergy",    duration: 22 },
+                { type: "p4_swarm_cover",duration: 28 },
                 { type: "p0_rest",       duration: 10 },
+                { type: "p13_blitz",     duration: 22 },
+                { type: "p0_rest",       exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 10 }, { type: "clear_all", value: true }] } },
                 { type: "p6_press",      duration: 25 },
                 { type: "p0_rest",       exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 10 }, { type: "clear_all", value: true }] } },
                 { type: "p8_boss",       duration: 9999 }

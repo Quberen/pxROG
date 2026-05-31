@@ -1186,9 +1186,10 @@ function buyUpgrade(index) {
             } else { 
                 player.equipment[opt.id].level++; 
             } 
-        } else { 
-            player.upgrades[opt.id] = (player.upgrades[opt.id] || 0) + 1; 
-        } 
+        } else {
+            player.upgrades[opt.id] = (player.upgrades[opt.id] || 0) + 1;
+            if (opt.id === 'slot') player.maxSlots = 3 + player.upgrades.slot;
+        }
         
         // [L1 经济学修复：买完后标记为售罄，绝不免费自动补货]
         currentShopItems[index] = { soldOut: true };
@@ -1707,7 +1708,7 @@ function startGame(levelId) {
     score = 0; frameCount = 0; gameTimeSeconds = 0;
     shakeTimer = 0; hitStopFrames = 0; flashScreenTimer = 0;
     comboCount = 0; comboTimer = 0; endingState = 'none'; endingTimer = 0;
-    shopInflation = 0.0; wasSkillFull = false;
+    shopInflation = 0.0; wasSkillFull = false; currentShopItems = [];
     directorPoints = 0; difficultyScore = 1.0;
     isBossSpawned = false; taggedItemId = null;
     ui.bossHpCont.style.opacity = 0; ui.bossToast.style.opacity = 0;
