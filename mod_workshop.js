@@ -58,9 +58,16 @@ window.WORKSHOP = {
         p0_rest: function(sec, frame, diff, w) { /* 喝茶中 */ },
         p1_intro: function(sec, frame, diff, w) {
             let interval = Math.max(30, 150 - sec * 4);
-            if (frame % interval === 0) spawn('Locator', Math.random() * (w - 60) + 30, { speedOverride: 1.2 });
-            // 10秒后混入 WandererLow，让玩家接触变速敌人
-            if (sec >= 10 && frame % 120 === 0) spawn('WandererLow', Math.random() * (w - 80) + 40, { speedOverride: 1.0 });
+            if (frame % interval === 0) {
+                let type = (diff >= 3 && Math.random() > 0.7) ? 'LocatorSwarm' : 'Locator';
+                spawn(type, Math.random() * (w - 60) + 30, { speedOverride: 1.0 + diff * 0.15 });
+            }
+            if (sec >= 10 && frame % 120 === 0) {
+                spawn(diff >= 2 ? 'WandererHigh' : 'WandererLow', Math.random() * (w - 80) + 40, { speedOverride: 1.0 + diff * 0.2 });
+            }
+            if (diff >= 3 && sec >= 14 && frame % 150 === 0) {
+                spawn('KamikazeSwarm', Math.random() * (w - 80) + 40, { speedOverride: 1.8 });
+            }
         },
         p2_cover: function(sec, frame, diff, w) {
             let tType = diff >= 2 ? 'TurretSwarm' : 'Turret';
@@ -82,23 +89,31 @@ window.WORKSHOP = {
                 let tType = diff >= 2 ? 'TurretSwarm' : 'Turret';
                 spawn(tType, 50, { isDumbFire: true, fireInterval: 25 });
                 spawn(tType, w - 50, { isDumbFire: true, fireInterval: 25 });
+                if (diff >= 3) spawn(tType, w / 2, { isDumbFire: true, fireInterval: 20 });
             }
             if (sec >= 3 && frame % 90 === 0) {
                 spawn('Tank', w / 2 - 60, { speedOverride: 0.8 }); spawn('Tank', w / 2, { speedOverride: 0.8 }); spawn('Tank', w / 2 + 60, { speedOverride: 0.8 });
+            }
+            if (diff >= 2 && sec >= 5 && frame % 120 === 0) {
+                spawn(diff >= 3 ? 'KamikazeSwarm' : 'Kamikaze', Math.random() * (w - 80) + 40, { speedOverride: 2.0 });
             }
         },
         p5_supply: function(sec, frame, diff, w) {
             if (sec === 1 && frame % 60 === 0) {
                 let sW = w / 6;
-                for (let r = 0; r < 4; r++) {
+                let rows = diff >= 2 ? 5 : 4;
+                for (let r = 0; r < rows; r++) {
                     for (let c = 1; c <= 3; c++) {
                         let rand = Math.random(); let opt = { speedOverride: 1.2, y: -40 - r * 40 };
                         if (rand < 0.25) opt.forceHeal = true; else if (rand < 0.6) opt.forceBattery = true;
                         spawn('Locator', sW * c, opt);
                     }
-                    // 后两列改为 WandererLow，提供更多PT收益
                     spawn('WandererLow', sW * 4, { speedOverride: 0.8, forceHeal: true, y: -40 - r * 40 });
                     spawn('WandererLow', sW * 5, { speedOverride: 0.8, y: -40 - r * 40 });
+                }
+                if (diff >= 3) {
+                    spawn('KamikazeSwarm', w * 0.3, { speedOverride: 1.5, y: -160 });
+                    spawn('KamikazeSwarm', w * 0.7, { speedOverride: 1.5, y: -160 });
                 }
             }
         },
@@ -110,13 +125,19 @@ window.WORKSHOP = {
             if (frame % interval === 0) spawn(Math.random() > 0.5 ? eType : 'Locator', Math.random() * (w - 40) + 20, { speedOverride: spd });
         },
         p7_synergy: function(sec, frame, diff, w) {
-            if (sec % 8 === 0 && frame % 60 === 0 && sec < 20) {
+            let groupInterval = diff >= 2 ? 6 : 8;
+            if (sec % groupInterval === 0 && frame % 60 === 0 && sec < 20) {
                 let cx = Math.random() * (w - 100) + 50;
-                spawn('Locator', cx, { speedOverride: 1.2 });
+                let eType = diff >= 2 ? 'LocatorSwarm' : 'Locator';
+                spawn(eType, cx, { speedOverride: 1.2 });
                 let elite = enemies[enemies.length - 1]; if (elite) elite.makeElite();
-                for (let i = 0; i < 6; i++) {
-                    let angle = (Math.PI * 2 / 6) * i;
-                    spawn('Locator', cx + Math.cos(angle) * 55, { speedOverride: 1.2, y: -40 + Math.sin(angle) * 55 });
+                let count = diff >= 3 ? 8 : 6;
+                for (let i = 0; i < count; i++) {
+                    let angle = (Math.PI * 2 / count) * i;
+                    spawn(diff >= 2 ? 'LocatorSwarm' : 'Locator', cx + Math.cos(angle) * 55, { speedOverride: 1.2, y: -40 + Math.sin(angle) * 55 });
+                }
+                if (diff >= 3) {
+                    spawn('KamikazeSwarm', cx + Math.random() * 80 - 40, { speedOverride: 2.0, y: -80 });
                 }
             }
         },
