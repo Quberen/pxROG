@@ -1374,6 +1374,11 @@ function loop(timestamp) {
             if (typeof DirectorSystem !== 'undefined') {
                 DirectorSystem.update(sec);
             }
+
+            // 波次时间线脚本（sector1 等基于 timeline 的关卡）
+            if (cassette && typeof cassette.script === 'function') {
+                cassette.script.call(cassette, sec, frameCount);
+            }
             
             // 极简视觉律动引擎
             let currentBPM = (cassette && cassette.bpm) ? cassette.bpm : 120; 
