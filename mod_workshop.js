@@ -38,6 +38,7 @@ window.WORKSHOP = {
     // 【全新架构：独立的波次名称注册表 (Data-Driven Notifications)】
     waveNames: {
         "p0_rest":      { name: "休整缓冲期",          color: "#00e676" },
+        "p0_starfall":  { name: "开幕: 星空坠落",       color: "#b39ddb" },
         "p1_intro":     { name: "波次 1: 前奏试探",    color: "#00e5ff" },
         "p2_cover":     { name: "波次 2: 炮台掩护",    color: "#00e5ff" },
         "p3_gather":    { name: "波次 3: 压迫铁桶阵",  color: "#00e5ff" },
@@ -56,8 +57,38 @@ window.WORKSHOP = {
     // 【核心黑科技】：波次导演的终极七印 + Boss
     patterns: {
         p0_rest: function(sec, frame, diff, w) { /* 喝茶中 */ },
+
+        // 开场发育波：低血高速流星，大量资源掉落，练习射击感知
+        p0_starfall: function(sec, frame, diff, w) {
+            // 单兵流星：概率型，每帧约8%生成一个高速低血Locator
+            if (Math.random() < 0.08) {
+                let rand = Math.random();
+                spawn('Locator', Math.random() * (w - 60) + 30, {
+                    speedOverride: 3.0 + diff * 0.5 + Math.random() * 1.5,
+                    hpMod: 0.35,
+                    forceHeal: rand < 0.4,
+                    forceBattery: rand >= 0.4 && rand < 0.75
+                });
+            }
+            // 流星簇：每100帧一组3-4个相近位置Locator
+            if (frame % 100 === 0) {
+                let cx = Math.random() * (w - 120) + 60;
+                let cnt = diff >= 2 ? 4 : 3;
+                for (let i = 0; i < cnt; i++) {
+                    let rand2 = Math.random();
+                    spawn('Locator', cx + (Math.random() - 0.5) * 80, {
+                        speedOverride: 1.8 + diff * 0.3 + Math.random() * 0.4,
+                        hpMod: 0.45,
+                        forceHeal: rand2 < 0.35,
+                        forceBattery: rand2 >= 0.35 && rand2 < 0.7,
+                        y: -40 - i * 20
+                    });
+                }
+            }
+        },
+
         p1_intro: function(sec, frame, diff, w) {
-            let interval = Math.max(20, 60 - sec * 2);
+            let interval = Math.max(30, 150 - sec * 4);
             if (frame % interval === 0) {
                 let type = (diff >= 3 && Math.random() > 0.7) ? 'LocatorSwarm' : 'Locator';
                 spawn(type, Math.random() * (w - 60) + 30, { speedOverride: 1.0 + diff * 0.15 });
@@ -100,20 +131,20 @@ window.WORKSHOP = {
         },
         p5_supply: function(sec, frame, diff, w) {
             if (sec === 1 && frame % 60 === 0) {
-                let sW = w / 6;
-                let rows = diff >= 2 ? 5 : 4;
+                let sW = w / 8;
+                let rows = 5, cols = 6;
                 for (let r = 0; r < rows; r++) {
-                    for (let c = 1; c <= 3; c++) {
-                        let rand = Math.random(); let opt = { speedOverride: 1.2, y: -40 - r * 40 };
-                        if (rand < 0.25) opt.forceHeal = true; else if (rand < 0.6) opt.forceBattery = true;
+                    for (let c = 1; c <= cols; c++) {
+                        let rand = Math.random();
+                        let opt = { speedOverride: 0.7, hpMod: 0.45, y: -40 - r * 35 };
+                        if (rand < 0.35) opt.forceHeal = true;
+                        else if (rand < 0.75) opt.forceBattery = true;
                         spawn('Locator', sW * c, opt);
                     }
-                    spawn('WandererLow', sW * 4, { speedOverride: 0.8, forceHeal: true, y: -40 - r * 40 });
-                    spawn('WandererLow', sW * 5, { speedOverride: 0.8, y: -40 - r * 40 });
                 }
-                if (diff >= 3) {
-                    spawn('KamikazeSwarm', w * 0.3, { speedOverride: 1.5, y: -160 });
-                    spawn('KamikazeSwarm', w * 0.7, { speedOverride: 1.5, y: -160 });
+                // 右侧额外WandererLow列，必掉血量
+                for (let r = 0; r < rows; r++) {
+                    spawn('WandererLow', sW * 7, { speedOverride: 0.6, hpMod: 0.5, forceHeal: true, y: -40 - r * 35 });
                 }
             }
         },
@@ -183,47 +214,50 @@ window.WORKSHOP = {
             }
         },
 
-        // 移动走廊：Turret 横排留缺口，考验位置预判
+        // 移动走廊：Turret 横排留缺口，考验位置预判（解法：读缺口列，移到安全位置）
         p11_corridor: function(sec, frame, diff, w) {
             if (frame % 240 === 0) {
                 let gap = Math.floor(Math.random() * 5);
+                let tType = diff >= 2 ? 'TurretSwarm' : 'Turret';
                 for (let col = 0; col < 5; col++) {
                     if (col === gap) continue;
-                    spawn('Turret', w * (col + 0.5) / 5, { isDumbFire: true, fireInterval: 40, speedOverride: 0.6 });
+                    spawn(tType, w * (col + 0.5) / 5, { isDumbFire: true, fireInterval: 40, speedOverride: 0.6 });
                 }
-            }
-            if (sec >= 12 && frame % 90 === 0) {
-                spawn(diff >= 2 ? 'WandererHigh' : 'WandererLow', Math.random() > 0.5 ? w * 0.05 : w * 0.95, { speedOverride: 1.5 });
             }
         },
 
-        // 交叉弹幕：左右炮台射线交叉，子弹地狱入门
+        // 交叉弹幕：先清杂兵，后应对固定弹幕区（解法：清 Locator→读炮台节奏→逐个击破）
         p12_crossfire: function(sec, frame, diff, w) {
-            if (sec === 1 && frame % 60 === 0) {
+            // sec 0-3: 先出 Locator 热身，让玩家清理后专注炮台
+            if (sec < 4 && frame % 70 === 0) {
+                spawn('Locator', Math.random() * (w - 80) + 40, { speedOverride: 1.4 });
+            }
+            // sec 3: 炮台部署（isDumbFire固定向下，形成弹幕区而非追踪弹）
+            if (sec === 3 && frame % 60 === 0) {
                 let n = diff >= 2 ? 3 : 2;
                 for (let i = 0; i < n; i++) {
-                    spawn('Turret', w * 0.08, { speedOverride: 0.4, y: -40 - i * 60, fireInterval: 50 + i * 10 });
-                    spawn('Turret', w * 0.92, { speedOverride: 0.4, y: -40 - i * 60, fireInterval: 55 + i * 10 });
+                    spawn('Turret', w * 0.1, { isDumbFire: true, speedOverride: 0.4, y: -40 - i * 60, fireInterval: 50 + i * 10 });
+                    spawn('Turret', w * 0.9, { isDumbFire: true, speedOverride: 0.4, y: -40 - i * 60, fireInterval: 55 + i * 10 });
                 }
-                if (diff >= 3) spawn('TurretSwarm', w * 0.5, { speedOverride: 0.3, fireInterval: 35 });
-            }
-            if (sec >= 5 && frame % 70 === 0) {
-                spawn('Locator', Math.random() * (w - 80) + 40, { speedOverride: 1.6 });
+                if (diff >= 3) spawn('TurretSwarm', w * 0.5, { isDumbFire: true, speedOverride: 0.3, fireInterval: 35 });
             }
         },
 
-        // 闪电压制：8秒节奏循环——冲锋→续压→恢复，考验技能时机
+        // 闪电压制：8秒节奏循环——冲锋→续压→休息，考验技能时机（解法：技能对准冲锋波）
         p13_blitz: function(sec, frame, diff, w) {
             let cycle = sec % 8;
+            // 冲击波：Normal 5个，Hard/Abyss 7个（技能时机更关键）
             if (cycle === 0 && frame % 60 === 0) {
-                let cnt = diff >= 2 ? 5 : 3;
+                let cnt = diff >= 2 ? 7 : 5;
                 for (let i = 0; i < cnt; i++) {
                     spawn('Kamikaze', w * (i + 0.5) / cnt, { speedOverride: 2.0 + diff * 0.3 });
                 }
             }
-            if (cycle >= 2 && cycle <= 5 && frame % 100 === 0) {
+            // 续压期（cycle 2-5）：间隔拉长到150帧，留呼吸空间
+            if (cycle >= 2 && cycle <= 5 && frame % 150 === 0) {
                 spawn('WandererHigh', Math.random() * (w - 80) + 40, { speedOverride: 1.4 });
             }
+            // cycle 6-7：diff<=1完全休息；diff>=2出现紫色KamikazeSwarm增压
             if (diff >= 2 && cycle >= 6 && frame % 120 === 0) {
                 spawn('KamikazeSwarm', Math.random() * (w - 80) + 40, { speedOverride: 1.8 });
             }
@@ -243,9 +277,11 @@ window.WORKSHOP = {
                               'Kamikaze', 'KamikazeSwarm', 'Turret', 'TurretSwarm', 'ArcFlyer', 'Tank'],
             allowed_formations: ['V_Strike', 'Turret_Wall', 'Ambush'],
             disable_director: true,
-            state: { currentWave: 0, waveTimer: 0, waveFrame: 0 },
+            state: { currentWave: 0, waveTimer: 0 },
 
             timeline: [
+                { type: "p0_starfall",   duration: 18 },
+                { type: "p0_rest",       exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 8  }, { type: "clear_all", value: true }] } },
                 { type: "p1_intro",      duration: 20 },
                 { type: "p0_rest",       exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 8  }, { type: "clear_all", value: true }] } },
                 { type: "p5_supply",     duration: 12 },
@@ -275,8 +311,7 @@ window.WORKSHOP = {
                 let wave = this.timeline[st.currentWave];
                 if (!wave) return;
 
-                if (WORKSHOP.patterns[wave.type]) WORKSHOP.patterns[wave.type](st.waveTimer, st.waveFrame, currentDifficulty, w);
-                st.waveFrame++;
+                if (WORKSHOP.patterns[wave.type]) WORKSHOP.patterns[wave.type](st.waveTimer, frame, currentDifficulty, w);
 
                 if (frame % 60 === 0) {
                     if (st.waveTimer === 0) {
@@ -312,7 +347,6 @@ window.WORKSHOP = {
                         }
                         st.currentWave++;
                         st.waveTimer = 0;
-                        st.waveFrame = 0;
                     }
                 }
             }

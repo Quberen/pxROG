@@ -161,10 +161,11 @@ let isBossSpawned = false;
 
 let shopBtnRect = { x: 0, y: 0 };
 let skillBtnRect = { x: 0, y: 0 };
-let uiOffsets = { hp: { x: 0, y: 0, vx: 0, vy: 0 }, pt: { x: 0, y: 0, vx: 0, vy: 0 }, skill: { x: 0, y: 0, vx: 0, vy: 0 } };
+let uiOffsets = { hp: { x: 0, y: 0, vx: 0, vy: 0 }, pt: { x: 0, y: 0, vx: 0, vy: 0 }, skill: { x: 0, y: 0, vx: 0, vy: 0 }, terminal: { x: 0, y: 0, vx: 0, vy: 0 } };
 
 let shopInflation = 0.0;
 let wasSkillFull = false;
+let wasInRestPhase = false;
 const BASE_REFRESH_COST = 1.0;
 let taggedItemId = null;
 
@@ -583,12 +584,13 @@ window.spawnEnemyByType = function(type, x, options = {}) {
         case 'TankSwarm': e = new Tank(x, startY, false, true); break;
     }
     
-    if (e) { 
-        if (speedOver !== null && e.speed !== undefined) e.speed = speedOver; 
-        if (isDF) e.isDumbFire = true; 
-        if (forceBat) e.isBattery = true; 
-        if (fireInt !== null) { e.fireInterval = fireInt; e.shootTimer = fireInt; } 
-        enemies.push(e); 
+    if (e) {
+        if (speedOver !== null && e.speed !== undefined) e.speed = speedOver;
+        if (isDF) e.isDumbFire = true;
+        if (forceBat) e.isBattery = true;
+        if (fireInt !== null) { e.fireInterval = fireInt; e.shootTimer = fireInt; }
+        if (options.hpMod !== undefined) { e.hp = Math.max(1, Math.round(e.hp * options.hpMod)); e.maxHp = e.hp; }
+        enemies.push(e);
     }
 };
 
@@ -901,13 +903,24 @@ function updateHUD() {
     if (!player) return;
     let isFullNow = (player.skillEnergy >= player.maxSkillEnergy);
     
-    if (isFullNow && !wasSkillFull && player.skillCdTimer <= 0) { 
-        let force = WORKSHOP.data.physics.skill_vibrate_force; 
-        uiOffsets.skill.x = (Math.random() > 0.5 ? 1 : -1) * force; 
-        uiOffsets.skill.y = (Math.random() > 0.5 ? 1 : -1) * force; 
+    if (isFullNow && !wasSkillFull && player.skillCdTimer <= 0) {
+        let force = WORKSHOP.data.physics.skill_vibrate_force;
+        uiOffsets.skill.x = (Math.random() > 0.5 ? 1 : -1) * force;
+        uiOffsets.skill.y = (Math.random() > 0.5 ? 1 : -1) * force;
     }
-    
-    wasSkillFull = isFullNow; 
+    wasSkillFull = isFullNow;
+
+    // 检测进入 p0_rest：终端按钮震荡提示商店可用
+    let cassette = WORKSHOP.cassettes[currentLevel];
+    let isRestNow = !!(cassette && cassette.state && cassette.timeline &&
+                       cassette.timeline[cassette.state.currentWave] &&
+                       cassette.timeline[cassette.state.currentWave].type === 'p0_rest');
+    if (isRestNow && !wasInRestPhase) {
+        let force = WORKSHOP.data.physics.skill_vibrate_force || 8;
+        uiOffsets.terminal.x = (Math.random() > 0.5 ? 1 : -1) * force;
+        uiOffsets.terminal.y = (Math.random() > 0.5 ? 1 : -1) * force;
+    }
+    wasInRestPhase = isRestNow; 
     ui.ptVal.innerText = `${player.pt.toFixed(1)} PT`;
     const hpPercent = Math.max(0, player.hp / player.getStat('maxHp')); 
     let hpColor = '#e60050';
@@ -947,11 +960,9 @@ function updatePixelButtons() {
     let skProg = player.skillActiveTimer > 0 ? (player.skillActiveTimer / 600) : (player.skillCdTimer > 0 ? (1 - player.skillCdTimer / 900) : player.skillEnergy / player.maxSkillEnergy);
     let ratio = player.skillEnergy / player.maxSkillEnergy;
     let skColor;
-    if (player.skillActiveTimer > 0)     skColor = '#00e5ff';
-    else if (player.skillCdTimer > 0)    skColor = '#ff1744';
-    else if (ratio >= 1.0)               skColor = '#ffea00';
-    else if (ratio >= 0.6)               skColor = '#00e676';
-    else                                 skColor = '#00b0ff';
+    if (player.skillActiveTimer > 0)  skColor = '#00e5ff';
+    else if (player.skillCdTimer > 0) skColor = '#ff1744';
+    else                              skColor = '#00b0ff';
     
     drawPixelButton('skill-btn-cvs', sprites.i_skill, skProg, skColor); 
     drawPixelButton('pause-btn-cvs', sprites.i_pause, 0, '#fff');
@@ -1404,7 +1415,9 @@ function loop(timestamp) {
             } else if (player.skillCdTimer > 0) { player.skillCdTimer--; }
         }
 
-        applyElastic(uiOffsets.hp, ui.hpVal, 'hp'); applyElastic(uiOffsets.skill, document.getElementById('skill-btn-cvs'), 'skill');
+        applyElastic(uiOffsets.hp, ui.hpVal, 'hp');
+        applyElastic(uiOffsets.skill, document.getElementById('skill-btn-cvs'), 'skill');
+        applyElastic(uiOffsets.terminal, document.getElementById('terminal-btn-cvs'), 'terminal');
         if (frameCount % 10 === 0) updateHUD();
 
         bullets.forEach(b => {
@@ -1536,6 +1549,14 @@ function switchTerminalTab(tabId) {
     const S = (css) => `style="${css}"`;
 
     if (tabId === 'shop') {
+        // 仅在波次缓冲期（p0_rest）允许访问商店
+        let _cas = WORKSHOP.cassettes[currentLevel];
+        let _inRest = !!(gameState === 'GAMEOVER' || !(_cas && _cas.timeline) ||
+                         (_cas.timeline[_cas.state.currentWave] && _cas.timeline[_cas.state.currentWave].type === 'p0_rest'));
+        if (!_inRest) {
+            view.innerHTML = `<div style="font-family:'Press Start 2P',monospace;font-size:9px;color:#ff9800;text-align:center;padding:40px 20px;line-height:2;">⚠ 战场锁定<br><br>仅限波次缓冲期<br>访问黑市网络</div>`;
+            return;
+        }
         if (typeof currentShopItems === 'undefined' || currentShopItems.length === 0) generateShopItems();
         let html = `<div ${S('font-family:'+PIXEL_FONT+';font-size:10px;color:#ff1744;letter-spacing:2px;margin-bottom:10px;')}>⬡ 黑市网络</div>`;
         html += `<div ${S('display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;')}>
@@ -1708,14 +1729,14 @@ function startGame(levelId) {
     score = 0; frameCount = 0; gameTimeSeconds = 0;
     shakeTimer = 0; hitStopFrames = 0; flashScreenTimer = 0;
     comboCount = 0; comboTimer = 0; endingState = 'none'; endingTimer = 0;
-    shopInflation = 0.0; wasSkillFull = false; currentShopItems = [];
+    shopInflation = 0.0; wasSkillFull = false; wasInRestPhase = false; currentShopItems = [];
     directorPoints = 0; difficultyScore = 1.0;
     isBossSpawned = false; taggedItemId = null;
     ui.bossHpCont.style.opacity = 0; ui.bossToast.style.opacity = 0;
     specialKamikazeMisses = 0; levelHpMultiplier = 1.0;
     ui.sysMessage.style.opacity = 0;
     isTouchActive = false; shipTouchId = null;
-    uiOffsets = { hp: { x: 0, y: 0, vx: 0, vy: 0 }, pt: { x: 0, y: 0, vx: 0, vy: 0 }, skill: { x: 0, y: 0, vx: 0, vy: 0 } };
+    uiOffsets = { hp: { x: 0, y: 0, vx: 0, vy: 0 }, pt: { x: 0, y: 0, vx: 0, vy: 0 }, skill: { x: 0, y: 0, vx: 0, vy: 0 }, terminal: { x: 0, y: 0, vx: 0, vy: 0 } };
     
     // 初始化系统
     EventBus.clear();
@@ -1731,7 +1752,7 @@ function startGame(levelId) {
     // 【架构修复：统一的装载逻辑，绝对杜绝重复声明】
     let c = WORKSHOP.cassettes[currentLevel];
     if (c) { 
-        if (c.state) { c.state.currentWave = 0; c.state.waveTimer = 0; c.state.waveFrame = 0; }
+        if (c.state) { c.state.currentWave = 0; c.state.waveTimer = 0; }
         if (c.choreography) { DirectorSystem.loadChoreography(c.choreography); }
         else { DirectorSystem.loadChoreography([]); }
     } else {
