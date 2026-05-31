@@ -61,7 +61,8 @@ class Player {
         });
 
         // 【关键修复】：补全旧版 upgrade 字典，防止 Item 拾取时读取 heal_up 和 magnet 报错
-        this.upgrades = { aoe: 0, wingman: 0, heal_up: 0, magnet: 0 }; 
+        this.upgrades = { aoe: 0, wingman: 0, heal_up: 0, magnet: 0,
+                          rapid_charge: 0, phase_dodge: 0, afterburn: 0, shield_gen: 0, skill_cd: 0 }; 
 
         this.hp = this.getStat('maxHp');
         this.pt = 0;
@@ -275,7 +276,17 @@ class Player {
 
     takeDamage(amount, isPercent = false, sourceStr = 'normal') {
         if (this.invincible > 0 || endingState !== 'none') return;
-        
+
+        // phase_dodge：受伤时有概率完全免疫（每级+15%）
+        if (this.upgrades.phase_dodge > 0) {
+            let dodgeChance = this.upgrades.phase_dodge * 0.15;
+            if (Math.random() < dodgeChance) {
+                if (typeof pushFloatingText !== 'undefined') pushFloatingText(this.x, this.y - 25, 'DODGE', '#00e5ff', true, false, '');
+                this.invincible = 12;
+                return;
+            }
+        }
+
         let currentMaxHp = this.getStat('maxHp');
         let actualAmount = isPercent ? Math.max(40, Math.floor(currentMaxHp * amount)) : amount;
         if (!isPercent && currentDifficulty === 3) actualAmount *= 1.25;
@@ -1076,7 +1087,8 @@ class Item {
                 let healAmt = this.value.isElite ? player.maxHp * 0.60 : player.maxHp * (0.20 + (player.upgrades.heal_up * 0.05));
                 player.heal(healAmt, this.value.isElite);
             } else if (this.type === 'energy') {
-                player.skillEnergy = Math.min(player.maxSkillEnergy, player.skillEnergy + this.value);
+                let extraEnergy = (player.upgrades.rapid_charge || 0) * 5;
+                player.skillEnergy = Math.min(player.maxSkillEnergy, player.skillEnergy + this.value + extraEnergy);
                 pushFloatingText(skillBtnRect.x, skillBtnRect.y - 30, `+ENG`, '#00e5ff', false, false, "", 8);
                 updateHUD();
             }
