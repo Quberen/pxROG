@@ -910,45 +910,43 @@ function updateHUD() {
     }
     wasSkillFull = isFullNow;
 
-    // 检测进入 p0_rest：终端按钮震荡提示商店可用
-    let cassette = WORKSHOP.cassettes[currentLevel];
-    let isRestNow = !!(cassette && cassette.state && cassette.timeline &&
-                       cassette.timeline[cassette.state.currentWave] &&
-                       cassette.timeline[cassette.state.currentWave].type === 'p0_rest');
-    if (isRestNow && !wasInRestPhase) {
-        let force = WORKSHOP.data.physics.skill_vibrate_force || 8;
-        uiOffsets.terminal.x = (Math.random() > 0.5 ? 1 : -1) * force;
-        uiOffsets.terminal.y = (Math.random() > 0.5 ? 1 : -1) * force;
-    }
-    wasInRestPhase = isRestNow; 
     ui.ptVal.innerText = `${player.pt.toFixed(1)} PT`;
-    const hpPercent = Math.max(0, player.hp / player.getStat('maxHp')); 
+    const hpPercent = Math.max(0, player.hp / player.getStat('maxHp'));
     let hpColor = '#e60050';
-    if (hpPercent > 0.7) hpColor = '#00e676'; 
-    else if (hpPercent > 0.4) hpColor = '#ffea00'; 
+    if (hpPercent > 0.7) hpColor = '#00e676';
+    else if (hpPercent > 0.4) hpColor = '#ffea00';
     else if (hpPercent > 0.2) hpColor = '#ff9800';
-    
-    ui.hpVal.style.color = hpColor; 
+
+    ui.hpVal.style.color = hpColor;
     ui.hpVal.innerText = `${Math.floor(player.hp)}%`;
 
-    let indColor = '#00e676'; 
+    let indColor = '#00e676';
     let cassette = WORKSHOP.cassettes[currentLevel];
     if (cassette && cassette.timeline) {
-        let st = cassette.state; 
+        let st = cassette.state;
         let wave = cassette.timeline[st.currentWave];
-        if (wave) { 
-            if (wave.type === 'p0_rest') { 
-                let remain = wave.duration - st.waveTimer; 
-                indColor = (remain <= 4) ? '#ffea00' : '#00e676'; 
-            } else { 
-                indColor = '#ff1744'; 
-            } 
-        } else { 
-            indColor = isBossSpawned ? '#ff1744' : '#00e676'; 
+        if (wave) {
+            if (wave.type === 'p0_rest') {
+                let remain = wave.duration - st.waveTimer;
+                indColor = (remain <= 4) ? '#ffea00' : '#00e676';
+            } else {
+                indColor = '#ff1744';
+            }
+        } else {
+            indColor = isBossSpawned ? '#ff1744' : '#00e676';
         }
+        // 检测进入 p0_rest：终端按钮震荡提示商店可用
+        let isRestNow = !!(wave && wave.type === 'p0_rest');
+        if (isRestNow && !wasInRestPhase) {
+            let force = WORKSHOP.data.physics.skill_vibrate_force || 8;
+            uiOffsets.terminal.x = (Math.random() > 0.5 ? 1 : -1) * force;
+            uiOffsets.terminal.y = (Math.random() > 0.5 ? 1 : -1) * force;
+        }
+        wasInRestPhase = isRestNow;
     } else {
         let isProtected = gameTimeSeconds < DIFF_CONFIG[currentDifficulty].protectionTime;
         if (isProtected) indColor = '#00e5ff'; else indColor = '#ffea00';
+        wasInRestPhase = false;
     }
     
     drawIndicator(indColor); 
