@@ -1731,7 +1731,7 @@ function startGame(levelId) {
     // 【架构修复：统一的装载逻辑，绝对杜绝重复声明】
     let c = WORKSHOP.cassettes[currentLevel];
     if (c) { 
-        if (c.state) { c.state.currentWave = 0; c.state.waveTimer = 0; }
+        if (c.state) { c.state.currentWave = 0; c.state.waveTimer = 0; c.state.waveFrame = 0; }
         if (c.choreography) { DirectorSystem.loadChoreography(c.choreography); }
         else { DirectorSystem.loadChoreography([]); }
     } else {

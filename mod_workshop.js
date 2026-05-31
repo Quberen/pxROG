@@ -57,15 +57,15 @@ window.WORKSHOP = {
     patterns: {
         p0_rest: function(sec, frame, diff, w) { /* 喝茶中 */ },
         p1_intro: function(sec, frame, diff, w) {
-            let interval = Math.max(30, 150 - sec * 4);
+            let interval = Math.max(20, 60 - sec * 2);
             if (frame % interval === 0) {
                 let type = (diff >= 3 && Math.random() > 0.7) ? 'LocatorSwarm' : 'Locator';
                 spawn(type, Math.random() * (w - 60) + 30, { speedOverride: 1.0 + diff * 0.15 });
             }
-            if (sec >= 10 && frame % 120 === 0) {
+            if (sec >= 10 && frame % 90 === 0) {
                 spawn(diff >= 2 ? 'WandererHigh' : 'WandererLow', Math.random() * (w - 80) + 40, { speedOverride: 1.0 + diff * 0.2 });
             }
-            if (diff >= 3 && sec >= 14 && frame % 150 === 0) {
+            if (diff >= 3 && sec >= 14 && frame % 120 === 0) {
                 spawn('KamikazeSwarm', Math.random() * (w - 80) + 40, { speedOverride: 1.8 });
             }
         },
@@ -243,7 +243,7 @@ window.WORKSHOP = {
                               'Kamikaze', 'KamikazeSwarm', 'Turret', 'TurretSwarm', 'ArcFlyer', 'Tank'],
             allowed_formations: ['V_Strike', 'Turret_Wall', 'Ambush'],
             disable_director: true,
-            state: { currentWave: 0, waveTimer: 0 },
+            state: { currentWave: 0, waveTimer: 0, waveFrame: 0 },
 
             timeline: [
                 { type: "p1_intro",      duration: 20 },
@@ -275,7 +275,8 @@ window.WORKSHOP = {
                 let wave = this.timeline[st.currentWave];
                 if (!wave) return;
 
-                if (WORKSHOP.patterns[wave.type]) WORKSHOP.patterns[wave.type](st.waveTimer, frame, currentDifficulty, w);
+                if (WORKSHOP.patterns[wave.type]) WORKSHOP.patterns[wave.type](st.waveTimer, st.waveFrame, currentDifficulty, w);
+                st.waveFrame++;
 
                 if (frame % 60 === 0) {
                     if (st.waveTimer === 0) {
@@ -311,6 +312,7 @@ window.WORKSHOP = {
                         }
                         st.currentWave++;
                         st.waveTimer = 0;
+                        st.waveFrame = 0;
                     }
                 }
             }
