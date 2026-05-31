@@ -135,6 +135,17 @@ const BLUE_TECH_TIERS = {
     damage:   { values: [2, 3, 5, 8], costs: [0.4, 1.3, 3.0, 5.0] },
     maxHp:    { values: [20, 50, 80, 120], costs: [1.2, 2.2, 3.8, 6.5] }
 };
+// 物品图标映射（Unicode 像素风）
+const ITEM_ICONS = {
+    'high_explosive': '⚡', 'spread': '≋',  'burst_core': '≫',  'hp_max':    '♥',
+    'homing':         '⊙',  'pulse':  '〰', 'laser':      '━',  'pierce':    '▸',
+    'speed':          '▶',  'debt_protocol': '⚠',
+    'rapid_charge':   '◉',  'phase_dodge': '◈', 'afterburn': '✦', 'skill_cd': '⟳',
+    'crit_rate': '★',  'crit_dmg': '◆', 'aoe': '◎', 'wingman': '✈',
+    'heal': '✚',  'heal_up': '✚', 'magnet': '⊕', 'shield_gen': '◈', 'slot': '▣',
+    'healer_rate': '✚', 'skill_duration': '◉'
+};
+function getItemIcon(id) { return ITEM_ICONS[id] || (id ? '◆' : '◆'); }
 let bullets = [], enemyBullets = [], enemies = [], particles = [], items = [], floatingTexts = [], stars = [], aoeEffects = [];
 let score = 0, frameCount = 0, gameTimeSeconds = 0;
 let shakeTimer = 0, shakeIntensity = 0;
@@ -1113,16 +1124,36 @@ function renderShopCards() {
     ui.shopPts.innerText = player.pt.toFixed(1);
     ui.shopCards.innerHTML = '';
     currentShopItems.forEach((opt, i) => {
-        if (opt.soldOut) { ui.shopCards.innerHTML += `<div class="upgrade-card disabled" style="opacity:0.3;"><div class="card-title">— 已售出 —</div></div>`; return; }
+        if (opt.soldOut) {
+            ui.shopCards.innerHTML += `<div class="upgrade-card disabled" style="opacity:0.25;justify-content:center;">
+                <div style="font-family:'Press Start 2P',monospace;font-size:8px;color:#444;">— 已售出 —</div></div>`;
+            return;
+        }
         let itemCost = getShopCost(opt);
-        let rarityColor = (typeof RARITY !== 'undefined' && RARITY[opt.rarity]) ? RARITY[opt.rarity].color : '#fff';
+        let canBuy = player.pt >= itemCost;
+        let rDef = (typeof RARITY !== 'undefined' && RARITY[opt.rarity]) ? RARITY[opt.rarity] : { color: '#fff', name: '' };
+        let icon = getItemIcon(opt.id);
+        let lvText = opt.type === 'equip'
+            ? `Lv.${(player.equipment[opt.id] && player.equipment[opt.id].owned) ? player.equipment[opt.id].level : 0}/${opt.max || '?'}`
+            : (opt.max && opt.max < 999 ? `${(player.upgrades[opt.id]||0)}/${opt.max}` : '');
         const el = document.createElement('div');
-        el.className = `upgrade-card ${player.pt >= itemCost ? '' : 'disabled'}`;
-        el.innerHTML = `<div class="card-info">
-            <div class="card-title" style="color:${rarityColor}">${opt.name}</div>
-            ${opt.desc ? `<div style="font-size:7px;color:#aaa;margin-top:4px;line-height:1.4">${opt.desc}</div>` : ''}
-        </div><div class="card-cost">${itemCost.toFixed(1)}</div>`;
-        el.onclick = () => { if (player.pt >= itemCost) buyUpgrade(i); };
+        el.className = `upgrade-card ${canBuy ? '' : 'disabled'}`;
+        el.style.borderColor = rDef.color + '55';
+        el.innerHTML = `
+            <div class="card-item-icon">${icon}</div>
+            <div class="card-info">
+                <div class="card-title">
+                    <span style="color:${rDef.color}">${opt.name}</span>
+                    <span class="card-rarity" style="color:${rDef.color};border-color:${rDef.color};">${rDef.name || opt.rarity || ''}</span>
+                </div>
+                ${opt.desc ? `<div class="card-desc">${opt.desc}</div>` : ''}
+            </div>
+            <div class="card-cost-box">
+                <div class="card-cost" style="color:${canBuy ? '#ffea00' : '#555'}">${itemCost.toFixed(1)}</div>
+                <div class="card-cost-label">PT</div>
+                <div class="card-max">${lvText}</div>
+            </div>`;
+        el.onclick = () => { if (canBuy) buyUpgrade(i); };
         ui.shopCards.appendChild(el);
     });
 }
@@ -1500,29 +1531,35 @@ function switchTerminalTab(tabId) {
 
     if (tabId === 'shop') {
         if (typeof currentShopItems === 'undefined' || currentShopItems.length === 0) generateShopItems();
-        let html = `<div ${S('font-family:'+PIXEL_FONT+';font-size:10px;color:#ff1744;letter-spacing:2px;margin-bottom:12px;')}>■ 黑市网络</div>`;
-        html += `<div ${S('font-size:9px;color:#aaa;margin-bottom:16px;')}>可用算力: <span ${S('color:#ffea00;font-family:'+PIXEL_FONT)+''}>${player.pt.toFixed(1)} PT</span></div>`;
-        html += `<div ${S('display:flex;gap:10px;margin-bottom:16px;')}>`;
+        let html = `<div ${S('font-family:'+PIXEL_FONT+';font-size:10px;color:#ff1744;letter-spacing:2px;margin-bottom:10px;')}>⬡ 黑市网络</div>`;
+        html += `<div ${S('display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;')}>
+            <span ${S('font-size:9px;color:#aaa;font-family:'+PIXEL_FONT)}>算力</span>
+            <span ${S('color:#ffea00;font-family:'+PIXEL_FONT+';font-size:12px;')}>${player.pt.toFixed(1)} PT</span>
+        </div>`;
+        html += `<div ${S('display:flex;gap:8px;margin-bottom:14px;')}>`;
         currentShopItems.forEach((opt, index) => {
             if (opt.soldOut) {
-                html += `<div ${S('flex:1;border:2px solid #222;padding:14px 10px;background:rgba(0,0,0,0.4);text-align:center;')}>
-                    <div ${S('color:#444;font-family:'+PIXEL_FONT+';font-size:8px;')}>- 已售出 -</div></div>`;
+                html += `<div ${S('flex:1;border:2px solid #222;padding:12px 8px;background:rgba(0,0,0,0.4);text-align:center;border-radius:4px;')}>
+                    <div ${S('font-size:16px;margin-bottom:6px;color:#333;')}>✕</div>
+                    <div ${S('color:#444;font-family:'+PIXEL_FONT+';font-size:7px;')}>已售出</div></div>`;
                 return;
             }
             let cost = getShopCost(opt);
             let canBuy = player.pt >= cost;
-            let rarityColor = (typeof RARITY !== 'undefined' && RARITY[opt.rarity]) ? RARITY[opt.rarity].color : '#fff';
-            let borderCol = canBuy ? '#ff1744' : '#444';
-            let bgCol = canBuy ? 'rgba(255,23,68,0.08)' : 'rgba(0,0,0,0.3)';
-            html += `<div onclick="${canBuy ? `terminalBuyRed(${index})` : ''}" ${S(`flex:1;border:2px solid ${borderCol};padding:14px 10px;background:${bgCol};cursor:${canBuy?'pointer':'not-allowed'};text-align:center;transition:background 0.1s;`)}>
-                <div ${S('font-family:'+PIXEL_FONT+';font-size:9px;color:'+rarityColor+';margin-bottom:6px;')}>${opt.name}</div>
-                ${opt.desc ? `<div ${S('font-size:7px;color:#888;line-height:1.5;margin-bottom:8px;')}>${opt.desc}</div>` : ''}
-                <div ${S('font-family:'+PIXEL_FONT+';font-size:11px;color:'+(canBuy?'#ffea00':'#555')+';margin-top:6px;')}>${cost.toFixed(1)} PT</div>
-                ${canBuy ? `<div ${S('font-size:7px;color:#ff6b6b;margin-top:4px;')}>[点击购买]</div>` : ''}
+            let rDef = (typeof RARITY !== 'undefined' && RARITY[opt.rarity]) ? RARITY[opt.rarity] : { color: '#fff', name: '' };
+            let icon = getItemIcon(opt.id);
+            let borderCol = canBuy ? '#ff1744' : '#333';
+            let bgCol = canBuy ? 'rgba(255,23,68,0.07)' : 'rgba(0,0,0,0.25)';
+            html += `<div onclick="${canBuy ? `terminalBuyRed(${index})` : ''}" ${S(`flex:1;border:2px solid ${borderCol};border-radius:4px;padding:12px 8px;background:${bgCol};cursor:${canBuy?'pointer':'not-allowed'};text-align:center;`)}>
+                <div ${S('font-size:22px;margin-bottom:6px;')}>${icon}</div>
+                <div ${S('font-family:'+PIXEL_FONT+';font-size:8px;color:'+rDef.color+';margin-bottom:4px;line-height:1.4;')}>${opt.name}</div>
+                <div ${S('font-size:7px;color:#555;border:1px solid '+rDef.color+'44;border-radius:3px;padding:1px 4px;display:inline-block;margin-bottom:6px;color:'+rDef.color+';')}>${rDef.name || ''}</div>
+                ${opt.desc ? `<div ${S('font-size:7px;color:#666;line-height:1.5;margin-bottom:8px;')}>${opt.desc}</div>` : ''}
+                <div ${S('font-family:'+PIXEL_FONT+';font-size:11px;color:'+(canBuy?'#ffea00':'#444')+';margin-top:4px;border-top:1px solid #222;padding-top:8px;')}>${cost.toFixed(1)} PT</div>
             </div>`;
         });
         html += `</div>`;
-        html += `<button onclick="terminalRefreshShop()" ${S('width:100%;padding:12px;background:rgba(17,17,17,0.9);color:#ff1744;border:2px solid #ff1744;cursor:pointer;font-family:'+PIXEL_FONT+';font-size:8px;letter-spacing:1px;')}>[ 强制刷新 (-1.0 PT) ]</button>`;
+        html += `<button onclick="terminalRefreshShop()" ${S('width:100%;padding:10px;background:rgba(10,10,10,0.9);color:#ff1744;border:2px solid #ff1744;border-radius:4px;cursor:pointer;font-family:'+PIXEL_FONT+';font-size:8px;letter-spacing:1px;')}>⟳ 强制刷新 (-1.0 PT)</button>`;
         view.innerHTML = html;
 
     } else if (tabId === 'tech') {
