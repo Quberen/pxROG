@@ -18,7 +18,14 @@ window.WORKSHOP = {
         },
         items: {
             "damage": { cost: 1.4, max: 20 }, "heal": { cost: 0.5, max: 999 }, "heal_up": { cost: 1.0, max: 10 }, "magnet": { cost: 1.0, max: 5 }, "crit_rate": { cost: 1.2, max: 10 }, "crit_dmg": { cost: 1.5, max: 10 }, "healer_rate": { cost: 1.4, max: 5 }, "aoe": { cost: 2.2, max: 3 }, "wingman": { cost: 3.5, max: 4 }, "slot": { cost: 1.8, max: 5 },
-            "hp_max": { initialCost: 1.8, cost: 1.5, costStep: 0.5, max: 3 }, "speed": { initialCost: 2.0, cost: 1.2, costStep: 0.4, max: 4 }, "spread": { initialCost: 3.0, cost: 1.5, costStep: 0.5, max: 4 }, "homing": { initialCost: 3.5, cost: 2.0, costStep: 0.5, max: 3 }, "pulse": { initialCost: 2.5, cost: 1.5, costStep: 0.5, max: 3 }, "laser": { initialCost: 6.0, cost: 3.0, costStep: 1.0, max: 4 }, "pierce": { initialCost: 2.5, cost: 1.5, costStep: 1.0, max: 3 }
+            "hp_max": { initialCost: 1.8, cost: 1.5, costStep: 0.5, max: 3 }, "speed": { initialCost: 2.0, cost: 1.2, costStep: 0.4, max: 4 },
+            "spread":  { initialCost: 4.0, cost: 4.0, costStep: 0.5, max: 4 },
+            "homing":  { initialCost: 2.5, cost: 1.6, costStep: 0.4, max: 3 },
+            "pulse":   { initialCost: 2.5, cost: 1.5, costStep: 0.5, max: 3 },
+            "laser":   { initialCost: 5.0, cost: 2.5, costStep: 1.0, max: 4 },
+            "pierce":  { initialCost: 2.5, cost: 1.2, costStep: 0.8, max: 3 },
+            "rapid_charge": { cost: 1.5, max: 3 }, "phase_dodge": { cost: 2.5, max: 3 },
+            "afterburn": { cost: 3.0, max: 2 }, "shield_gen": { cost: 1.8, max: 4 }, "skill_cd": { cost: 2.0, max: 3 }
         }
     },
 
@@ -30,16 +37,17 @@ window.WORKSHOP = {
 
     // 【全新架构：独立的波次名称注册表 (Data-Driven Notifications)】
     waveNames: {
-        "p0_rest": { name: "休整缓冲期", color: "#00e676" },
-        "p1_intro": { name: "波次 1: 前奏试探", color: "#00e5ff" },
-        "p2_cover": { name: "波次 2: 炮台掩护", color: "#00e5ff" },
-        "p3_gather": { name: "波次 3: 压迫铁桶阵", color: "#00e5ff" },
-        "p4_swarm_cover": { name: "波次 4: 弹幕走廊", color: "#00e5ff" },
-        "p5_supply": { name: "波次 5: 补给方阵", color: "#00e676" },
-        "p6_press": { name: "波次 6: 绝境暴兵", color: "#ff9800" },
-        "p7_synergy": { name: "波次 7: 协同结阵", color: "#ff9800" },
-        "p8_boss": { name: "警告: 废铁主宰者", color: "#ff1744" }
-        // 未来如果有 p9_new_wave，只要在这里加一行即可！
+        "p0_rest":      { name: "休整缓冲期",          color: "#00e676" },
+        "p1_intro":     { name: "波次 1: 前奏试探",    color: "#00e5ff" },
+        "p2_cover":     { name: "波次 2: 炮台掩护",    color: "#00e5ff" },
+        "p3_gather":    { name: "波次 3: 压迫铁桶阵",  color: "#00e5ff" },
+        "p4_swarm_cover": { name: "波次 4: 弹幕走廊",  color: "#00e5ff" },
+        "p5_supply":    { name: "补给方阵 — 掠夺资源", color: "#00e676" },
+        "p6_press":     { name: "波次 6: 绝境暴兵",    color: "#ff9800" },
+        "p7_synergy":   { name: "波次 7: 协同结阵",    color: "#ff9800" },
+        "p8_boss":      { name: "警告: 废铁主宰者",    color: "#ff1744" },
+        "p9_flanker":   { name: "波次 9: 双翼夹击",    color: "#ff9800" },
+        "p10_aerial":   { name: "波次 10: 空中打击",   color: "#ab47bc" }
     },
 
     // 【核心黑科技】：波次导演的终极七印 + Boss
@@ -48,11 +56,15 @@ window.WORKSHOP = {
         p1_intro: function(sec, frame, diff, w) {
             let interval = Math.max(30, 150 - sec * 4);
             if (frame % interval === 0) spawn('Locator', Math.random() * (w - 60) + 30, { speedOverride: 1.2 });
+            // 10秒后混入 WandererLow，让玩家接触变速敌人
+            if (sec >= 10 && frame % 120 === 0) spawn('WandererLow', Math.random() * (w - 80) + 40, { speedOverride: 1.0 });
         },
         p2_cover: function(sec, frame, diff, w) {
             let tType = diff >= 2 ? 'TurretSwarm' : 'Turret';
             if (sec === 1 && frame % 60 === 0) { spawn(tType, w * 0.2); spawn(tType, w * 0.8); if (diff === 3) spawn(tType, w * 0.5); }
             if (frame % 80 === 0) spawn(diff >= 2 ? 'LocatorSwarm' : 'Locator', Math.random() * (w - 60) + 30, { speedOverride: 1.5 });
+            // 15秒后加入 ArcFlyer 协同炮台压制
+            if (sec >= 15 && frame % 200 === 0) spawn('ArcFlyer', Math.random() * (w - 120) + 60, { speedOverride: 1.1 });
         },
         p3_gather: function(sec, frame, diff, w) {
             let colW = w / 7; let c = [colW * 0.5, colW * 1.5, colW * 2.5, colW * 3.5, colW * 4.5, colW * 5.5, colW * 6.5];
@@ -85,8 +97,11 @@ window.WORKSHOP = {
             }
         },
         p6_press: function(sec, frame, diff, w) {
-            if (diff < 3) return;
-            if (frame % 20 === 0) spawn(Math.random() > 0.5 ? 'LocatorSwarm' : 'Locator', Math.random() * (w - 40) + 20, { speedOverride: 2.0 });
+            // 全难度生效，按难度档次调整强度
+            let interval = diff >= 3 ? 20 : (diff >= 2 ? 35 : 55);
+            let eType = diff >= 2 ? 'LocatorSwarm' : 'Locator';
+            let spd = diff >= 3 ? 2.0 : (diff >= 2 ? 1.6 : 1.3);
+            if (frame % interval === 0) spawn(Math.random() > 0.5 ? eType : 'Locator', Math.random() * (w - 40) + 20, { speedOverride: spd });
         },
         p7_synergy: function(sec, frame, diff, w) {
             if (sec % 8 === 0 && frame % 60 === 0 && sec < 20) {
@@ -106,6 +121,39 @@ window.WORKSHOP = {
                 enemies = enemies.filter(e => e.isSpecial || e.isBoss);
                 if (typeof EventBus !== 'undefined') EventBus.emit('UI_UPDATE_REQUESTED', {});
             }
+        },
+
+        // 双翼夹击：Kamikaze 从左右两侧同时突袭，配合 Wanderer 推进
+        p9_flanker: function(sec, frame, diff, w) {
+            if (frame % 90 === 0) {
+                spawn('Kamikaze', w * 0.08, { speedOverride: 1.8 });
+                spawn('Kamikaze', w * 0.92, { speedOverride: 1.8 });
+            }
+            if (sec >= 5 && frame % 110 === 0) {
+                let wType = diff >= 2 ? 'WandererSwarm' : 'WandererHigh';
+                spawn(wType, w * 0.15, { speedOverride: 1.2 });
+                spawn(wType, w * 0.85, { speedOverride: 1.2 });
+            }
+            if (sec >= 12 && frame % 150 === 0) {
+                spawn(diff >= 3 ? 'KamikazeSwarm' : 'Kamikaze', w * 0.5, { speedOverride: 2.0 });
+            }
+        },
+
+        // 空中打击：ArcFlyer 纵队轰炸，考验玩家横向走位
+        p10_aerial: function(sec, frame, diff, w) {
+            if (sec === 1 && frame % 60 === 0) {
+                let cnt = diff >= 2 ? 4 : 3;
+                for (let i = 0; i < cnt; i++) {
+                    spawn('ArcFlyer', w * 0.15 + i * (w * 0.7 / (cnt - 1)), { speedOverride: 1.2, y: -30 - i * 20 });
+                }
+            }
+            if (sec >= 6 && frame % 180 === 0) {
+                spawn(diff >= 3 ? 'ArcFlyerSwarm' : 'ArcFlyer', Math.random() * (w - 100) + 50, { speedOverride: 1.3 });
+            }
+            // 陆空协同：地面辅助兵
+            if (sec >= 10 && frame % 100 === 0) {
+                spawn('Locator', Math.random() * (w - 80) + 40, { speedOverride: 1.4 });
+            }
         }
     },
 
@@ -113,50 +161,56 @@ window.WORKSHOP = {
         
         
         'sector1': {
-            
+
             name: "区域 1: 废星边缘",
-            shopItems: ['high_explosive', 'spread', 'skill_duration', 'burst_core'],
-            allowed_enemies: ['Locator', 'LocatorSwarm', 'Turret', 'TurretSwarm', 'ArcFlyer', 'Tank'],
-            allowed_formations: ['V_Strike', 'Turret_Wall'],
+            shopItems: ['high_explosive', 'spread', 'skill_duration', 'burst_core',
+                        'rapid_charge', 'phase_dodge', 'afterburn', 'shield_gen', 'skill_cd',
+                        'pierce', 'homing', 'crit_rate', 'heal_up', 'slot'],
+            allowed_enemies: ['Locator', 'LocatorSwarm', 'WandererLow', 'WandererHigh', 'WandererSwarm',
+                              'Kamikaze', 'KamikazeSwarm', 'Turret', 'TurretSwarm', 'ArcFlyer', 'Tank'],
+            allowed_formations: ['V_Strike', 'Turret_Wall', 'Ambush'],
             disable_director: true,
             state: { currentWave: 0, waveTimer: 0 },
-            
+
             timeline: [
-                { type: "p1_intro", duration: 25 },
-                {
-                    type: "p0_rest",
-                    exitConditions: { logic: "OR", rules: [ { type: "time_limit", value: 10 }, { type: "clear_all", value: true } ] }
-                },
-                { type: "p5_supply", duration: 15 }, { type: "p0_rest", duration: 10 },
-                { type: "p2_cover", duration: 35 }, { type: "p0_rest", duration: 10 },
-                { type: "p3_gather", duration: 30 }, { type: "p0_rest", duration: 12 },
-                { type: "p4_swarm_cover", duration: 35 }, { type: "p0_rest", duration: 12 },
-                { type: "p7_synergy", duration: 25 }, { type: "p0_rest", duration: 12 },
-                { type: "p6_press", duration: 30 }, { type: "p0_rest", duration: 10 },
-                { type: "p8_boss", duration: 9999 } 
+                { type: "p1_intro",      duration: 20 },
+                { type: "p0_rest",       exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 8  }, { type: "clear_all", value: true }] } },
+                { type: "p5_supply",     duration: 12 },
+                { type: "p0_rest",       duration: 8 },
+                { type: "p2_cover",      duration: 30 },
+                { type: "p0_rest",       exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 12 }, { type: "clear_all", value: true }] } },
+                { type: "p9_flanker",    duration: 22 },
+                { type: "p0_rest",       duration: 10 },
+                { type: "p3_gather",     duration: 28 },
+                { type: "p0_rest",       exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 12 }, { type: "clear_all", value: true }] } },
+                { type: "p10_aerial",    duration: 20 },
+                { type: "p0_rest",       duration: 10 },
+                { type: "p4_swarm_cover",duration: 30 },
+                { type: "p0_rest",       exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 12 }, { type: "clear_all", value: true }] } },
+                { type: "p7_synergy",    duration: 22 },
+                { type: "p0_rest",       duration: 10 },
+                { type: "p6_press",      duration: 25 },
+                { type: "p0_rest",       exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 10 }, { type: "clear_all", value: true }] } },
+                { type: "p8_boss",       duration: 9999 }
             ],
-            
+
             script: function(sec, frame) {
                 let w = window.innerWidth;
                 let st = this.state;
                 let wave = this.timeline[st.currentWave];
-                if (!wave) return; 
-                
+                if (!wave) return;
+
                 if (WORKSHOP.patterns[wave.type]) WORKSHOP.patterns[wave.type](st.waveTimer, frame, currentDifficulty, w);
-                
+
                 if (frame % 60 === 0) {
-                    
-                    // 【核心重构：彻底抛弃飘字，直接派发 WAVE_STARTED 专属事件】
                     if (st.waveTimer === 0) {
                         let waveMeta = WORKSHOP.waveNames[wave.type] || { name: `未知波次: ${wave.type}`, color: "#ffffff" };
-                        if (typeof EventBus !== 'undefined') {
-                            EventBus.emit('WAVE_STARTED', waveMeta);
-                        }
+                        if (typeof EventBus !== 'undefined') EventBus.emit('WAVE_STARTED', waveMeta);
                     }
 
                     st.waveTimer++;
                     let shouldExit = false;
-                    
+
                     if (wave.exitConditions) {
                         let rules = wave.exitConditions.rules || [];
                         let logic = wave.exitConditions.logic || "OR";
@@ -171,8 +225,15 @@ window.WORKSHOP = {
                     } else {
                         if (st.waveTimer >= (wave.duration || 999)) shouldExit = true;
                     }
-                    
+
                     if (shouldExit) {
+                        // shield_gen 效果：进入休整波次时回复血量
+                        let nextWave = this.timeline[st.currentWave + 1];
+                        if (nextWave && nextWave.type === 'p0_rest' && player && player.upgrades && player.upgrades.shield_gen > 0) {
+                            let healAmt = player.getStat('maxHp') * 0.08 * player.upgrades.shield_gen;
+                            player.hp = Math.min(player.getStat('maxHp'), player.hp + healAmt);
+                            if (typeof showSystemMessage === 'function') showSystemMessage(`屏障再生 +${Math.round(healAmt)}`, '#00e676');
+                        }
                         st.currentWave++;
                         st.waveTimer = 0;
                     }

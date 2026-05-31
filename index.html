@@ -3,321 +3,429 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>像素肉鸽战机 V4.2 数据觉醒</title>
-    
+    <title>像素肉鸽战机 V4.2</title>
+
     <style>
         @import url('https://fonts.googleapis.com/css2?family=DotGothic16&family=Press+Start+2P&display=swap');
-        
-        * { 
-            box-sizing: border-box; 
-            -webkit-font-smoothing: none;
-            -moz-osx-font-smoothing: grayscale;
-            font-smooth: never;
-            text-rendering: geometricPrecision;
-        }
+
+        * { box-sizing: border-box; -webkit-font-smoothing: none; -moz-osx-font-smoothing: grayscale; font-smooth: never; text-rendering: geometricPrecision; }
         body, html {
             margin: 0; padding: 0; width: 100%; height: 100%;
             background-color: #050510; overflow: hidden;
-            font-family: 'DotGothic16', 'Press Start 2P', 'SimSun', '宋体', monospace; 
-            color: white;
-            user-select: none; -webkit-user-select: none; touch-action: none;
+            font-family: 'DotGothic16', 'Press Start 2P', 'SimSun', '宋体', monospace;
+            color: white; user-select: none; -webkit-user-select: none; touch-action: none;
         }
-        
         #game-container { position: relative; width: 100%; height: 100%; }
         #gameCanvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; touch-action: none; }
-        
+
+        /* ═══ 通用覆盖层 ═══ */
         .overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             display: flex; flex-direction: column; justify-content: center; align-items: center;
-            background: rgba(5, 5, 16, 0.85); z-index: 10; text-align: center; padding: 20px; 
-            backdrop-filter: blur(2px);
-            opacity: 0; pointer-events: none; visibility: hidden; transform: scale(0.95);
-            transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.25s;
+            background: rgba(5, 5, 16, 0.92); z-index: 10; text-align: center; padding: 20px;
+            backdrop-filter: blur(3px);
+            opacity: 0; pointer-events: none; visibility: hidden; transform: scale(0.97);
+            transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
         }
         .overlay.active { opacity: 1; pointer-events: auto; visibility: visible; transform: scale(1); }
-        
-        h1 { font-size: 20px; text-shadow: 2px 4px 0 #e60050; margin-bottom: 10px; line-height: 1.5; font-family: 'Press Start 2P', 'DotGothic16', monospace; }
-        h2 { font-size: 16px; color: #00b0ff; margin-bottom: 20px; text-shadow: 2px 3px 0 #005a80; }
-        p { font-size: 10px; line-height: 1.8; color: #ccc; margin-bottom: 25px; max-width: 80%; }
-        
-        .btn-group { display: flex; flex-direction: column; gap: 12px; width: 80%; max-width: 250px; }
+
+        h1 { font-size: 18px; text-shadow: 2px 4px 0 #e60050; margin: 0 0 6px; line-height: 1.5; font-family: 'Press Start 2P', monospace; }
+        h2 { font-size: 14px; color: #00b0ff; margin: 0 0 18px; text-shadow: 2px 3px 0 #005a80; font-family: 'Press Start 2P', monospace; }
+        p { font-size: 10px; line-height: 1.8; color: #ccc; margin-bottom: 18px; max-width: 80%; }
+
+        /* ═══ 按钮系统 ═══ */
+        .btn-group { display: flex; flex-direction: column; gap: 10px; width: 80%; max-width: 260px; }
         .btn {
-            background: #1a1a2e; color: white; border: 3px solid #fff; padding: 15px; font-size: 10px;
-            font-family: inherit; border-radius: 6px; 
-            cursor: pointer; text-transform: uppercase; position: relative; box-shadow: 4px 4px 0 #000; 
-            transition: transform 0.1s, box-shadow 0.1s, filter 0.2s;
+            background: #1a1a2e; color: white; border: 3px solid #fff; padding: 13px 16px; font-size: 10px;
+            font-family: inherit; border-radius: 6px; cursor: pointer; text-transform: uppercase;
+            position: relative; box-shadow: 4px 4px 0 #000;
+            transition: transform 0.1s, box-shadow 0.1s, filter 0.15s;
+            display: flex; align-items: center; justify-content: center; gap: 8px;
         }
         .btn:hover { filter: brightness(1.2); }
         .btn:active { box-shadow: 0 0 0 transparent; transform: translate(4px, 4px); filter: brightness(1); }
-        .btn-red { background: #e60050; border-color: #ff8a80;}
-        .btn-blue { background: #00b0ff; border-color: #80d8ff;}
-        .btn-dark { background: #333; }
-        .btn-yellow { background: #ff9800; border-color: #ffd180; color: #000; font-weight: bold; }
-        .btn-disabled { background: #222 !important; border-color: #444 !important; color: #666 !important; pointer-events: none; filter: none !important; box-shadow: 4px 4px 0 #000 !important; }
+        .btn-red    { background: #9e0030; border-color: #ff4d6d; }
+        .btn-blue   { background: #00557a; border-color: #00b0ff; }
+        .btn-dark   { background: #222; border-color: #555; }
+        .btn-yellow { background: #7a4600; border-color: #ff9800; color: #ffd180; }
+        .btn-green  { background: #1b5e20; border-color: #00e676; color: #b2ff59; }
+        .btn-icon   { font-size: 14px; line-height: 1; flex-shrink: 0; }
 
-        .diff-selector { display: flex; justify-content: space-between; gap: 5px; margin-bottom: 15px; width: 100%; max-width: 280px; }
-        .diff-btn { 
-            flex: 1; padding: 10px 0; background: #222; color: #888; border: 3px solid #444; 
-            font-family: inherit; font-size: 8px; cursor: pointer; border-radius: 6px; transition: all 0.2s;
+        /* ═══ 难度选择器 ═══ */
+        .diff-selector { display: flex; justify-content: space-between; gap: 5px; margin-bottom: 12px; width: 100%; max-width: 300px; }
+        .diff-btn {
+            flex: 1; padding: 10px 4px; background: #181828; color: #666; border: 3px solid #333;
+            font-family: inherit; font-size: 7px; cursor: pointer; border-radius: 6px; transition: all 0.15s;
         }
-        .diff-btn:hover:not(.locked) { filter: brightness(1.2); border-color: #888; }
-        .diff-btn.selected { background: #e60050; color: #fff; border-color: #ff8a80; font-weight: bold; box-shadow: 2px 2px 0 rgba(0,0,0,0.8); }
+        .diff-btn:hover:not(.locked) { border-color: #777; color: #aaa; }
+        .diff-btn.selected { background: #9e0030; color: #fff; border-color: #ff4d6d; box-shadow: 2px 2px 0 rgba(0,0,0,0.8); }
         .diff-btn.locked { opacity: 0.3; cursor: not-allowed; background: #000; border-style: dashed; }
+        #diff-desc { font-size: 8px; color: #ffeb3b; margin-bottom: 14px; max-width: 280px; }
 
-        #hud-top-left { 
-            position: absolute; top: 25px; left: 20px; display: flex; flex-direction: column; gap: 6px; 
+        /* ═══ 关卡卡片（主屏） ═══ */
+        .level-list { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 300px; margin-bottom: 14px; }
+        .level-card {
+            display: flex; align-items: center; gap: 12px;
+            background: #0d0d1a; border: 3px solid #333; border-radius: 4px;
+            padding: 14px 12px; cursor: pointer; box-shadow: 4px 4px 0 #000;
+            transition: border-color 0.1s, filter 0.1s, transform 0.1s, box-shadow 0.1s;
+            text-align: left;
+        }
+        .level-card:hover { filter: brightness(1.2); }
+        .level-card:active { transform: translate(4px,4px); box-shadow: 0 0 0 transparent; filter: brightness(1); }
+        .level-card.lc-red    { border-color: #9e0030; }
+        .level-card.lc-red:hover { border-color: #ff4d6d; }
+        .level-card.lc-purple { border-color: #4a1070; }
+        .level-card.lc-purple:hover { border-color: #ab47bc; }
+        .lc-icon { font-size: 26px; line-height: 1; flex-shrink: 0; width: 34px; text-align: center; }
+        .lc-body { flex: 1; min-width: 0; }
+        .lc-name { font-family: 'Press Start 2P', monospace; font-size: 8px; color: #fff; margin-bottom: 5px; line-height: 1.4; }
+        .lc-desc { font-size: 9px; color: #777; line-height: 1.4; }
+        .lc-go { font-family: 'Press Start 2P', monospace; font-size: 10px; color: #ffea00; flex-shrink: 0; }
+
+        /* 主屏底部开发者链接 */
+        .dev-row { display: flex; gap: 20px; margin-top: 4px; }
+        .dev-link { font-size: 8px; color: #444; cursor: pointer; font-family: 'Press Start 2P', monospace; border-bottom: 1px solid #333; padding-bottom: 1px; }
+        .dev-link:hover { color: #666; }
+
+        /* ═══ HUD ═══ */
+        #hud-top-left {
+            position: absolute; top: 25px; left: 20px; display: flex; flex-direction: column; gap: 6px;
             align-items: flex-start; z-index: 5; pointer-events: none; opacity: 0.85;
             transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
-        #side-btns-container { 
+        #side-btns-container {
             position: absolute; top: 50%; right: 20px; transform: translateY(-50%);
-            z-index: 5; display: flex; flex-direction: column; gap: 12px; 
+            z-index: 5; display: flex; flex-direction: column; gap: 12px;
             transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
-
         .hud-hidden { opacity: 0 !important; pointer-events: none !important; }
         #hud-top-left.hud-hidden { transform: translateY(-20px); }
         #side-btns-container.hud-hidden { transform: translate(20px, -50%); }
-
         #hud-hp-val { font-family: 'Press Start 2P', monospace; font-size: 16px; color: #00e676; text-shadow: 2px 2px 0 #000; display: inline-block; }
         #hud-pt-val { font-family: 'Press Start 2P', monospace; font-size: 12px; color: #e0e0e0; text-shadow: 2px 2px 0 #000; margin-bottom: 4px; display: inline-block; position: relative; }
-
         .pixel-btn-cvs { cursor: pointer; transition: transform 0.1s, filter 0.2s; width: 48px; height: 48px; image-rendering: pixelated; display: block; }
         .pixel-btn-cvs:hover { filter: brightness(1.2); }
-        .pixel-btn-cvs:active { transform: translate(3px, 3px); filter: brightness(1); }
+        .pixel-btn-cvs:active { transform: translate(3px,3px); filter: brightness(1); }
 
+        /* ═══ Boss HP ═══ */
         #boss-hp-container { position: absolute; top: 30px; left: 50%; transform: translateX(-50%); width: 50%; max-width: 250px; height: 8px; background: #050505; border: 3px solid #222; z-index: 4; opacity: 0; transition: opacity 0.4s; box-shadow: 0 4px 0 rgba(0,0,0,0.5); pointer-events: none; border-radius: 4px; }
-        #boss-hp-delay { position: absolute; height: 100%; background: #fff; width: 100%; transition: width 0.5s linear; opacity: 0.8;}
-        #boss-hp-fill { position: absolute; height: 100%; background: #ff1744; width: 100%; transition: width 0.1s linear;}
-        
-        #boss-name-toast { position: absolute; top: 65px; width: 100%; text-align: center; color: #ff1744; font-family: 'Press Start 2P', monospace; font-size: 24px; letter-spacing: 2px; text-shadow: 3px 3px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000; opacity: 0; transition: opacity 1.5s ease-in-out; z-index: 10; pointer-events: none; }
+        #boss-hp-delay { position: absolute; height: 100%; background: #fff; width: 100%; transition: width 0.5s linear; opacity: 0.8; }
+        #boss-hp-fill  { position: absolute; height: 100%; background: #ff1744; width: 100%; transition: width 0.1s linear; }
+        #boss-name-toast { position: absolute; top: 65px; width: 100%; text-align: center; color: #ff1744; font-family: 'Press Start 2P', monospace; font-size: 24px; letter-spacing: 2px; text-shadow: 3px 3px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000; opacity: 0; transition: opacity 1.5s; z-index: 10; pointer-events: none; }
         .system-message { position: absolute; top: 105px; width: 100%; text-align: center; font-family: 'Press Start 2P', 'DotGothic16', monospace; font-size: 10px; opacity: 0; pointer-events: none; transition: opacity 0.5s; text-shadow: 2px 2px 0 #000; z-index: 4; }
 
-        .card-container { display: flex; flex-direction: column; gap: 12px; width: 95%; max-width: 320px; }
-        @keyframes popAnim { 0% { transform: scale(1); } 50% { transform: scale(1.05); filter: brightness(1.5); } 100% { transform: scale(1); } }
+        /* ═══ 商店卡片 ═══ */
+        .card-container { display: flex; flex-direction: column; gap: 10px; width: 95%; max-width: 320px; }
+        @keyframes popAnim { 0%{transform:scale(1)} 50%{transform:scale(1.05);filter:brightness(1.5)} 100%{transform:scale(1)} }
         .anim-pop { animation: popAnim 0.2s ease; }
 
-        .upgrade-card { background: #1a1a2e; border: 3px solid #fff; padding: 12px; text-align: left; cursor: pointer; position: relative; box-shadow: 4px 4px 0 #000; transition: transform 0.1s, box-shadow 0.1s, filter 0.2s; display: flex; justify-content: space-between; align-items: stretch; border-radius: 6px; }
+        .upgrade-card {
+            background: #0d0d20; border: 3px solid #2a2a40; padding: 11px 12px;
+            text-align: left; cursor: pointer; position: relative;
+            box-shadow: 4px 4px 0 #000; border-radius: 4px;
+            transition: transform 0.1s, box-shadow 0.1s, filter 0.15s;
+            display: flex; align-items: center; gap: 10px;
+        }
         .upgrade-card:hover:not(.disabled) { filter: brightness(1.15); }
-        .upgrade-card:active { transform: translate(4px, 4px); box-shadow: 0 0 0 transparent; filter: brightness(1); }
-        .card-info { flex: 1; padding-right: 8px; }
-        .card-title { margin-bottom: 6px; font-size: 10px; display: flex; justify-content: space-between; align-items:center;}
-        .card-desc { color: #aaa; line-height: 1.4; font-size: 8px; }
-        .card-cost-box { display: flex; flex-direction: column; justify-content: center; align-items: center; background: rgba(0,0,0,0.4); padding: 5px 8px; min-width: 45px; text-align:center; border-radius: 4px;}
-        .card-cost { font-size: 10px; font-weight: bold; margin-bottom: 4px; font-family: 'Press Start 2P', monospace; transition: color 0.3s;}
-        .card-max { font-size: 6px; color: #ccc; font-family: 'Press Start 2P', monospace;}
-        .upgrade-card.disabled { opacity: 0.6; filter: grayscale(80%); cursor: not-allowed; }
-        .upgrade-card.disabled:active { transform: none; box-shadow: 4px 4px 0 #000; filter: grayscale(80%); }
-        .equip-active { border-color: #00e676 !important; background: linear-gradient(90deg, #003311, #1a1a2e) !important;}
-        .equip-inactive { border-color: #555 !important; background: #111 !important;}
+        .upgrade-card:active { transform: translate(4px,4px); box-shadow: 0 0 0 transparent; filter: brightness(1); }
+        .upgrade-card.disabled { opacity: 0.5; filter: grayscale(70%); cursor: not-allowed; }
+        .upgrade-card.disabled:active { transform: none; box-shadow: 4px 4px 0 #000; }
+
+        .card-item-icon { font-size: 20px; line-height: 1; flex-shrink: 0; width: 28px; text-align: center; }
+        .card-info { flex: 1; min-width: 0; }
+        .card-title { font-family: 'Press Start 2P', monospace; font-size: 9px; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+        .card-rarity { font-size: 7px; border: 1px solid currentColor; border-radius: 3px; padding: 1px 4px; opacity: 0.9; flex-shrink: 0; }
+        .card-desc { color: #888; line-height: 1.5; font-size: 8px; }
+        .card-cost-box { display: flex; flex-direction: column; justify-content: center; align-items: center; background: rgba(0,0,0,0.5); padding: 6px 8px; min-width: 50px; text-align: center; border-radius: 6px; flex-shrink: 0; border: 2px solid #333; }
+        .card-cost { font-size: 10px; font-weight: bold; font-family: 'Press Start 2P', monospace; color: #ffea00; }
+        .card-cost-label { font-size: 6px; color: #666; margin-top: 3px; font-family: 'Press Start 2P', monospace; }
+        .card-max  { font-size: 6px; color: #555; font-family: 'Press Start 2P', monospace; margin-top: 2px; }
+        .equip-active  { border-color: #00e676 !important; background: linear-gradient(90deg,#001a0d,#0d0d20) !important; }
+        .equip-inactive { border-color: #333 !important; background: #0a0a18 !important; }
         .tagged-item { box-shadow: 4px 4px 0 #ffea00 !important; border-color: #ffea00 !important; }
 
+        /* ═══ 装备芯片 ═══ */
         .equip-chip { background: #111; border: 3px solid #555; border-radius: 6px; padding: 6px; display: flex; align-items: center; gap: 8px; cursor: pointer; transition: all 0.1s; width: calc(50% - 3px); }
         .equip-chip:hover { border-color: #fff; filter: brightness(1.2); }
         .equip-chip:active { transform: translateY(2px); }
-        .equip-chip.core-chip { border-color: #00b0ff; background: rgba(0, 176, 255, 0.15); }
-        .equip-chip.ext-chip { border-color: #ab47bc; background: rgba(171, 71, 188, 0.15); }
-        .equip-chip.locked-chip { border-color: #ff1744 !important; background: rgba(255, 23, 68, 0.15) !important; cursor: not-allowed; }
+        .equip-chip.core-chip { border-color: #00b0ff; background: rgba(0,176,255,0.12); }
+        .equip-chip.ext-chip  { border-color: #ab47bc; background: rgba(171,71,188,0.12); }
+        .equip-chip.locked-chip { border-color: #ff1744 !important; background: rgba(255,23,68,0.12) !important; cursor: not-allowed; }
+        .empty-slot { background: rgba(255,255,255,0.03); border: 3px dashed #333; border-radius: 6px; width: calc(50% - 3px); height: 32px; display: flex; justify-content: center; align-items: center; color: #444; font-size: 14px; font-family: monospace; }
 
-        .empty-slot { background: rgba(255,255,255,0.05); border: 3px dashed #444; border-radius: 6px; width: calc(50% - 3px); height: 32px; display: flex; justify-content: center; align-items: center; color: #555; font-size: 14px; font-family: monospace; }
+        /* ═══ 通货膨胀条 ═══ */
+        #inflation-container { width: 95%; max-width: 320px; margin-bottom: 10px; background: #0d0d1f; border: 2px solid #333; border-radius: 6px; padding: 8px 10px; }
+        #inflation-bar-bg { width: 100%; height: 6px; background: #1a1a2e; border-radius: 3px; overflow: hidden; margin-top: 6px; }
+        #inflation-bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg,#ff9800,#ff1744); transition: width 0.3s; border-radius: 3px; }
+        #inflation-text { font-size: 8px; color: #ff9800; text-align: right; font-family: 'Press Start 2P', monospace; }
 
-        #inflation-container { width: 95%; max-width: 320px; margin-bottom: 10px; background: #111; border: 2px solid #555; border-radius: 4px; padding: 5px; }
-        #inflation-bar-bg { width: 100%; height: 6px; background: #222; border-radius: 3px; position: relative; overflow: hidden; }
-        #inflation-bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #ff9800, #ff1744); transition: width 0.3s ease; }
-        #inflation-text { font-size: 8px; color: #aaa; text-align: right; margin-top: 4px; font-family: 'Press Start 2P', monospace; }
-
-        .abyss-clear-title { color: #ffea00 !important; text-shadow: 2px 4px 0 #e65100 !important; animation: textGlow 2s infinite; }
+        /* ═══ 设置控件 ═══ */
         .ctrl-hidden { display: none !important; }
-        
-        /* 创意工坊终端文本框样式 */
-        #workshop-textarea {
-            width: 90%; max-width: 400px; height: 50%; background: #000; color: #00e676;
-            font-family: monospace; font-size: 10px; border: 2px solid #00b0ff; 
-            padding: 10px; resize: none; border-radius: 4px; outline: none;
-            box-shadow: inset 0 0 10px rgba(0, 229, 255, 0.2);
-            white-space: pre; overflow-wrap: normal; overflow-x: auto;
-        }
+        .abyss-clear-title { color: #ffea00 !important; text-shadow: 2px 4px 0 #e65100 !important; }
+
+        /* 工坊文本框 */
+        #workshop-textarea { width: 90%; max-width: 400px; height: 50%; background: #000; color: #00e676; font-family: monospace; font-size: 10px; border: 2px solid #00b0ff; padding: 10px; resize: none; border-radius: 4px; outline: none; box-shadow: inset 0 0 10px rgba(0,229,255,0.2); white-space: pre; overflow-wrap: normal; overflow-x: auto; }
         #workshop-textarea:focus { border-color: #00e5ff; }
+
+        /* ═══ 战术终端 ═══ */
+        #tactical-terminal { position: fixed; top: 4%; left: 3%; width: 94%; height: 92%; background: rgba(3,3,12,0.97); border: 2px solid #00e5ff; box-shadow: inset 0 0 30px rgba(0,229,255,0.06), 0 0 40px rgba(0,229,255,0.12); z-index: 10000; display: flex; flex-direction: column; font-family: 'Press Start 2P','DotGothic16',monospace; color: #fff; }
+        #terminal-tab-bar { display: flex; border-bottom: 2px solid #00e5ff; background: rgba(0,229,255,0.04); flex-shrink: 0; }
+        .term-tab { flex: 1; padding: 13px 6px; background: none; border: none; border-right: 1px solid rgba(0,229,255,0.25); color: #555; font-family: 'Press Start 2P',monospace; font-size: 8px; letter-spacing: 1px; cursor: pointer; transition: color 0.15s,background 0.15s; }
+        .term-tab:hover { color: #aaa; background: rgba(255,255,255,0.02); }
+        .term-close { padding: 13px 18px; background: rgba(255,23,68,0.1); border: none; border-left: 2px solid #ff1744; color: #ff1744; font-family: 'Press Start 2P',monospace; font-size: 12px; cursor: pointer; }
+        .term-close:hover { background: rgba(255,23,68,0.25); }
+        #terminal-viewport { flex: 1; padding: 18px 22px; overflow-y: auto; font-family: 'DotGothic16',monospace; font-size: 12px; }
+        #terminal-viewport::-webkit-scrollbar { width: 4px; }
+        #terminal-viewport::-webkit-scrollbar-thumb { background: #00e5ff44; border-radius: 2px; }
     </style>
-</head
+</head>
 
 <body>
-
 <div id="game-container">
     <canvas id="gameCanvas"></canvas>
 
+    <!-- HUD 顶部左侧 -->
     <div id="hud-top-left" class="hud-hidden">
         <div id="hud-hp-val">100%</div>
         <div id="hud-pt-val">0.0 PT</div>
         <canvas id="hud-indicator" width="16" height="16"></canvas>
     </div>
-    
+
     <div id="system-message" class="system-message"></div>
 
+    <!-- Boss 血条 -->
     <div id="boss-hp-container">
         <div id="boss-hp-delay"></div>
         <div id="boss-hp-fill"></div>
     </div>
     <div id="boss-name-toast">废铁主宰者</div>
 
+    <!-- 右侧功能按钮 -->
     <div id="side-btns-container" class="hud-hidden">
-        <canvas id="pause-btn-cvs" class="pixel-btn-cvs" width="48" height="48" onclick="togglePause()"></canvas>
-        <canvas id="pause-btn-cvs" width="48" height="48"></canvas>
-        <canvas id="skill-btn-cvs" width="48" height="48"></canvas>
-        <canvas id="terminal-btn-cvs" width="48" height="48"></canvas>
-
+        <canvas id="pause-btn-cvs"    class="pixel-btn-cvs" width="48" height="48"></canvas>
+        <canvas id="skill-btn-cvs"    class="pixel-btn-cvs" width="48" height="48"></canvas>
+        <canvas id="terminal-btn-cvs" class="pixel-btn-cvs" width="48" height="48"></canvas>
     </div>
 
+    <!-- ══════════════════════════════════════
+         主屏幕
+    ══════════════════════════════════════ -->
     <div id="start-screen" class="overlay active">
-        <h1>肉鸽战机 V4.2</h1>
-        
+
+        <h1>肉鸽战机</h1>
+        <div style="font-family:'Press Start 2P',monospace;font-size:7px;color:#555;letter-spacing:3px;margin-bottom:18px;">V4.2 · DATA AWAKENING</div>
+
+        <!-- 难度选择 -->
         <div class="diff-selector" id="diff-selector">
             <button class="diff-btn selected" onclick="selectDifficulty(0)">新兵</button>
-            <button class="diff-btn" onclick="selectDifficulty(1)">老手</button>
-            <button class="diff-btn" onclick="selectDifficulty(2)">精英</button>
+            <button class="diff-btn"          onclick="selectDifficulty(1)">老手</button>
+            <button class="diff-btn"          onclick="selectDifficulty(2)">精英</button>
             <button class="diff-btn locked" id="diff-nightmare" onclick="selectDifficulty(3)">深渊</button>
         </div>
+        <p id="diff-desc" style="font-size:8px;color:#ffeb3b;margin-bottom:14px;">简单：新手教学，无集群敌人。</p>
 
-        <p style="margin-bottom: 15px; color:#ffeb3b" id="diff-desc">简单：新手教学，无集群敌人。</p>
+        <!-- 关卡选择 -->
+        <div class="level-list">
+            <div class="level-card lc-red" onclick="startGame('sector1')">
+                <div class="lc-icon">◈</div>
+                <div class="lc-body">
+                    <div class="lc-name">区域 1: 废星边缘</div>
+                    <div class="lc-desc">主线战役 · 9波次 + BOSS战</div>
+                </div>
+                <div class="lc-go">▶</div>
+            </div>
 
-        <div class="btn-group">
-            <button class="btn btn-red" onclick="startGame('sector1')">区域 1: 废星边缘</button>
-            <button class="btn btn-dark" onclick="startGame('debug')">代号: 调试 [无尽模式]</button>
-            <button onclick="startGame('neon_crash')">进入霓虹幻灭</button>
-            <button class="btn btn-yellow" style="margin-top: 15px;" onclick="openWorkshop()">进入极客工坊 (DIY)</button>
+            <div class="level-card lc-purple" onclick="startGame('neon_crash')">
+                <div class="lc-icon">♪</div>
+                <div class="lc-body">
+                    <div class="lc-name">霓虹幻灭</div>
+                    <div class="lc-desc">音乐同步 · 碰撞交响曲</div>
+                </div>
+                <div class="lc-go">▶</div>
+            </div>
+        </div>
+
+        <!-- 开发者入口（小字） -->
+        <div class="dev-row">
+            <span class="dev-link" onclick="startGame('debug')">⚠ 调试模式</span>
+            <span class="dev-link" onclick="openWorkshop()">⚙ 数据工坊</span>
         </div>
     </div>
 
+    <!-- ══════════════════════════════════════
+         极客工坊
+    ══════════════════════════════════════ -->
     <div id="workshop-menu" class="overlay">
-        <h2 style="color: #ffea00; text-shadow: 2px 2px 0 #e65100;">JSON 数据控制台</h2>
-        <p style="font-size: 8px; color: #aaa; margin-bottom: 5px;">修改参数后点击[注入覆写]生效。修改敌人数值、商品价格、物理手感。</p>
-        
+        <div style="font-family:'Press Start 2P',monospace;font-size:9px;color:#ffea00;letter-spacing:2px;margin-bottom:6px;">⚙ JSON 数据控制台</div>
+        <p style="font-size:8px;color:#666;margin-bottom:8px;max-width:380px;">修改参数后点击[注入覆写]生效。敌人数值、商品价格、物理手感均可调整。</p>
         <textarea id="workshop-textarea" spellcheck="false"></textarea>
-        
-        <div style="display:flex; gap:10px; margin-top:15px; width:90%; max-width:400px;">
-            <button class="btn btn-red" style="flex:1;" onclick="applyWorkshopData()">注入覆写</button>
-            <button class="btn btn-dark" style="flex:1;" onclick="closeWorkshop()">关闭控制台</button>
+        <div style="display:flex;gap:10px;margin-top:12px;width:90%;max-width:400px;">
+            <button class="btn btn-red"  style="flex:1;" onclick="applyWorkshopData()">⬆ 注入覆写</button>
+            <button class="btn btn-dark" style="flex:1;" onclick="closeWorkshop()">✕ 关闭控制台</button>
         </div>
-        <div id="workshop-status" style="font-size:8px; color:#00e676; margin-top:10px; font-family:'Press Start 2P';"></div>
+        <div id="workshop-status" style="font-size:8px;color:#00e676;margin-top:10px;font-family:'Press Start 2P';"></div>
     </div>
 
+    <!-- ══════════════════════════════════════
+         暂停菜单
+    ══════════════════════════════════════ -->
     <div id="pause-menu" class="overlay">
-        <h2>系统已挂起</h2>
+        <h2>⏸ 系统已挂起</h2>
         <div class="btn-group">
-            <button class="btn" onclick="togglePause()">恢复连接</button>
-            <button class="btn btn-blue" onclick="openSettings('PAUSED')">系统设置</button>
-            <button class="btn btn-dark" onclick="quitGame()">中止任务(主屏)</button>
+            <button class="btn btn-green" onclick="togglePause()">
+                <span class="btn-icon">▶</span>恢复连接
+            </button>
+            <button class="btn btn-blue" onclick="openSettings('PAUSED')">
+                <span class="btn-icon">⚙</span>系统设置
+            </button>
+            <button class="btn btn-dark" onclick="quitGame()">
+                <span class="btn-icon">✕</span>中止任务
+            </button>
         </div>
-        <div id="pause-score-display" style="margin-top: 20px; font-size: 10px; color:#ffea00; font-family: 'Press Start 2P', monospace;">得分: 0 PTS</div>
+        <div id="pause-score-display" style="margin-top:18px;font-size:9px;color:#ffea00;font-family:'Press Start 2P',monospace;opacity:0.8;">得分: 0 PTS</div>
     </div>
 
+    <!-- ══════════════════════════════════════
+         系统设置
+    ══════════════════════════════════════ -->
     <div id="settings-menu" class="overlay">
-        <h2 id="settings-title">系统设置</h2>
+        <h2 id="settings-title">⚙ 系统设置</h2>
         <div id="settings-main-list" class="btn-group">
-            <button class="btn" onclick="enterSettingsSub('control')">操控设定 >></button>
-            <button class="btn" onclick="enterSettingsSub('game')">系统与画面 >></button>
-            <button class="btn btn-blue" style="margin-top:20px;" onclick="closeSettings()">返回游戏</button>
+            <button class="btn" onclick="enterSettingsSub('control')"><span class="btn-icon">◈</span>操控设定</button>
+            <button class="btn" onclick="enterSettingsSub('game')"><span class="btn-icon">◆</span>系统与画面</button>
+            <button class="btn btn-blue" style="margin-top:14px;" onclick="closeSettings()"><span class="btn-icon">▶</span>返回游戏</button>
         </div>
-        <div id="settings-sub-game" class="ctrl-hidden" style="width:100%; display:flex; flex-direction:column; align-items:center;">
+        <div id="settings-sub-game" class="ctrl-hidden" style="width:100%;display:flex;flex-direction:column;align-items:center;">
             <div class="btn-group">
                 <button class="btn btn-dark" id="toggle-dmg-btn" onclick="toggleSetting('dmgText')">伤害飘字: 开</button>
                 <button class="btn btn-dark" id="toggle-shake-btn" onclick="toggleSetting('shake')">屏幕震动: 开</button>
             </div>
-            <button class="btn btn-blue" style="margin-top:30px; width:80%; max-width:250px;" onclick="backToSettingsMain()">返回上级</button>
+            <button class="btn btn-blue" style="margin-top:24px;width:80%;max-width:250px;" onclick="backToSettingsMain()">← 返回上级</button>
         </div>
-        <div id="settings-sub-control" class="ctrl-hidden" style="width:100%; display:flex; flex-direction:column; align-items:center;">
-            <div class="diff-selector" style="margin-bottom: 5px; width: 80%; max-width:200px;">
+        <div id="settings-sub-control" class="ctrl-hidden" style="width:100%;display:flex;flex-direction:column;align-items:center;">
+            <div class="diff-selector" style="margin-bottom:6px;width:80%;max-width:200px;">
                 <button id="ctrl-mode-abs" class="diff-btn selected" onclick="setControlMode('absolute')">绝对定位</button>
                 <button id="ctrl-mode-rel" class="diff-btn" onclick="setControlMode('relative')">滑动牵引</button>
             </div>
-            <div class="diff-selector" style="margin-bottom: 15px; width: 80%; max-width:200px;">
+            <div class="diff-selector" style="margin-bottom:14px;width:80%;max-width:200px;">
                 <button id="ctrl-touch-single" class="diff-btn selected" onclick="setTouchMode('single')">单点锁定</button>
-                <button id="ctrl-touch-multi" class="diff-btn" onclick="setTouchMode('multi')">多指映射</button>
+                <button id="ctrl-touch-multi"  class="diff-btn" onclick="setTouchMode('multi')">多指映射</button>
             </div>
-            <div id="settings-abs-ui" style="display:flex; flex-direction:column; align-items:center; width:100%;">
-                <p style="color:#aaa; font-size:8px; margin-bottom:10px;">控制手指纵向偏移补偿</p>
-                <div id="offset-widget" style="position:relative; width:80px; height:80px; margin:0 auto; touch-action:none; background:rgba(0,0,0,0.5); border-radius: 50%; box-shadow: inset 0 0 0 4px #444, 4px 4px 0 #000;">
+            <div id="settings-abs-ui" style="display:flex;flex-direction:column;align-items:center;width:100%;">
+                <p style="color:#aaa;font-size:8px;margin-bottom:10px;">控制手指纵向偏移补偿</p>
+                <div id="offset-widget" style="position:relative;width:80px;height:80px;margin:0 auto;touch-action:none;background:rgba(0,0,0,0.5);border-radius:50%;box-shadow:inset 0 0 0 4px #444,4px 4px 0 #000;">
                     <canvas id="offsetCanvas" width="80" height="80"></canvas>
-                    <div id="offset-val" style="position:absolute; top:0; left:0; width:100%; height:100%; display:flex; justify-content:center; align-items:center; font-family:'Press Start 2P'; font-size:16px;">90</div>
+                    <div id="offset-val" style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;justify-content:center;align-items:center;font-family:'Press Start 2P';font-size:16px;">90</div>
                 </div>
             </div>
-            <div id="settings-rel-ui" class="ctrl-hidden" style="display:flex; flex-direction:column; align-items:center; width:100%;">
-                <p style="color:#aaa; font-size:8px; margin-bottom:10px;">调节指尖滑动灵敏度</p>
-                <div id="sens-widget" style="position:relative; width:80px; height:80px; margin:0 auto; touch-action:none; background:rgba(0,0,0,0.5); border-radius: 50%; box-shadow: inset 0 0 0 4px #444, 4px 4px 0 #000;">
+            <div id="settings-rel-ui" class="ctrl-hidden" style="display:flex;flex-direction:column;align-items:center;width:100%;">
+                <p style="color:#aaa;font-size:8px;margin-bottom:10px;">调节指尖滑动灵敏度</p>
+                <div id="sens-widget" style="position:relative;width:80px;height:80px;margin:0 auto;touch-action:none;background:rgba(0,0,0,0.5);border-radius:50%;box-shadow:inset 0 0 0 4px #444,4px 4px 0 #000;">
                     <canvas id="sensCanvas" width="80" height="80"></canvas>
-                    <div id="sens-val" style="position:absolute; top:0; left:0; width:100%; height:100%; display:flex; justify-content:center; align-items:center; font-family:'Press Start 2P'; font-size:12px;">1.5x</div>
+                    <div id="sens-val" style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;justify-content:center;align-items:center;font-family:'Press Start 2P';font-size:12px;">1.5x</div>
                 </div>
             </div>
-            <button class="btn btn-blue" style="margin-top:30px; width:80%; max-width:250px;" onclick="backToSettingsMain()">确认并返回</button>
+            <button class="btn btn-blue" style="margin-top:24px;width:80%;max-width:250px;" onclick="backToSettingsMain()">← 确认并返回</button>
         </div>
     </div>
 
+    <!-- ══════════════════════════════════════
+         装备背包（loadout）
+    ══════════════════════════════════════ -->
     <div id="loadout-menu" class="overlay">
-        <h2 style="color: #ffffff; margin-bottom:10px; font-size:12px;">战术总线 (LOADOUT)</h2>
-        <div style="width: 95%; max-width: 320px; background: rgba(0,0,0,0.6); border: 4px solid #555; border-radius: 6px; padding: 10px; margin-bottom: 10px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
-                <span style="color:#00b0ff; font-size:8px;">■ 核心插槽 (CORE)</span>
-                <span id="loadout-slots-text" style="color:#fff; font-size:8px; font-family:monospace;">0 / 3</span>
+        <h2 style="font-size:12px;">⚔ 战术总线</h2>
+        <div style="width:95%;max-width:320px;background:rgba(0,0,0,0.5);border:3px solid #2a2a40;border-radius:8px;padding:12px;margin-bottom:10px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <span style="color:#00b0ff;font-size:8px;font-family:'Press Start 2P',monospace;">■ 核心插槽</span>
+                <span id="loadout-slots-text" style="color:#fff;font-size:8px;font-family:'Press Start 2P',monospace;">0 / 3</span>
             </div>
-            <div id="core-slots-grid" style="display:flex; gap:6px; flex-wrap:wrap; min-height: 34px; margin-bottom:10px;"></div>
-            <div style="display:flex; justify-content:space-between; margin-bottom:10px; border-top: 2px dashed #444; padding-top: 10px;">
-                <span style="color:#ab47bc; font-size:8px;">■ 外部协处理 (EXT)</span>
+            <div id="core-slots-grid" style="display:flex;gap:6px;flex-wrap:wrap;min-height:34px;margin-bottom:10px;"></div>
+            <div style="border-top:2px dashed #2a2a40;padding-top:8px;margin-bottom:8px;">
+                <span style="color:#ab47bc;font-size:8px;font-family:'Press Start 2P',monospace;">■ 外部协处理</span>
             </div>
-            <div id="ext-slots-grid" style="display:flex; gap:6px; flex-wrap:wrap; min-height: 20px;"></div>
+            <div id="ext-slots-grid" style="display:flex;gap:6px;flex-wrap:wrap;min-height:20px;"></div>
         </div>
-        <div style="width: 95%; max-width: 320px; text-align: left; margin-bottom:5px;">
-            <span style="color:#888; font-size:8px;">▼ 闲置库 (INVENTORY)</span>
+        <div style="width:95%;max-width:320px;text-align:left;margin-bottom:6px;">
+            <span style="color:#555;font-size:8px;font-family:'Press Start 2P',monospace;">▼ 闲置库</span>
         </div>
-        <div class="card-container" id="loadout-inventory-list" style="overflow-y:auto; max-height:28%; padding-bottom:10px;"></div>
+        <div class="card-container" id="loadout-inventory-list" style="overflow-y:auto;max-height:28%;padding-bottom:10px;"></div>
         <div class="btn-group" style="margin-top:10px;">
-            <button class="btn btn-blue" onclick="closeLoadout()">应用调整</button>
+            <button class="btn btn-blue" onclick="closeLoadout()"><span class="btn-icon">✓</span>应用调整</button>
         </div>
     </div>
 
+    <!-- ══════════════════════════════════════
+         商店菜单（terminal 后备入口）
+    ══════════════════════════════════════ -->
     <div id="shop-menu" class="overlay">
-        <h1 style="color: #00b0ff; text-shadow: 2px 4px 0 #005a80;">黑客商店</h1>
-        
+        <!-- 标题区 -->
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+            <span style="font-size:22px;">⬡</span>
+            <h1 style="color:#00b0ff;text-shadow:2px 4px 0 #003355;font-size:16px;margin:0;">黑市补给</h1>
+        </div>
+
+        <!-- 通货膨胀条 -->
         <div id="inflation-container">
-            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                <span style="color:#ff9800; font-size:8px;">市场热度 (物价溢出)</span>
-                <span id="inflation-text">0%</span>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+                <span style="color:#ff9800;font-size:8px;font-family:'Press Start 2P',monospace;">⚠ 市场热度</span>
+                <span id="inflation-text" style="font-size:8px;font-family:'Press Start 2P',monospace;color:#ff9800;">0%</span>
             </div>
             <div id="inflation-bar-bg"><div id="inflation-bar-fill"></div></div>
         </div>
 
-        <h2 style="color: #fff; font-size: 10px; margin-bottom: 20px;">
-            可用资产: <span id="shop-pts" style="color:#00e676; font-size: 14px; font-family:'Press Start 2P', monospace;">0.0</span> <span style="font-family:'Press Start 2P', monospace;">PT</span>
-        </h2>
-        <div class="card-container" id="shop-cards" style="overflow-y:auto; max-height:40%; padding-bottom:10px;"></div>
-        <div class="btn-group" style="margin-top:15px; flex-direction: row; justify-content: center; width: 95%; max-width:320px;">
-            <button id="refresh-btn" class="btn btn-dark" style="flex: 1; padding: 12px; font-size:10px;" onclick="refreshShop()">刷新 (-1.0)</button>
-            <button class="btn" style="flex: 1; padding: 12px; font-size:10px;" onclick="closeShop()">离开</button>
+        <!-- 可用 PT -->
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+            <span style="font-size:16px;">◉</span>
+            <span style="font-size:9px;color:#aaa;font-family:'Press Start 2P',monospace;">算力:</span>
+            <span id="shop-pts" style="color:#00e676;font-size:14px;font-family:'Press Start 2P',monospace;">0.0</span>
+            <span style="color:#00e676;font-size:10px;font-family:'Press Start 2P',monospace;">PT</span>
+        </div>
+
+        <!-- 商品卡片 -->
+        <div class="card-container" id="shop-cards" style="overflow-y:auto;max-height:40%;padding-bottom:10px;"></div>
+
+        <!-- 操作按钮 -->
+        <div style="display:flex;gap:10px;margin-top:14px;width:95%;max-width:320px;">
+            <button id="refresh-btn" class="btn btn-dark" style="flex:1;font-size:9px;" onclick="refreshShop()">
+                <span class="btn-icon">⟳</span>刷新 (-1.0)
+            </button>
+            <button class="btn" style="flex:1;font-size:9px;" onclick="closeShop()">
+                <span class="btn-icon">✕</span>离开
+            </button>
         </div>
     </div>
 
+    <!-- ══════════════════════════════════════
+         游戏结束
+    ══════════════════════════════════════ -->
     <div id="game-over-screen" class="overlay">
         <h1 style="color:#e60050" id="game-over-title">连接丢失</h1>
-        <p id="final-score" style="color:#fff; font-size:12px; line-height:2">最终得分: 0 PTS<br>存活时间: 00:00</p>
-        <div class="btn-group" style="margin-top: 15px;">
-            <button class="btn btn-red" onclick="startGame(currentLevel)">重新部署</button>
-            <button class="btn btn-dark" onclick="quitGame()">返回主屏</button>
+        <p id="final-score" style="color:#fff;font-size:11px;line-height:2;">最终得分: 0 PTS<br>存活时间: 00:00</p>
+        <div class="btn-group" style="margin-top:14px;">
+            <button class="btn btn-red"  onclick="startGame(currentLevel)"><span class="btn-icon">⟳</span>重新部署</button>
+            <button class="btn btn-dark" onclick="quitGame()"><span class="btn-icon">←</span>返回主屏</button>
         </div>
     </div>
-</div>
+
+</div><!-- /game-container -->
 
 <script src="mod_workshop.js"></script>
 <script src="config.js"></script>
 <script src="entities.js"></script>
 <script src="main.js"></script>
 
-<div id="tactical-terminal" class="hud-hidden" style="position: fixed; top: 5%; left: 5%; width: 90%; height: 90%; background: rgba(5, 5, 15, 0.95); border: 2px solid #00e5ff; box-shadow: inset 0 0 20px rgba(0, 229, 255, 0.2); z-index: 10000; display: flex; flex-direction: column; font-family: '"Press Start 2P", monospace'; color: #fff;">
-    <div style="display: flex; border-bottom: 2px solid #00e5ff; background: rgba(0, 229, 255, 0.1);">
-        <button onclick="switchTerminalTab('shop')" style="flex: 1; padding: 15px; background: none; border: none; border-right: 1px solid #00e5ff; color: #ff1744; font-weight: bold; cursor: pointer;">[ 黑市补给 ]</button>
-        <button onclick="switchTerminalTab('tech')" style="flex: 1; padding: 15px; background: none; border: none; border-right: 1px solid #00e5ff; color: #00e676; font-weight: bold; cursor: pointer;">[ 系统超频 ]</button>
-        <button onclick="switchTerminalTab('loadout')" style="flex: 1; padding: 15px; background: none; border: none; border-right: 1px solid #00e5ff; color: #fff; font-weight: bold; cursor: pointer;">[ 模块装配 ]</button>
-        <button onclick="toggleTerminal()" style="padding: 15px 25px; background: #ff1744; border: none; color: #fff; font-weight: bold; cursor: pointer;">X</button>
+<!-- ══════════════════════════════════════
+     战术终端（全屏浮层）
+══════════════════════════════════════ -->
+<div id="tactical-terminal" class="hud-hidden">
+    <div id="terminal-tab-bar">
+        <button id="term-tab-shop"    class="term-tab" onclick="switchTerminalTab('shop')">⬡ 黑市</button>
+        <button id="term-tab-tech"    class="term-tab" onclick="switchTerminalTab('tech')">◉ 超频</button>
+        <button id="term-tab-loadout" class="term-tab" onclick="switchTerminalTab('loadout')">⚔ 装配</button>
+        <button class="term-close" onclick="toggleTerminal()">✕</button>
     </div>
-    <div id="terminal-viewport" style="flex: 1; padding: 20px; overflow-y: auto;"></div>
+    <div id="terminal-viewport"></div>
 </div>
 
 </body>

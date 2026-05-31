@@ -135,6 +135,17 @@ const BLUE_TECH_TIERS = {
     damage:   { values: [2, 3, 5, 8], costs: [0.4, 1.3, 3.0, 5.0] },
     maxHp:    { values: [20, 50, 80, 120], costs: [1.2, 2.2, 3.8, 6.5] }
 };
+// 物品图标映射（Unicode 像素风）
+const ITEM_ICONS = {
+    'high_explosive': '⚡', 'spread': '≋',  'burst_core': '≫',  'hp_max':    '♥',
+    'homing':         '⊙',  'pulse':  '〰', 'laser':      '━',  'pierce':    '▸',
+    'speed':          '▶',  'debt_protocol': '⚠',
+    'rapid_charge':   '◉',  'phase_dodge': '◈', 'afterburn': '✦', 'skill_cd': '⟳',
+    'crit_rate': '★',  'crit_dmg': '◆', 'aoe': '◎', 'wingman': '✈',
+    'heal': '✚',  'heal_up': '✚', 'magnet': '⊕', 'shield_gen': '◈', 'slot': '▣',
+    'healer_rate': '✚', 'skill_duration': '◉'
+};
+function getItemIcon(id) { return ITEM_ICONS[id] || (id ? '◆' : '◆'); }
 let bullets = [], enemyBullets = [], enemies = [], particles = [], items = [], floatingTexts = [], stars = [], aoeEffects = [];
 let score = 0, frameCount = 0, gameTimeSeconds = 0;
 let shakeTimer = 0, shakeIntensity = 0;
@@ -840,21 +851,35 @@ function updateAndDrawStars(ctx, isPlaying) {
 
 // --- [11] 核心战斗函数 ---
 
-function activateSkill() { 
+function activateSkill() {
     if (!player) return;
-    if (player.skillEnergy >= player.maxSkillEnergy && player.skillCdTimer <= 0 && player.skillActiveTimer <= 0) { 
-        player.skillEnergy = 0; 
-        
-        // 【L2 物理接线：读取黑市买到的 skill_duration 等级】
-        // 基础 600帧(10秒) + 每级额外增加 60帧(1秒)
+    if (player.skillEnergy >= player.maxSkillEnergy && player.skillCdTimer <= 0 && player.skillActiveTimer <= 0) {
+        player.skillEnergy = 0;
+
         let bonusFrames = (player.upgrades['skill_duration'] || 0) * 60;
-        player.skillActiveTimer = 600 + bonusFrames; 
-        
-        triggerShake(10, 10); 
-        flashScreenTimer = 15; 
-        flashScreenColor = '0, 229, 255'; 
-        wasSkillFull = false; 
-        updateHUD(); 
+        player.skillActiveTimer = 600 + bonusFrames;
+
+        triggerShake(10, 10);
+        flashScreenTimer = 15;
+        flashScreenColor = '0, 229, 255';
+        wasSkillFull = false;
+
+        // 激活粒子圆环爆发
+        for (let i = 0; i < 20; i++) {
+            let angle = (Math.PI * 2 / 20) * i;
+            let spd = 4 + Math.random() * 4;
+            particles.push(new Particle(player.x, player.y, '#00e5ff',
+                Math.cos(angle) * spd, Math.sin(angle) * spd, 22));
+        }
+        // 外圈黄色粒子
+        for (let i = 0; i < 10; i++) {
+            let angle = (Math.PI * 2 / 10) * i + 0.15;
+            let spd = 2 + Math.random() * 2;
+            particles.push(new Particle(player.x, player.y, '#ffea00',
+                Math.cos(angle) * spd, Math.sin(angle) * spd, 30));
+        }
+
+        updateHUD();
     } else {
         triggerShake(4, 4);
     }
@@ -920,7 +945,13 @@ function updateHUD() {
 function updatePixelButtons() {
     if (!player) return;
     let skProg = player.skillActiveTimer > 0 ? (player.skillActiveTimer / 600) : (player.skillCdTimer > 0 ? (1 - player.skillCdTimer / 900) : player.skillEnergy / player.maxSkillEnergy);
-    let skColor = player.skillActiveTimer > 0 ? '#00e5ff' : (player.skillCdTimer > 0 ? '#ff1744' : (player.skillEnergy >= player.maxSkillEnergy ? '#ffea00' : '#00b0ff'));
+    let ratio = player.skillEnergy / player.maxSkillEnergy;
+    let skColor;
+    if (player.skillActiveTimer > 0)     skColor = '#00e5ff';
+    else if (player.skillCdTimer > 0)    skColor = '#ff1744';
+    else if (ratio >= 1.0)               skColor = '#ffea00';
+    else if (ratio >= 0.6)               skColor = '#00e676';
+    else                                 skColor = '#00b0ff';
     
     drawPixelButton('skill-btn-cvs', sprites.i_skill, skProg, skColor); 
     drawPixelButton('pause-btn-cvs', sprites.i_pause, 0, '#fff');
@@ -1089,17 +1120,42 @@ function toggleEquipment(id) {
     updateHUD(); 
 }
 
-function renderShopCards() { 
-    ui.shopPts.innerText = player.pt.toFixed(1); 
-    ui.shopCards.innerHTML = ''; 
-    currentShopItems.forEach(opt => { 
-        let itemCost = getShopCost(opt); 
-        const el = document.createElement('div'); 
-        el.className = `upgrade-card ${player.pt >= itemCost ? '' : 'disabled'}`; 
-        el.innerHTML = `<div class="card-info"><div class="card-title">${opt.name}</div></div><div class="card-cost">${itemCost.toFixed(1)}</div>`; 
-        el.onclick = () => { if (player.pt >= itemCost) buyUpgrade(opt.id); }; 
-        ui.shopCards.appendChild(el); 
-    }); 
+function renderShopCards() {
+    ui.shopPts.innerText = player.pt.toFixed(1);
+    ui.shopCards.innerHTML = '';
+    currentShopItems.forEach((opt, i) => {
+        if (opt.soldOut) {
+            ui.shopCards.innerHTML += `<div class="upgrade-card disabled" style="opacity:0.25;justify-content:center;">
+                <div style="font-family:'Press Start 2P',monospace;font-size:8px;color:#444;">— 已售出 —</div></div>`;
+            return;
+        }
+        let itemCost = getShopCost(opt);
+        let canBuy = player.pt >= itemCost;
+        let rDef = (typeof RARITY !== 'undefined' && RARITY[opt.rarity]) ? RARITY[opt.rarity] : { color: '#fff', name: '' };
+        let icon = getItemIcon(opt.id);
+        let lvText = opt.type === 'equip'
+            ? `Lv.${(player.equipment[opt.id] && player.equipment[opt.id].owned) ? player.equipment[opt.id].level : 0}/${opt.max || '?'}`
+            : (opt.max && opt.max < 999 ? `${(player.upgrades[opt.id]||0)}/${opt.max}` : '');
+        const el = document.createElement('div');
+        el.className = `upgrade-card ${canBuy ? '' : 'disabled'}`;
+        el.style.borderColor = rDef.color + '55';
+        el.innerHTML = `
+            <div class="card-item-icon">${icon}</div>
+            <div class="card-info">
+                <div class="card-title">
+                    <span style="color:${rDef.color}">${opt.name}</span>
+                    <span class="card-rarity" style="color:${rDef.color};border-color:${rDef.color};">${rDef.name || opt.rarity || ''}</span>
+                </div>
+                ${opt.desc ? `<div class="card-desc">${opt.desc}</div>` : ''}
+            </div>
+            <div class="card-cost-box">
+                <div class="card-cost" style="color:${canBuy ? '#ffea00' : '#555'}">${itemCost.toFixed(1)}</div>
+                <div class="card-cost-label">PT</div>
+                <div class="card-max">${lvText}</div>
+            </div>`;
+        el.onclick = () => { if (canBuy) buyUpgrade(i); };
+        ui.shopCards.appendChild(el);
+    });
 }
 
 function refreshShop() { 
@@ -1329,7 +1385,16 @@ function loop(timestamp) {
 
         if (player) {
             if (player.skillActiveTimer > 0) {
-                player.skillActiveTimer--; if (player.skillActiveTimer <= 0) player.skillCdTimer = 900;
+                player.skillActiveTimer--;
+                if (player.skillActiveTimer <= 0) {
+                    // skill_cd 缩减：每级冷却 -15%
+                    let cdReduction = 1.0 - Math.min(0.45, (player.upgrades.skill_cd || 0) * 0.15);
+                    player.skillCdTimer = Math.round(900 * cdReduction);
+                    // 技能结束时的短暂红色提示
+                    flashScreenTimer = 8;
+                    flashScreenColor = '255, 100, 0';
+                    triggerShake(4, 4);
+                }
             } else if (player.skillCdTimer > 0) { player.skillCdTimer--; }
         }
 
@@ -1348,6 +1413,10 @@ function loop(timestamp) {
                     e.takeDamage(finalDmg, true, isCrit, 'bullet');
                     b.hitEnemies.add(e);
                     if (player.upgrades && player.upgrades.aoe > 0) triggerAOE(e.x, e.y);
+                    // afterburn：命中后有概率留下燃烧AOE（小范围持续伤害）
+                    if (player.upgrades && player.upgrades.afterburn > 0 && Math.random() < 0.25 * player.upgrades.afterburn) {
+                        triggerAOE(e.x, e.y, player.getStat('damage') * 0.3, 28);
+                    }
                     if (b.hitEnemies.size > b.pierceCount) {
                         b.active = false;
                         if(!player.upgrades || player.upgrades.aoe === 0) particles.push(new Particle(b.x, b.y, isCrit ? '#ffea00' : '#ffffff', (Math.random()-0.5)*4, (Math.random()-0.5)*4, 6));
@@ -1442,36 +1511,66 @@ function toggleTerminal() {
 
 function switchTerminalTab(tabId) {
     let view = document.getElementById('terminal-viewport');
-    if (!player) return;
+    if (!player || !view) return;
+
+    // Tab 激活状态高亮
+    let tabBtns = document.querySelectorAll('#terminal-tab-bar > button.term-tab');
+    tabBtns.forEach(btn => {
+        btn.style.color = '#666';
+        btn.style.borderBottom = '2px solid transparent';
+        btn.style.background = 'none';
+    });
+    let activeBtn = document.getElementById('term-tab-' + tabId);
+    if (activeBtn) {
+        activeBtn.style.color = '#ffea00';
+        activeBtn.style.borderBottom = '2px solid #ffea00';
+    }
+
+    const PIXEL_FONT = "'Press Start 2P', 'DotGothic16', monospace";
+    const S = (css) => `style="${css}"`;
 
     if (tabId === 'shop') {
         if (typeof currentShopItems === 'undefined' || currentShopItems.length === 0) generateShopItems();
-        let html = `<h3 style="color:#ff1744; margin-top:0;">[ 黑市网络 ]</h3>
-                    <p>算力: <span style="color:#ffea00;">${player.pt.toFixed(1)} PT</span></p>
-                    <div style="display:flex; gap:10px; margin-bottom: 20px;">`;
+        let html = `<div ${S('font-family:'+PIXEL_FONT+';font-size:10px;color:#ff1744;letter-spacing:2px;margin-bottom:10px;')}>⬡ 黑市网络</div>`;
+        html += `<div ${S('display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;')}>
+            <span ${S('font-size:9px;color:#aaa;font-family:'+PIXEL_FONT)}>算力</span>
+            <span ${S('color:#ffea00;font-family:'+PIXEL_FONT+';font-size:12px;')}>${player.pt.toFixed(1)} PT</span>
+        </div>`;
+        html += `<div ${S('display:flex;gap:8px;margin-bottom:14px;')}>`;
         currentShopItems.forEach((opt, index) => {
             if (opt.soldOut) {
-                html += `<div style="flex:1; border: 1px solid #333; padding: 10px; background: rgba(0,0,0,0.5); text-align: center;">
-                            <div style="color:#555; font-weight:bold; margin-top:15px;">[ 货柜已空 ]</div>
-                         </div>`;
-            } else {
-                let cost = getShopCost(opt);
-                let canBuy = player.pt >= cost;
-                html += `<div style="flex:1; border: 1px solid ${canBuy ? '#ff1744' : '#555'}; padding: 10px; background: rgba(255,23,68,0.1); cursor: ${canBuy ? 'pointer' : 'not-allowed'}; text-align: center;" onclick="${canBuy ? `terminalBuyRed(${index})` : ''}">
-                            <div style="font-weight:bold; color:#fff; font-size:12px;">${opt.name}</div>
-                            <div style="color:#ffea00; margin-top:10px;">${cost.toFixed(1)} PT</div>
-                         </div>`;
+                html += `<div ${S('flex:1;border:2px solid #222;padding:12px 8px;background:rgba(0,0,0,0.4);text-align:center;border-radius:4px;')}>
+                    <div ${S('font-size:16px;margin-bottom:6px;color:#333;')}>✕</div>
+                    <div ${S('color:#444;font-family:'+PIXEL_FONT+';font-size:7px;')}>已售出</div></div>`;
+                return;
             }
+            let cost = getShopCost(opt);
+            let canBuy = player.pt >= cost;
+            let rDef = (typeof RARITY !== 'undefined' && RARITY[opt.rarity]) ? RARITY[opt.rarity] : { color: '#fff', name: '' };
+            let icon = getItemIcon(opt.id);
+            let borderCol = canBuy ? '#ff1744' : '#333';
+            let bgCol = canBuy ? 'rgba(255,23,68,0.07)' : 'rgba(0,0,0,0.25)';
+            html += `<div onclick="${canBuy ? `terminalBuyRed(${index})` : ''}" ${S(`flex:1;border:2px solid ${borderCol};border-radius:4px;padding:12px 8px;background:${bgCol};cursor:${canBuy?'pointer':'not-allowed'};text-align:center;`)}>
+                <div ${S('font-size:22px;margin-bottom:6px;')}>${icon}</div>
+                <div ${S('font-family:'+PIXEL_FONT+';font-size:8px;color:'+rDef.color+';margin-bottom:4px;line-height:1.4;')}>${opt.name}</div>
+                <div ${S('font-size:7px;color:#555;border:1px solid '+rDef.color+'44;border-radius:3px;padding:1px 4px;display:inline-block;margin-bottom:6px;color:'+rDef.color+';')}>${rDef.name || ''}</div>
+                ${opt.desc ? `<div ${S('font-size:7px;color:#666;line-height:1.5;margin-bottom:8px;')}>${opt.desc}</div>` : ''}
+                <div ${S('font-family:'+PIXEL_FONT+';font-size:11px;color:'+(canBuy?'#ffea00':'#444')+';margin-top:4px;border-top:1px solid #222;padding-top:8px;')}>${cost.toFixed(1)} PT</div>
+            </div>`;
         });
-        html += `</div><button onclick="terminalRefreshShop()" style="width:100%; padding:15px; background:rgba(17,17,17,0.8); color:#fff; border:1px solid #ff1744; cursor:pointer; font-family:inherit;">强制刷新 (1.0 PT)</button>`;
+        html += `</div>`;
+        html += `<button onclick="terminalRefreshShop()" ${S('width:100%;padding:10px;background:rgba(10,10,10,0.9);color:#ff1744;border:2px solid #ff1744;border-radius:4px;cursor:pointer;font-family:'+PIXEL_FONT+';font-size:8px;letter-spacing:1px;')}>⟳ 强制刷新 (-1.0 PT)</button>`;
         view.innerHTML = html;
-        
+
     } else if (tabId === 'tech') {
-        let html = `<h3 style="color:#00e676; margin-top:0;">[ 蓝轨系统超频 ]</h3>
-                    <p>算力: <span style="color:#00e5ff;">${player.pt.toFixed(1)} PT</span></p>
-                    <table style="width:100%; text-align:left; border-collapse: collapse; margin-top:15px;">
-                        <tr style="border-bottom: 1px solid #00e676; color:#00e676;"><th style="padding-bottom:10px;">超频模块</th><th style="padding-bottom:10px;">当前增益</th><th style="padding-bottom:10px;">操作</th></tr>`;
-        
+        let html = `<div ${S('font-family:'+PIXEL_FONT+';font-size:10px;color:#00e676;letter-spacing:2px;margin-bottom:12px;')}>■ 蓝轨超频</div>`;
+        html += `<div ${S('font-size:9px;color:#aaa;margin-bottom:16px;')}>可用算力: <span ${S('color:#00e5ff;font-family:'+PIXEL_FONT)}>${player.pt.toFixed(1)} PT</span></div>`;
+        html += `<table ${S('width:100%;border-collapse:collapse;font-size:9px;')}>
+            <tr ${S('border-bottom:2px solid #00e676;color:#00e676;font-family:'+PIXEL_FONT)}>
+                <th ${S('text-align:left;padding:8px 0;')}>模块</th>
+                <th ${S('padding:8px;')}>当前</th>
+                <th ${S('padding:8px;')}>操作</th>
+            </tr>`;
         const renderRow = (key, name, unit) => {
             let lv = player.techLevels[key] || 0;
             let cfg = BLUE_TECH_TIERS[key];
@@ -1479,33 +1578,45 @@ function switchTerminalTab(tabId) {
             let curVal = isMax ? cfg.values[cfg.values.length-1] : (lv > 0 ? cfg.values[lv-1] : 0);
             let nextCost = isMax ? 'MAX' : cfg.costs[lv];
             let canBuy = !isMax && player.pt >= nextCost;
-            
-            html += `<tr style="border-bottom: 1px dashed #555;">
-                        <td style="padding: 15px 0;">${name} (Lv.${lv})</td>
-                        <td style="color:#ffea00;">+${key === 'fireRate' ? (curVal*100).toFixed(0)+'%' : curVal+unit}</td>
-                        <td><button onclick="terminalBuyBlue('${key}')" style="background:${isMax ? '#333' : (canBuy ? '#00e676' : '#555')}; color:${isMax ? '#555' : '#000'}; border:none; padding:8px 15px; cursor:${isMax ? 'not-allowed' : 'pointer'}; font-weight:bold;">${isMax ? '已满级' : '超频 ('+nextCost+' PT)'}</button></td>
-                     </tr>`;
+            let display = key === 'fireRate' ? (curVal*100).toFixed(0)+'%' : curVal + unit;
+            html += `<tr ${S('border-bottom:1px dashed #333;')}>
+                <td ${S('padding:12px 0;font-family:'+PIXEL_FONT+';font-size:8px;')}>${name}<br><span ${S('color:#666;font-size:7px;')}>Lv.${lv}</span></td>
+                <td ${S('text-align:center;color:#ffea00;font-family:'+PIXEL_FONT+';font-size:9px;')}>+${lv > 0 ? display : '—'}</td>
+                <td ${S('text-align:center;padding:8px;')}>
+                    <button onclick="terminalBuyBlue('${key}')" ${S('background:'+(isMax?'#1a1a1a':(canBuy?'#00e676':'#333'))+';color:'+(isMax?'#444':'#000')+';border:none;padding:8px 12px;cursor:'+(isMax?'default':'pointer')+';font-family:'+PIXEL_FONT+';font-size:7px;')}>
+                        ${isMax ? 'MAX' : (canBuy ? `超频 ${nextCost}PT` : `需${nextCost}PT`)}
+                    </button>
+                </td>
+            </tr>`;
         };
-        
         renderRow('fireRate', '射击频率', '');
         renderRow('damage', '基础火力', '');
-        renderRow('maxHp', '装甲韧性', ' HP');
+        renderRow('maxHp', '装甲韧性', 'HP');
         html += `</table>`;
         view.innerHTML = html;
-        
+
     } else if (tabId === 'loadout') {
-        // 装配逻辑保持不变
-        let html = `<h3 style="color:#00b0ff; margin-top:0;">[ 装备模块管理 ]</h3><p>算力槽位: ${player.usedSlots} / ${player.maxSlots}</p><div style="display:flex; flex-wrap:wrap; gap:10px;">`;
+        let html = `<div ${S('font-family:'+PIXEL_FONT+';font-size:10px;color:#00b0ff;letter-spacing:2px;margin-bottom:12px;')}>■ 模块装配</div>`;
+        html += `<div ${S('font-size:9px;color:#aaa;margin-bottom:16px;')}>核心插槽: <span ${S('color:#fff;font-family:'+PIXEL_FONT)}>${player.usedSlots}/${player.maxSlots}</span></div>`;
+        html += `<div ${S('display:flex;flex-wrap:wrap;gap:10px;')}>`;
+        let hasAny = false;
         for (let id in player.equipment) {
             let eq = player.equipment[id];
-            if (eq.owned) {
-                let canToggle = eq.equipped ? eq.canUnequip : (player.usedSlots + eq.slotCost <= player.maxSlots);
-                html += `<div onclick="${canToggle ? `terminalToggleEquip('${id}')` : ''}" style="border: 1px solid ${eq.equipped ? '#00b0ff' : '#555'}; padding: 10px; background: ${eq.equipped ? 'rgba(0,176,255,0.2)' : 'rgba(255,255,255,0.05)'}; cursor: ${canToggle ? 'pointer' : 'not-allowed'}; width: 45%;">
-                            <div style="color:${eq.equipped ? '#fff' : '#888'}; font-weight:bold;">${eq.name} Lv.${eq.level}</div>
-                            <div style="color:#aaa; font-size:10px; margin-top:5px;">占用: ${eq.slotCost}</div>
-                         </div>`;
-            }
+            if (!eq.owned) continue;
+            hasAny = true;
+            let canToggle = eq.equipped ? eq.canUnequip !== false : (player.usedSlots + eq.slotCost <= player.maxSlots);
+            let def = upgradePool.find(u => u.id === id) || {};
+            let rarityColor = (typeof RARITY !== 'undefined' && RARITY[def.rarity]) ? RARITY[def.rarity].color : '#fff';
+            html += `<div onclick="${canToggle ? `terminalToggleEquip('${id}')` : ''}" ${S(`border:2px solid ${eq.equipped?'#00b0ff':'#333'};padding:12px;background:${eq.equipped?'rgba(0,176,255,0.12)':'rgba(255,255,255,0.03)'};cursor:${canToggle?'pointer':'not-allowed'};width:calc(50% - 10px);box-sizing:border-box;`)}>
+                <div ${S('font-family:'+PIXEL_FONT+';font-size:8px;color:'+rarityColor+';')}>${eq.name}</div>
+                <div ${S('font-size:7px;color:#888;margin-top:4px;')}>Lv.${eq.level} · 占${eq.slotCost}槽</div>
+                ${def.desc ? `<div ${S('font-size:7px;color:#666;margin-top:4px;line-height:1.4;')}>${def.desc}</div>` : ''}
+                <div ${S('font-size:7px;margin-top:6px;color:'+(eq.equipped?'#00b0ff':'#555')+';font-family:'+PIXEL_FONT)}>
+                    ${eq.equipped ? '[已装备]' : (canToggle ? '[点击装备]' : '[槽位不足]')}
+                </div>
+            </div>`;
         }
+        if (!hasAny) html += `<div ${S('color:#555;font-size:9px;')}>尚未购买任何装备模块。</div>`;
         html += `</div>`;
         view.innerHTML = html;
     }

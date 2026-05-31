@@ -23,27 +23,34 @@ const ENEMY_TYPES = Object.keys(WORKSHOP.data.enemies).map(key => {
 
 // 【数据混入】：保留静态描述，混入工坊里的价格与等级上限
 const baseUpgradePool = [
-{ id: 'high_explosive', type: 'equip', name: '高能弹头', slotCost: 1, rarity: 'rare', initialCost: 3, cost: 2, costStep: 3, max: 4 }, 
-{ id: 'spread', type: 'equip', name: '散弹模组', slotCost: 2, rarity: 'epic', initialCost: 6, cost: 6, costStep: 6, max: 3 },
-{ id: 'skill_duration', type: 'upgrade', name: '超频运转', rarity: 'rare', cost: 3, max: 3 },
-{ id: 'burst_core', type: 'equip', name: '连发核心', slotCost: 1, rarity: 'epic', initialCost: 2, cost: 4, costStep: 2, max: 3 },
+{ id: 'high_explosive', type: 'equip', name: '高能弹头',  slotCost: 1, rarity: 'R', initialCost: 3,   cost: 1.4, costStep: 2, max: 4, desc: '弹头伤害提升。每级+15%基础伤害。' },
+{ id: 'spread',         type: 'equip', name: '散弹模组',  slotCost: 2, rarity: 'E', initialCost: 4.0, cost: 4.0, costStep: 0.5, max: 3, desc: '发射扇形散弹。每级扩大散布并增加弹数。' },
+{ id: 'skill_duration', type: 'upgrade', name: '超频运转', rarity: 'R', cost: 3, max: 3, desc: '技能持续时间+1秒/级。' },
+{ id: 'burst_core',     type: 'equip', name: '连发核心',  slotCost: 1, rarity: 'E', initialCost: 2,   cost: 3.0, costStep: 2, max: 3, desc: '射速大幅提升。每级额外缩短射击间隔。' },
 
-    { id: 'heal', type: 'utility', name: '紧急修复', rarity: 'C', unlockPT: 0, unlockTime: 0, desc: '立刻固定恢复20点耐久度。' },
-    { id: 'heal_up', type: 'utility', name: '修复增幅', rarity: 'R', unlockPT: 0, unlockTime: 0, desc: '增加血包恢复量(+5%)。' },
-    { id: 'magnet', type: 'utility', name: '引力场', rarity: 'C', unlockPT: 0, unlockTime: 0, desc: '扩大能量晶体与补给的拾取范围。' },
-    { id: 'crit_rate', type: 'stat', name: '精准校准', rarity: 'R', unlockPT: 1.0, unlockTime: 0, desc: '暴击概率提升5%。' },
-    { id: 'crit_dmg', type: 'stat', name: '弱点分析', rarity: 'E', unlockPT: 2.0, unlockTime: 0, desc: '暴击伤害提升20%。' },
-    { id: 'healer_rate', type: 'utility', name: '补给雷达', rarity: 'E', unlockPT: 2.0, unlockTime: 30, desc: '增加携带修复包的机体概率(+3%)。' }, 
-    { id: 'aoe', type: 'stat', name: '高爆弹头', rarity: 'L', unlockPT: 8.0, unlockTime: 60, desc: '部分攻击能引发大范围爆炸。' }, 
-    { id: 'wingman', type: 'stat', name: '战斗僚机', rarity: 'L', unlockPT: 12.0, unlockTime: 90, desc: '部署一台自动攻击敌人的浮游炮。' },
-    { id: 'slot', type: 'utility', name: '系统插槽', rarity: 'L', unlockPT: 2.0, unlockTime: 0, desc: '背包容量扩充，+1 装备插槽。' }, 
-    
-    { id: 'hp_max', type: 'equip', name: '装甲重塑', rarity: 'E', slotCost: 1, unlockPT: 0, unlockTime: 0, desc: '提升血量上限(30-30-40)。获取时自动回复对应血量。' },
-    { id: 'homing', type: 'equip', name: '追踪模块', rarity: 'E', slotCost: 2, unlockPT: 5.0, unlockTime: 60, desc: '子弹弱追踪。升级提升制导。' },
-    { id: 'pulse', type: 'equip', name: '脉冲发射', rarity: 'R', slotCost: 2, unlockPT: 4.0, unlockTime: 60, desc: '点射模式。升级缩短发射间隔。' },
-    { id: 'laser', type: 'equip', name: '高能激光', rarity: 'L', slotCost: 3, unlockPT: 15.0, unlockTime: 120, desc: '发射贯穿屏障的高频光束。' },
-    { id: 'pierce', type: 'equip', name: '穿透弹头', rarity: 'E', slotCost: 1, unlockPT: 4.0, unlockTime: 60, desc: '子弹可穿透敌机。升级降低衰减并增加穿透次数。' },
-    { id: 'debt_protocol', type: 'equip', name: '恶魔剥削', rarity: 'E', initialCost: 0, cost: 0, costStep: 0, max: 1, slotCost: 0, canUnequip: false, unlockPT: 3.0, unlockTime: 60, desc: '立刻获得 3.0 PT。绑定外置槽不可卸下。代价：火力永久衰减20%。' }
+    { id: 'heal',       type: 'utility', name: '紧急修复', rarity: 'C', unlockPT: 0,    unlockTime: 0,   desc: '立刻固定恢复20点耐久度。' },
+    { id: 'heal_up',    type: 'utility', name: '修复增幅', rarity: 'R', unlockPT: 0,    unlockTime: 0,   desc: '血包恢复量+5%/级。' },
+    { id: 'magnet',     type: 'utility', name: '引力场',   rarity: 'C', unlockPT: 0,    unlockTime: 0,   desc: '扩大能量晶体与补给的拾取范围。' },
+    { id: 'crit_rate',  type: 'stat',    name: '精准校准', rarity: 'R', unlockPT: 1.0,  unlockTime: 0,   desc: '暴击概率+5%/级。' },
+    { id: 'crit_dmg',   type: 'stat',    name: '弱点分析', rarity: 'E', unlockPT: 2.0,  unlockTime: 0,   desc: '暴击伤害+20%/级。' },
+    { id: 'healer_rate',type: 'utility', name: '补给雷达', rarity: 'E', unlockPT: 2.0,  unlockTime: 30,  desc: '携带修复包的机体概率+3%/级。' },
+    { id: 'aoe',        type: 'stat',    name: '高爆弹头', rarity: 'L', unlockPT: 8.0,  unlockTime: 60,  desc: '部分攻击引发大范围爆炸。' },
+    { id: 'wingman',    type: 'stat',    name: '战斗僚机', rarity: 'L', unlockPT: 12.0, unlockTime: 90,  desc: '部署自动攻击敌人的浮游炮。' },
+    { id: 'slot',       type: 'utility', name: '系统插槽', rarity: 'L', unlockPT: 2.0,  unlockTime: 0,   desc: '背包容量扩充，+1 装备插槽。' },
+
+    { id: 'hp_max',   type: 'equip', name: '装甲重塑', rarity: 'E', slotCost: 1, unlockPT: 0,    unlockTime: 0,   desc: '血量上限+30/30/40，获取时自动补血。' },
+    { id: 'homing',   type: 'equip', name: '追踪模块', rarity: 'E', slotCost: 2, unlockPT: 5.0,  unlockTime: 60,  initialCost: 2.5, desc: '子弹弱追踪敌机。升级提升制导强度。' },
+    { id: 'pulse',    type: 'equip', name: '脉冲发射', rarity: 'R', slotCost: 2, unlockPT: 4.0,  unlockTime: 60,  desc: '点射模式。升级缩短发射间隔。' },
+    { id: 'laser',    type: 'equip', name: '高能激光', rarity: 'L', slotCost: 3, unlockPT: 15.0, unlockTime: 120, initialCost: 5.0, desc: '发射贯穿屏障的高频光束。' },
+    { id: 'pierce',   type: 'equip', name: '穿透弹头', rarity: 'E', slotCost: 1, unlockPT: 4.0,  unlockTime: 60,  desc: '子弹穿透敌机。升级降低衰减并增加穿透数。' },
+    { id: 'debt_protocol', type: 'equip', name: '恶魔剥削', rarity: 'E', initialCost: 0, cost: 0, costStep: 0, max: 1, slotCost: 0, canUnequip: false, unlockPT: 3.0, unlockTime: 60, desc: '立刻获得 3.0 PT。绑定外置槽不可卸下。代价：火力永久衰减20%。' },
+
+    // 新增商品
+    { id: 'rapid_charge', type: 'stat',    name: '快速充能', rarity: 'R', unlockPT: 1.0,  unlockTime: 0,  desc: '击杀敌人额外获得+5技能能量/级。' },
+    { id: 'phase_dodge',  type: 'stat',    name: '相位闪避', rarity: 'E', unlockPT: 3.0,  unlockTime: 30, desc: '受伤时15%概率完全免疫伤害/级(最高45%)。' },
+    { id: 'afterburn',    type: 'stat',    name: '余烬',     rarity: 'E', unlockPT: 5.0,  unlockTime: 60, desc: '子弹命中后留下燃烧AOE区域，持续灼烧。' },
+    { id: 'shield_gen',   type: 'utility', name: '屏障再生', rarity: 'R', unlockPT: 1.5,  unlockTime: 0,  desc: '每次休整波次结束时回复8%最大HP/级。' },
+    { id: 'skill_cd',     type: 'upgrade', name: '超频缩减', rarity: 'R', unlockPT: 2.0,  unlockTime: 0,  desc: '技能冷却时间-15%/级(最多-45%)。' }
 ];
 
 const upgradePool = baseUpgradePool.map(item => {
