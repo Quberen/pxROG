@@ -62,7 +62,7 @@ window.WORKSHOP = {
         // 开场发育波：低血高速流星，稀疏→中等→密集三段，大量资源掉落
         p0_starfall: function(sec, frame, diff, w) {
             // 三段密度渐进：前6秒稀疏，6-12秒中等，12秒后密集
-            let density = sec < 6 ? 0.025 : sec < 12 ? 0.055 : 0.10;
+            let density = sec < 6 ? 0.025 : sec < 12 ? 0.055 : 0.07;
             if (Math.random() < density) {
                 let rand = Math.random();
                 spawn('Locator', Math.random() * (w - 60) + 30, {
@@ -83,16 +83,15 @@ window.WORKSHOP = {
             if (frame % 90 === 0) {
                 let cx = Math.random() * (w - 120) + 60;
                 let cnt = sec < 6 ? 2 : (diff >= 2 ? 4 : 3);
-                let clusterSpeed = 1.8 + diff * 0.25;
+                let clusterSpeed = sec < 12 ? (1.8 + diff * 0.25) : (2.8 + diff * 0.4);
+                let monoType = (frame % 540 === 0) ? (Math.random() < 0.5 ? 'heal' : 'battery') : null;
                 for (let i = 0; i < cnt; i++) {
                     let rand2 = Math.random();
-                    spawn('Locator', cx + (Math.random() - 0.5) * 60, {
-                        speedOverride: clusterSpeed,
-                        hpMod: 0.45,
-                        forceHeal: rand2 < 0.35,
-                        forceBattery: rand2 >= 0.35 && rand2 < 0.70,
-                        y: -40 - i * 22
-                    });
+                    let opt = { speedOverride: clusterSpeed, hpMod: monoType ? 0.60 : 0.45, y: -40 - i * 22 };
+                    if (monoType === 'heal') opt.forceHeal = true;
+                    else if (monoType === 'battery') opt.forceBattery = true;
+                    else { opt.forceHeal = rand2 < 0.35; opt.forceBattery = rand2 >= 0.35 && rand2 < 0.70; }
+                    spawn('Locator', cx + (Math.random() - 0.5) * 25, opt);
                 }
             }
         },

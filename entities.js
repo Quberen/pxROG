@@ -51,6 +51,10 @@ class Player {
             maxHp: 0
         };
 
+        this.techTree = {};
+        this.ironWallUsed = false;
+        this.skillDamageMult = 1.0;
+
 
         this.equipment = {};
         upgradePool.filter(i => i.type === 'equip').forEach(i => {
@@ -147,7 +151,11 @@ class Player {
         this.processShooting();
         
         if (this.invincible > 0) this.invincible--;
-        
+
+        if (this.techTree && this.techTree.def_regen && typeof frameCount !== 'undefined' && frameCount % 60 === 0) {
+            this.hp = Math.min(this.getStat('maxHp'), this.hp + this.techTree.def_regen);
+        }
+
         if (this.skillActiveTimer > 0) {
             if (frameCount % 2 === 0 && particles.length < 200) {
                 particles.push(new Particle(this.x, this.y + this.h / 2, '#00e5ff', (Math.random() - 0.5) * 5, 4 + Math.random() * 4, 20));
@@ -182,10 +190,16 @@ class Player {
             pRet = eq.pierce.level >= 2 ? 0.8 : 0.5;
         }
         
+        // tech_overclock：CD期间火力+50%
+        if (this.skillCdTimer > 0 && this.techTree && this.techTree.tech_overclock >= 1) {
+            currentDamage *= 1.5;
+        }
+
         let spawnBullet = (vx, vy) => {
             // [技能视觉反馈：弹道变黄]
             let bulletColor = this.skillActiveTimer > 0 ? '#ffeb3b' : '#ffffff';
-            let b = new Bullet(this.x, this.y - this.h / 2, vx, vy, cw, ch, currentDamage, pCnt, pRet, actCritRate, actCritDmg, bulletColor);
+            let skillMult = (this.skillActiveTimer > 0 && this.skillDamageMult) ? this.skillDamageMult : 1.0;
+            let b = new Bullet(this.x, this.y - this.h / 2, vx, vy, cw, ch, currentDamage * skillMult, pCnt, pRet, actCritRate, actCritDmg, bulletColor);
             b.isHoming = eq.homing && eq.homing.equipped;
             b.homingTurn = homingTurn;
             bullets.push(b);
@@ -194,7 +208,13 @@ class Player {
         let doShoot = () => {
             if (eq.laser && eq.laser.equipped) return;
             if (eq.spread && eq.spread.equipped) {
-                let count = Math.min(5, eq.spread.level + 1);
+                let spreadBase = eq.spread.level + 1;
+                let techSpread = (this.techTree && this.techTree.fp_scatter) || 0;
+                let count = Math.min(7, spreadBase + techSpread);
+                let startVx = -1.5 * (count - 1) / 2;
+                for (let i = 0; i < count; i++) spawnBullet(startVx + 1.5 * i, -16);
+            } else if (this.techTree && this.techTree.fp_scatter > 0) {
+                let count = Math.min(3, 1 + this.techTree.fp_scatter);
                 let startVx = -1.5 * (count - 1) / 2;
                 for (let i = 0; i < count; i++) spawnBullet(startVx + 1.5 * i, -16);
             } else {
@@ -212,6 +232,7 @@ class Player {
                 this.laserTick++;
                 if (this.laserTick % 5 === 0) {
                     let laserMult = 0.25 + (eq.laser.level - 1) * 0.15;
+                    laserMult *= (1 + ((this.techTree && this.techTree.fp_laser) || 0) * 0.25);
                     let laserDmg = currentDamage * laserMult;
                     
                     enemies.forEach(e => {
@@ -277,20 +298,27 @@ class Player {
     takeDamage(amount, isPercent = false, sourceStr = 'normal') {
         if (this.invincible > 0 || endingState !== 'none') return;
 
-        // phase_dodge：受伤时有概率完全免疫（每级+15%）
-        if (this.upgrades.phase_dodge > 0) {
-            let dodgeChance = this.upgrades.phase_dodge * 0.15;
-            if (Math.random() < dodgeChance) {
-                if (typeof pushFloatingText !== 'undefined') pushFloatingText(this.x, this.y - 25, 'DODGE', '#00e5ff', true, false, '');
-                this.invincible = 12;
-                return;
-            }
+        // phase_dodge：受伤时有概率完全免疫（每级+15%，科技树def_dodge额外+10%/级）
+        let dodgeChance = (this.upgrades.phase_dodge || 0) * 0.15 + ((this.techTree && this.techTree.def_dodge) || 0) * 0.10;
+        if (dodgeChance > 0 && Math.random() < dodgeChance) {
+            if (typeof pushFloatingText !== 'undefined') pushFloatingText(this.x, this.y - 25, 'DODGE', '#00e5ff', true, false, '');
+            this.invincible = 12;
+            return;
         }
 
         let currentMaxHp = this.getStat('maxHp');
         let actualAmount = isPercent ? Math.max(40, Math.floor(currentMaxHp * amount)) : amount;
         if (!isPercent && currentDifficulty === 3) actualAmount *= 1.25;
-        
+
+        // def_ultimate：铁壁——每波首次致命伤害改为保留1HP
+        if (!this.ironWallUsed && this.techTree && this.techTree.def_ultimate >= 1) {
+            if (this.hp - actualAmount <= 0) {
+                actualAmount = this.hp - 1;
+                this.ironWallUsed = true;
+                if (typeof pushFloatingText !== 'undefined') pushFloatingText(this.x, this.y - 35, 'IRON WALL', '#ffea00', true, false, '');
+            }
+        }
+
         this.hp -= actualAmount;
         this.invincible = 20;
         
@@ -562,6 +590,7 @@ class BaseEnemy {
     }
 
     takeDamage(amount, showText = true, isCrit = false, damageType = 'normal') {
+        if (this.damageReduction > 0) amount = Math.max(1, Math.round(amount * (1 - this.damageReduction)));
         this.hp -= amount;
         
         if (particles.length < 150) {
@@ -633,7 +662,6 @@ class CrystalLocator extends BaseEnemy {
         super(x, y, sprites.crystal_locator, def.hp, def.weight, '#e0f7fa');
         this.speed = speedOverride || 0.8;
         this.isCrystal = true;
-        this.isElite = true;
     }
     update() {
         this.baseUpdate();
@@ -880,7 +908,10 @@ class BossScrapDominator extends BaseEnemy {
         
         this.isSpecial = true;
         this.isBoss = true;
-        
+
+        this.damageReduction = 0;
+        this.chargePhase = null;
+
         this.laserWarnTimer = 0;
         this.laserFireTimer = 0;
         
@@ -913,7 +944,7 @@ class BossScrapDominator extends BaseEnemy {
             flashScreenTimer = 20;
             flashScreenColor = '255, 23, 68';
             this.state = 'HOVER';
-            this.timer = 30;
+            this.timer = 35;
         }
         
         if (this.state === 'ENTER') {
@@ -947,13 +978,17 @@ class BossScrapDominator extends BaseEnemy {
                     } else if (roll < 0.40) {
                         this.state = 'ATTACK_RING';
                         this.timer = 60;
-                    } else if (roll < 0.70) {
+                    } else if (roll < 0.65) {
                         this.state = 'ATTACK_SPIRAL';
                         this.timer = 90; this.spiralAngle = 0;
-                    } else if (roll < 0.90) {
+                    } else if (roll < 0.82) {
                         this.state = 'ATTACK_LASER';
                         this.laserWarnTimer = 40;
                         this.laserFireTimer = 60;
+                    } else if (roll < 0.93) {
+                        this.state = 'ATTACK_CHARGE';
+                        this.chargePhase = 'WARN';
+                        this.timer = 50;
                     } else {
                         this.state = 'ATTACK_TURRETS';
                         this.timer = 30;
@@ -963,15 +998,19 @@ class BossScrapDominator extends BaseEnemy {
                     if (roll < 0.20) {
                         this.state = 'ATTACK_SPAWN';
                         this.timer = 30;
-                    } else if (roll < 0.45) {
+                    } else if (roll < 0.42) {
                         this.state = 'ATTACK_RING';
                         this.timer = 45;
-                    } else if (roll < 0.70) {
+                    } else if (roll < 0.62) {
                         this.state = 'ATTACK_SPIRAL';
                         this.timer = 80; this.spiralAngle = 0;
-                    } else if (roll < 0.85) {
+                    } else if (roll < 0.76) {
                         this.state = 'ATTACK_RUSH';
                         this.timer = 120; this.rushDir = null; this.rushCount = 0;
+                    } else if (roll < 0.90) {
+                        this.state = 'ATTACK_CHARGE';
+                        this.chargePhase = 'WARN';
+                        this.timer = 40;
                     } else {
                         this.state = 'ATTACK_LASER';
                         this.laserWarnTimer = 30;
@@ -1011,9 +1050,9 @@ class BossScrapDominator extends BaseEnemy {
             this.timer--;
             this.x += (this.targetX - this.x) * 0.005;
 
-            if (this.timer % 15 === 0) {
+            if (this.timer % 18 === 0) {
                 let bCount = this.phase === 1 ? 12 : (this.phase === 2 ? 16 : 20);
-                let offset = (this.timer / 15) * 0.2;
+                let offset = (this.timer / 18) * 0.2;
                 for (let i = 0; i < bCount; i++) {
                     let angle = (Math.PI * 2 / bCount) * i + offset;
                     enemyBullets.push(new EnemyBullet(this.x, this.y, Math.cos(angle) * 3, Math.sin(angle) * 3, 'normal'));
@@ -1022,7 +1061,7 @@ class BossScrapDominator extends BaseEnemy {
 
             if (this.timer <= 0) {
                 this.state = 'HOVER';
-                this.timer = this.phase === 1 ? 45 : (this.phase === 3 ? 20 : 60);
+                this.timer = this.phase === 1 ? 60 : (this.phase === 3 ? 35 : 75);
             }
         } else if (this.state === 'ATTACK_SPIRAL') {
             this.timer--;
@@ -1082,11 +1121,45 @@ class BossScrapDominator extends BaseEnemy {
                 triggerShake(3, 2);
             } else {
                 this.state = 'HOVER';
-                this.timer = this.phase === 3 ? 20 : 60;
+                this.timer = this.phase === 3 ? 35 : 75;
                 this.targetX = Math.random() * (width - 100) + 50;
             }
+        } else if (this.state === 'ATTACK_CHARGE') {
+            this.timer--;
+            if (this.chargePhase === 'WARN') {
+                this.x += Math.sin(this.timer * 0.4) * 2.5;
+                if (this.timer <= 0) {
+                    this.chargePhase = 'DASH';
+                    this.timer = 60;
+                    this.damageReduction = 0.80;
+                }
+            } else if (this.chargePhase === 'DASH') {
+                this.y -= 18;
+                for (let i = enemies.length - 1; i >= 0; i--) {
+                    let e = enemies[i];
+                    if (!e.isBoss && e.active && Math.abs(e.x - this.x) < 25) e.hp = 0;
+                }
+                if (currentDifficulty >= 3 && this.timer % 8 === 0) {
+                    enemyBullets.push(new EnemyBullet(this.x - 20, this.y, -2, 2.5, 'normal'));
+                    enemyBullets.push(new EnemyBullet(this.x + 20, this.y,  2, 2.5, 'normal'));
+                }
+                if (this.y < -80 || this.timer <= 0) {
+                    this.chargePhase = 'RETURN';
+                    this.timer = 90;
+                    this.x = this.targetX;
+                    this.y = -80;
+                }
+            } else {
+                this.y += 3.0;
+                if (this.y >= 80) {
+                    this.damageReduction = 0;
+                    this.chargePhase = null;
+                    this.state = 'HOVER';
+                    this.timer = this.phase === 3 ? 35 : 75;
+                }
+            }
         }
-        
+
         this.checkPlayerCollision(false, 40);
     }
 
@@ -1176,7 +1249,8 @@ class Item {
                 player.pt += this.value;
                 pushFloatingText(50 + (Math.random() - 0.5) * 15, 45 + (Math.random() - 0.5) * 10, `+${this.value % 1 === 0 ? this.value : this.value.toFixed(1)}`, '#e0e0e0', false, false, "", 6);
             } else if (this.type === 'hp') {
-                let healAmt = this.value.isElite ? player.maxHp * 0.60 : player.maxHp * (0.20 + (player.upgrades.heal_up * 0.05));
+                let healBase = this.value.isElite ? player.maxHp * 0.60 : player.maxHp * (0.20 + (player.upgrades.heal_up * 0.05));
+                let healAmt = healBase * (1 + ((player.techTree && player.techTree.def_heal) || 0) * 0.20);
                 player.heal(healAmt, this.value.isElite);
             } else if (this.type === 'energy') {
                 let extraEnergy = (player.upgrades.rapid_charge || 0) * 5;

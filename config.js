@@ -61,6 +61,24 @@ function getHpMaxBoost(level) {
     if(level === 0) return 0; if(level === 1) return 30; if(level === 2) return 60; return 100;
 }
 
+const TECH_TREE = [
+    { id: 'root',          branch: 'root', maxLevel: 1, costs: [20],          prereq: null,           name: '系统核心',   desc: '激活科技树' },
+    { id: 'fp_scatter',    branch: 'fire', maxLevel: 3, costs: [15, 25, 40],  prereq: 'root',         name: '散射矩阵',   desc: '每级+1弹扩散（无散弹模组时生效）' },
+    { id: 'fp_laser',      branch: 'fire', maxLevel: 3, costs: [15, 25, 40],  prereq: 'root',         name: '激光增幅',   desc: '每级激光伤害×1.25' },
+    { id: 'fp_afterburn',  branch: 'fire', maxLevel: 2, costs: [30, 50],      prereq: 'fp_scatter',   name: '余燃强化',   desc: '每级+1余燃层' },
+    { id: 'fp_ultimate',   branch: 'fire', maxLevel: 1, costs: [60],          prereq: 'fp_laser',     name: '全方位爆发', desc: '技能触发时额外发射20发全向弹' },
+    { id: 'def_regen',     branch: 'def',  maxLevel: 3, costs: [12, 20, 35],  prereq: 'root',         name: '纳米修复',   desc: '每级每60帧回1HP' },
+    { id: 'def_dodge',     branch: 'def',  maxLevel: 3, costs: [12, 20, 35],  prereq: 'root',         name: '规避机动',   desc: '每级+10%闪避率' },
+    { id: 'def_heal',      branch: 'def',  maxLevel: 2, costs: [25, 40],      prereq: 'def_regen',    name: '治愈强化',   desc: '每级治疗道具效果+20%' },
+    { id: 'def_ultimate',  branch: 'def',  maxLevel: 1, costs: [60],          prereq: 'def_dodge',    name: '铁壁',       desc: '每波首次致命伤害改为保留1HP' },
+    { id: 'tech_skillcd',  branch: 'tech', maxLevel: 3, costs: [15, 25, 40],  prereq: 'root',         name: '算力超频',   desc: '每级技能CD-15%' },
+    { id: 'tech_wingman',  branch: 'tech', maxLevel: 3, costs: [15, 25, 40],  prereq: 'root',         name: '僚机扩编',   desc: '每级+1僚机' },
+    { id: 'tech_energy',   branch: 'tech', maxLevel: 2, costs: [20, 35],      prereq: 'tech_skillcd', name: '能量回收',   desc: '每级每次击杀回0.5能量' },
+    { id: 'tech_ultimate', branch: 'tech', maxLevel: 2, costs: [40, 60],      prereq: 'tech_wingman', name: '战略加成',   desc: '每级技能伤害×1.4' },
+    { id: 'def_shield',    branch: 'def',  maxLevel: 1, costs: [80],          prereq: 'def_ultimate', name: '能量护盾',   desc: '激活铁壁后获得3HP额外护盾' },
+    { id: 'tech_overclock',branch: 'tech', maxLevel: 1, costs: [80],          prereq: 'tech_ultimate',name: '极限超频',   desc: '技能冷却期间火力+50%' },
+];
+
 function createPixelTexture(grid, colors, pixelSize) {
     const rows = grid.length; const cols = grid[0].length;
     const c = document.createElement('canvas'); c.width = cols * pixelSize; c.height = rows * pixelSize;
@@ -79,7 +97,10 @@ function initSprites() {
     sprites.pt_core = createPixelTexture([[0,1,0],[1,2,1],[0,1,0]], ['#ffffff', '#e0e0e0'], 3);
     sprites.energy_crystal = createPixelTexture([[0,1,0],[1,2,1],[0,1,0]], ['#00e5ff', '#ffffff'], 3);
     
-    sprites.crystal_locator = createPixelTexture([[1,0,1,0,1],[0,2,1,2,0],[1,1,3,1,1],[0,2,1,2,0],[1,0,1,0,1]], ['#e0f7fa', '#ffffff', '#80deea'], 3);
+    sprites.crystal_locator = createPixelTexture([[0,1,2,1,0],[1,2,3,2,1],[2,3,4,3,2],[1,2,3,2,1],[0,1,2,1,0]], ['#b0bec5', '#cfd8dc', '#e0e0e0', '#ffffff'], 3);
+    sprites.node_fire  = createPixelTexture([[0,0,1,0,0],[0,1,2,1,0],[1,2,2,2,1],[0,1,2,1,0],[0,0,1,0,0]], ['#ff5722', '#ff8a65'], 3);
+    sprites.node_def   = createPixelTexture([[0,1,1,1,0],[1,2,2,2,1],[1,2,2,2,1],[0,1,2,1,0],[0,0,1,0,0]], ['#1565c0', '#42a5f5'], 3);
+    sprites.node_tech  = createPixelTexture([[0,0,1,0,0],[0,1,2,1,0],[1,2,1,2,1],[0,1,2,1,0],[0,0,1,0,0]], ['#2e7d32', '#66bb6a'], 3);
     sprites.pale_crystal = createPixelTexture([[0,1,0],[1,2,1],[0,1,0]], ['#e0f7fa', '#ffffff'], 3);
     sprites.locator = createPixelTexture([[1,0,0,0,1],[0,1,2,1,0],[1,2,3,2,1],[0,1,2,1,0],[0,1,0,1,0]], ['#546e7a', '#90a4ae', '#ff1744'], 3);
     sprites.locator_swarm = createPixelTexture([[1,0,0,0,1],[0,1,2,1,0],[1,2,3,2,1],[0,1,2,1,0],[0,1,0,1,0]], ['#4a148c', '#ab47bc', '#00b0ff'], 3); 
