@@ -373,6 +373,17 @@ const LootSystem = {
     init() {
         EventBus.on('ENTITY_DIED', (data) => {
             if (!data.killedByPlayer) return;
+            if (data.isCrystal) {
+                let cnt = 3 + Math.floor(Math.random() * 3);
+                for (let i = 0; i < cnt; i++) {
+                    items.push(new Item(
+                        data.x + (Math.random() - 0.5) * 30,
+                        data.y + (Math.random() - 0.5) * 10,
+                        'pale_crystal', 3.0
+                    ));
+                }
+                return;
+            }
             if (data.isHealer) {
                 items.push(new Item(data.x, data.y, 'hp', { isElite: data.isElite }));
             } else if (data.isBattery) {
@@ -580,8 +591,9 @@ window.spawnEnemyByType = function(type, x, options = {}) {
         case 'ArcFlyerSwarm': e = new ArcFlyer(0, startY + 20, Math.random() > 0.5, 0, true); break; 
         case 'Turret': e = new Turret(x, startY, false, forceHeal, isDF); break; 
         case 'TurretSwarm': e = new Turret(x, startY, true, forceHeal, isDF); break; 
-        case 'Tank': e = new Tank(x, startY); break; 
+        case 'Tank': e = new Tank(x, startY); break;
         case 'TankSwarm': e = new Tank(x, startY, false, true); break;
+        case 'CrystalLocator': e = new CrystalLocator(x, startY, speedOver); break;
     }
     
     if (e) {

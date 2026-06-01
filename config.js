@@ -79,6 +79,8 @@ function initSprites() {
     sprites.pt_core = createPixelTexture([[0,1,0],[1,2,1],[0,1,0]], ['#ffffff', '#e0e0e0'], 3);
     sprites.energy_crystal = createPixelTexture([[0,1,0],[1,2,1],[0,1,0]], ['#00e5ff', '#ffffff'], 3);
     
+    sprites.crystal_locator = createPixelTexture([[1,0,1,0,1],[0,2,1,2,0],[1,1,3,1,1],[0,2,1,2,0],[1,0,1,0,1]], ['#e0f7fa', '#ffffff', '#80deea'], 3);
+    sprites.pale_crystal = createPixelTexture([[0,1,0],[1,2,1],[0,1,0]], ['#e0f7fa', '#ffffff'], 3);
     sprites.locator = createPixelTexture([[1,0,0,0,1],[0,1,2,1,0],[1,2,3,2,1],[0,1,2,1,0],[0,1,0,1,0]], ['#546e7a', '#90a4ae', '#ff1744'], 3);
     sprites.locator_swarm = createPixelTexture([[1,0,0,0,1],[0,1,2,1,0],[1,2,3,2,1],[0,1,2,1,0],[0,1,0,1,0]], ['#4a148c', '#ab47bc', '#00b0ff'], 3); 
     sprites.locator_healer = createPixelTexture([[1,0,0,0,1],[0,1,2,1,0],[1,2,3,2,1],[0,1,2,1,0],[0,1,0,1,0]], ['#1b5e20', '#4caf50', '#b2ff59'], 3);

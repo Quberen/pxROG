@@ -601,6 +601,7 @@ class BaseEnemy {
             isBattery: this.isBattery,
             isHealer: this.isHealer,
             isBossMinion: this.isBossMinion,
+            isCrystal: this.isCrystal,
             particleColor: this.particleColor,
             weight: this.weight
         });
@@ -618,6 +619,22 @@ class Locator extends BaseEnemy {
         this.isAbyss = isAbyss;
     }
 
+    update() {
+        this.baseUpdate();
+        this.y += this.speed;
+        this.checkBounds();
+        this.checkPlayerCollision();
+    }
+}
+
+class CrystalLocator extends BaseEnemy {
+    constructor(x, y, speedOverride = null) {
+        let def = WORKSHOP.data.enemies['CrystalLocator'];
+        super(x, y, sprites.crystal_locator, def.hp, def.weight, '#e0f7fa');
+        this.speed = speedOverride || 0.8;
+        this.isCrystal = true;
+        this.isElite = true;
+    }
     update() {
         this.baseUpdate();
         this.y += this.speed;
@@ -1109,6 +1126,7 @@ class Item {
         else if (type === 'pt_core') this.sprite = sprites.pt_core;
         else if (type === 'pt_shard') this.sprite = sprites.pt_shard;
         else if (type === 'energy') this.sprite = sprites.energy_crystal;
+        else if (type === 'pale_crystal') this.sprite = sprites.pale_crystal;
         else this.sprite = sprites.pt_shard;
         
         this.w = this.sprite.width;
@@ -1165,6 +1183,9 @@ class Item {
                 player.skillEnergy = Math.min(player.maxSkillEnergy, player.skillEnergy + this.value + extraEnergy);
                 pushFloatingText(skillBtnRect.x, skillBtnRect.y - 30, `+ENG`, '#00e5ff', false, false, "", 8);
                 updateHUD();
+            } else if (this.type === 'pale_crystal') {
+                player.pt += this.value;
+                pushFloatingText(50 + (Math.random() - 0.5) * 15, 45, `+${this.value.toFixed(1)}`, '#e0f7fa', false, false, "", 6);
             }
         }
         

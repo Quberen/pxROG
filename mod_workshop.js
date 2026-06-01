@@ -14,6 +14,7 @@ window.WORKSHOP = {
             "KamikazeSwarm": { hp: 12,  weight: 16, unlockTime: 40,  role: 'swarm' }, "ArcFlyerSwarm": { hp: 144, weight: 20, unlockTime: 50,  role: 'swarm' },
             "TurretSwarm":   { hp: 72,  weight: 22, unlockTime: 70,  role: 'swarm' }, "KamikazeSpec":  { hp: 180, weight: 30, unlockTime: 60,  role: 'elite' },
             "Tank":          { hp: 120, weight: 30, unlockTime: 85,  role: 'tank' }, "TankSwarm":     { hp: 180, weight: 40, unlockTime: 100, role: 'tank' },
+            "CrystalLocator": { hp: 120, weight: 5, unlockTime: 0, role: 'elite' },
             "Formation_V_Strike":    { weight: 12, unlockTime: 20, role: 'formation' }, "Formation_Turret_Wall": { weight: 25, unlockTime: 50, role: 'formation' }, "Formation_Ambush": { weight: 28, unlockTime: 65, role: 'formation' }
         },
         items: {
@@ -58,30 +59,39 @@ window.WORKSHOP = {
     patterns: {
         p0_rest: function(sec, frame, diff, w) { /* 喝茶中 */ },
 
-        // 开场发育波：低血高速流星，大量资源掉落，练习射击感知
+        // 开场发育波：低血高速流星，稀疏→中等→密集三段，大量资源掉落
         p0_starfall: function(sec, frame, diff, w) {
-            // 单兵流星：概率型，每帧约8%生成一个高速低血Locator
-            if (Math.random() < 0.08) {
+            // 三段密度渐进：前6秒稀疏，6-12秒中等，12秒后密集
+            let density = sec < 6 ? 0.025 : sec < 12 ? 0.055 : 0.10;
+            if (Math.random() < density) {
                 let rand = Math.random();
                 spawn('Locator', Math.random() * (w - 60) + 30, {
-                    speedOverride: 3.0 + diff * 0.5 + Math.random() * 1.5,
+                    speedOverride: 3.0 + diff * 0.4 + Math.random() * 1.2,
                     hpMod: 0.35,
-                    forceHeal: rand < 0.4,
-                    forceBattery: rand >= 0.4 && rand < 0.75
+                    forceHeal: rand < 0.40,
+                    forceBattery: rand >= 0.40 && rand < 0.75
                 });
             }
-            // 流星簇：每100帧一组3-4个相近位置Locator
-            if (frame % 100 === 0) {
+            // 最高难度：极低概率出现深渊流星（LocatorSwarm）
+            if (diff >= 3 && Math.random() < 0.005) {
+                spawn('LocatorSwarm', Math.random() * (w - 60) + 30, {
+                    speedOverride: 2.5 + Math.random() * 0.8,
+                    hpMod: 0.5
+                });
+            }
+            // 流星簇：每90帧一组，全员共用同一速度（视觉整齐）
+            if (frame % 90 === 0) {
                 let cx = Math.random() * (w - 120) + 60;
-                let cnt = diff >= 2 ? 4 : 3;
+                let cnt = sec < 6 ? 2 : (diff >= 2 ? 4 : 3);
+                let clusterSpeed = 1.8 + diff * 0.25;
                 for (let i = 0; i < cnt; i++) {
                     let rand2 = Math.random();
-                    spawn('Locator', cx + (Math.random() - 0.5) * 80, {
-                        speedOverride: 1.8 + diff * 0.3 + Math.random() * 0.4,
+                    spawn('Locator', cx + (Math.random() - 0.5) * 60, {
+                        speedOverride: clusterSpeed,
                         hpMod: 0.45,
                         forceHeal: rand2 < 0.35,
-                        forceBattery: rand2 >= 0.35 && rand2 < 0.7,
-                        y: -40 - i * 20
+                        forceBattery: rand2 >= 0.35 && rand2 < 0.70,
+                        y: -40 - i * 22
                     });
                 }
             }
@@ -118,9 +128,9 @@ window.WORKSHOP = {
         p4_swarm_cover: function(sec, frame, diff, w) {
             if (sec === 1 && frame % 60 === 0) {
                 let tType = diff >= 2 ? 'TurretSwarm' : 'Turret';
-                spawn(tType, 50, { isDumbFire: true, fireInterval: 25 });
-                spawn(tType, w - 50, { isDumbFire: true, fireInterval: 25 });
-                if (diff >= 3) spawn(tType, w / 2, { isDumbFire: true, fireInterval: 20 });
+                spawn(tType, 50,     { isDumbFire: true, fireInterval: 25, hpMod: 0.55 });
+                spawn(tType, w - 50, { isDumbFire: true, fireInterval: 25, hpMod: 0.55 });
+                if (diff >= 3) spawn(tType, w / 2, { isDumbFire: true, fireInterval: 20, hpMod: 0.55 });
             }
             if (sec >= 3 && frame % 90 === 0) {
                 spawn('Tank', w / 2 - 60, { speedOverride: 0.8 }); spawn('Tank', w / 2, { speedOverride: 0.8 }); spawn('Tank', w / 2 + 60, { speedOverride: 0.8 });
@@ -131,20 +141,23 @@ window.WORKSHOP = {
         },
         p5_supply: function(sec, frame, diff, w) {
             if (sec === 1 && frame % 60 === 0) {
-                let sW = w / 8;
-                let rows = 5, cols = 6;
+                let cols = 8, rows = 7;
+                let sW = w / (cols + 1);
                 for (let r = 0; r < rows; r++) {
                     for (let c = 1; c <= cols; c++) {
+                        let isMidRow = r >= 2 && r <= 5;
                         let rand = Math.random();
-                        let opt = { speedOverride: 0.7, hpMod: 0.45, y: -40 - r * 35 };
-                        if (rand < 0.35) opt.forceHeal = true;
-                        else if (rand < 0.75) opt.forceBattery = true;
-                        spawn('Locator', sW * c, opt);
+                        if (isMidRow && rand < 0.15) {
+                            // 中间行偶现水晶Locator（高血量，掉苍白水晶）
+                            spawn('CrystalLocator', sW * c, { speedOverride: 0.6, y: -40 - r * 32 });
+                        } else {
+                            let rand2 = Math.random();
+                            let opt = { speedOverride: 0.7, hpMod: 0.45, y: -40 - r * 32 };
+                            if (rand2 < 0.35) opt.forceHeal = true;
+                            else if (rand2 < 0.75) opt.forceBattery = true;
+                            spawn('Locator', sW * c, opt);
+                        }
                     }
-                }
-                // 右侧额外WandererLow列，必掉血量
-                for (let r = 0; r < rows; r++) {
-                    spawn('WandererLow', sW * 7, { speedOverride: 0.6, hpMod: 0.5, forceHeal: true, y: -40 - r * 35 });
                 }
             }
         },
@@ -280,26 +293,39 @@ window.WORKSHOP = {
             state: { currentWave: 0, waveTimer: 0 },
 
             timeline: [
-                { type: "p0_starfall",   duration: 18 },
+                // Act 1: 发育期（低威胁，建立资源基础）
+                { type: "p0_starfall",   duration: 20 },
                 { type: "p0_rest",       exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 8  }, { type: "clear_all", value: true }] } },
                 { type: "p1_intro",      duration: 20 },
                 { type: "p0_rest",       exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 8  }, { type: "clear_all", value: true }] } },
-                { type: "p5_supply",     duration: 12 },
-                { type: "p0_rest",       duration: 8 },
-                { type: "p2_cover",      duration: 28 },
-                { type: "p0_rest",       exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 12 }, { type: "clear_all", value: true }] } },
+
+                // Act 2: 机制入门（补给 + 炮台/空中协同 + 侧翼夹击）
+                { type: "p5_supply",     duration: 18 },
+                { type: "p0_rest",       duration: 10 },
+                { type: "p2_cover",      duration: 22 },
+                { type: "p0_rest",       exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 10 }, { type: "clear_all", value: true }] } },
                 { type: "p9_flanker",    duration: 22 },
-                { type: "p0_rest",       duration: 10 },
+                { type: "p0_rest",       exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 10 }, { type: "clear_all", value: true }] } },
+
+                // Act 3: 空间谜题（走廊位置预判 + 铁桶阵收缩）
                 { type: "p11_corridor",  duration: 22 },
-                { type: "p0_rest",       exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 12 }, { type: "clear_all", value: true }] } },
+                { type: "p0_rest",       exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 10 }, { type: "clear_all", value: true }] } },
                 { type: "p3_gather",     duration: 25 },
-                { type: "p0_rest",       duration: 10 },
-                { type: "p12_crossfire", duration: 20 },
+                { type: "p0_rest",       exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 10 }, { type: "clear_all", value: true }] } },
+
+                // 中场补给（含水晶Locator，回血/补能）
+                { type: "p5_supply",     duration: 15 },
+                { type: "p0_rest",       duration: 12 },
+
+                // Act 4: 高压进阶（弹幕阵 + 弹幕走廊 + 闪电压制）
+                { type: "p12_crossfire", duration: 22 },
                 { type: "p0_rest",       exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 12 }, { type: "clear_all", value: true }] } },
                 { type: "p4_swarm_cover",duration: 28 },
                 { type: "p0_rest",       duration: 10 },
                 { type: "p13_blitz",     duration: 22 },
                 { type: "p0_rest",       exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 10 }, { type: "clear_all", value: true }] } },
+
+                // Act 5: 最终高潮 + Boss
                 { type: "p6_press",      duration: 25 },
                 { type: "p0_rest",       exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 10 }, { type: "clear_all", value: true }] } },
                 { type: "p8_boss",       duration: 9999 }
