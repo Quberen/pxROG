@@ -63,7 +63,7 @@ const TECH_TREE = [
       prereq: null,    minRootLevel: 0,
       name: '系统核心', desc: 'Lv.1一阶 · Lv.2二阶 · Lv.3三阶 · Lv.4特化' },
     { id: 'atk_dmg',   branch: 'atk', maxLevel: 3, costs: [4, 8, 14],
-      prereq: 'root',  minRootLevel: 1, name: '基础攻击',  desc: '每级基础伤害+10%' },
+      prereq: 'root',  minRootLevel: 1, name: '基础攻击',  desc: '1级+2·2级再+3·3级再+4（基础伤害平值）' },
     { id: 'atk_crit',  branch: 'atk', maxLevel: 1, costs: [18],
       prereq: 'atk_dmg', minRootLevel: 4, name: '暴击锐化', desc: '暴击时伤害额外×2' },
     { id: 'def_red',   branch: 'def', maxLevel: 3, costs: [4, 8, 14],

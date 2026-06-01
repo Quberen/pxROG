@@ -108,7 +108,9 @@ class Player {
                 // 提供 20% 加成，每级额外 10%
                 inc += 0.20 + (dmgCore.level - 1) * 0.10;
             }
-            inc += ((this.techTree && this.techTree.atk_dmg) || 0) * 0.10;
+            const ATK_DMG_FLAT = [0, 2, 5, 9];
+            let atkLv = (this.techTree && this.techTree.atk_dmg) || 0;
+            base += ATK_DMG_FLAT[Math.min(3, atkLv)] || 0;
         }
         
         if (statName === 'fireRate') {
