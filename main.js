@@ -155,6 +155,7 @@ let score = 0, frameCount = 0, gameTimeSeconds = 0;
 let shakeQueue = [];
 let shakeTimer = 0, shakeIntensity = 0;
 let lowHpShakeCooldown = 0;
+let bossEnterPhase = 0;
 let comboCount = 0, comboTimer = 0;
 const maxComboTimer = 90;
 let endingState = 'none', endingTimer = 0;
@@ -184,7 +185,7 @@ const AudioSystem = {
     bgmAudioEl: null, bgmSourceNode: null, fallbackOsc: null,
     stopTimer: null, dmgFilterTimer: null, dmgFilterActive: false,
     
-    config: { normalFreq: 20000, uiMuffleFreq: 600, uiFadeTime: 0.1, dmgMuffleFreq: 300, dmgDuration: 250, dmgFadeOut: 0.8 },
+    config: { normalFreq: 20000, uiMuffleFreq: 600, uiFadeTime: 0.1, dmgMuffleFreq: 300, dmgDuration: 600, dmgFadeOut: 2.5 },
 
     initGraph() {
         if (globalAudioCtx) return;
@@ -567,13 +568,13 @@ window.spawnEnemyByType = function(type, x, options = {}) {
             formDef.forEach(en => { 
                 let rx = cx + (en.x || 0); 
                 let ry = options.y ? options.y + (en.y || 0) : -40 + (en.y || 0); 
-                let eOpts = { 
-                    forceHeal: en.forceHeal || forceHeal, 
-                    forceBattery: en.forceBattery || forceBat, 
-                    speedOverride: en.speed || null, 
-                    y: ry, 
-                    isDumbFire: en.isDumbFire || isDF, 
-                    fireInterval: en.fireInterval || fireInt 
+                let eOpts = {
+                    forceHeal: en.forceHeal || forceHeal,
+                    forceBattery: en.forceBattery || forceBat,
+                    speedOverride: en.speed || speedOver || null,
+                    y: ry,
+                    isDumbFire: en.isDumbFire || isDF,
+                    fireInterval: en.fireInterval || fireInt
                 }; 
                 window.spawnEnemyByType(en.type, rx, eOpts); 
             }); 
@@ -706,29 +707,54 @@ function drawIndicator(color) {
     ic.shadowBlur = 0; ic.fillStyle = '#fff'; ic.fillRect(6, 5, 2, 2); 
 }
 
-function drawPixelButton(id, icon, progress, color) { 
-    let cvs = document.getElementById(id); 
-    if (!cvs) return; 
-    let ctx = cvs.getContext('2d'); 
-    ctx.clearRect(0, 0, 48, 48); 
-    ctx.fillStyle = '#111'; ctx.fillRect(4, 4, 40, 40); 
-    if (progress > 0) { 
-        ctx.fillStyle = color; 
-        ctx.globalAlpha = progress >= 1 ? 0.6 : 0.4; 
-        let fillH = Math.floor(40 * Math.min(1, progress)); 
-        ctx.fillRect(4, 44 - fillH, 40, fillH); 
-        ctx.globalAlpha = 1.0; 
-    } 
-    ctx.fillStyle = '#555'; ctx.fillRect(4, 0, 40, 4); ctx.fillRect(4, 44, 40, 4); ctx.fillRect(0, 4, 4, 40); ctx.fillRect(44, 4, 4, 40); 
-    ctx.fillRect(2, 2, 4, 4); ctx.fillRect(42, 2, 4, 4); ctx.fillRect(2, 42, 4, 4); ctx.fillRect(42, 42, 4, 4); 
-    
+function drawPixelButton(id, icon, progress, color, isActive = false, cdProgress = 0) {
+    let cvs = document.getElementById(id);
+    if (!cvs) return;
+    let ctx = cvs.getContext('2d');
+    ctx.clearRect(0, 0, 48, 48);
+    ctx.fillStyle = '#111'; ctx.fillRect(4, 4, 40, 40);
+    if (progress > 0) {
+        ctx.fillStyle = color;
+        ctx.globalAlpha = progress >= 1 ? 0.6 : 0.4;
+        let fillH = Math.floor(40 * Math.min(1, progress));
+        ctx.fillRect(4, 44 - fillH, 40, fillH);
+        ctx.globalAlpha = 1.0;
+    }
+    // 冷却叠层：暗色蒙层 + 红色冷却条（充满→清空）
+    if (cdProgress > 0) {
+        ctx.globalAlpha = 0.45;
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(4, 4, 40, 40);
+        let cdH = Math.floor(40 * cdProgress);
+        ctx.globalAlpha = 0.35;
+        ctx.fillStyle = '#ff1744';
+        ctx.fillRect(4, 44 - cdH, 40, cdH);
+        ctx.globalAlpha = 1.0;
+    }
+    // 技能激活时：进度条顶部蓝色火花粒子
+    if (isActive && progress >= 1) {
+        let sparkCount = 4;
+        for (let s = 0; s < sparkCount; s++) {
+            let sx = 4 + Math.random() * 40;
+            let sy = 4 + Math.random() * 6;
+            let glow = 0.5 + Math.random() * 0.5;
+            ctx.save();
+            ctx.globalAlpha = glow;
+            ctx.shadowBlur = 5; ctx.shadowColor = color;
+            ctx.fillStyle = Math.random() < 0.5 ? '#ffffff' : color;
+            ctx.fillRect(sx, sy, 2, 2);
+            ctx.shadowBlur = 0; ctx.restore();
+        }
+    }
+    ctx.fillStyle = '#555'; ctx.fillRect(4, 0, 40, 4); ctx.fillRect(4, 44, 40, 4); ctx.fillRect(0, 4, 4, 40); ctx.fillRect(44, 4, 4, 40);
+    ctx.fillRect(2, 2, 4, 4); ctx.fillRect(42, 2, 4, 4); ctx.fillRect(2, 42, 4, 4); ctx.fillRect(42, 42, 4, 4);
     // 【L1 修复：白色的、尺寸与技能一致的原生像素加号】
     if (icon === '+') {
         ctx.fillStyle = '#ffffff';
-        ctx.fillRect(22, 16, 4, 16); 
-        ctx.fillRect(16, 22, 16, 4); 
+        ctx.fillRect(22, 16, 4, 16);
+        ctx.fillRect(16, 22, 16, 4);
     } else if (icon) {
-        ctx.drawImage(icon, 24 - icon.width / 2, 24 - icon.height / 2); 
+        ctx.drawImage(icon, 24 - icon.width / 2, 24 - icon.height / 2);
     }
 }
 
@@ -980,17 +1006,15 @@ function updateHUD() {
 
 function updatePixelButtons() {
     if (!player) return;
-    let skProg = player.skillActiveTimer > 0 ? (player.skillActiveTimer / 600) : (player.skillCdTimer > 0 ? (1 - player.skillCdTimer / 900) : player.skillEnergy / player.maxSkillEnergy);
-    let ratio = player.skillEnergy / player.maxSkillEnergy;
-    let skColor;
-    if (player.skillActiveTimer > 0)  skColor = '#00e5ff';
-    else if (player.skillCdTimer > 0) skColor = '#ff1744';
-    else                              skColor = '#00b0ff';
-    
-    drawPixelButton('skill-btn-cvs', sprites.i_skill, skProg, skColor); 
+    let skProg = player.skillEnergy / player.maxSkillEnergy;
+    let skCdProg = player.skillCdTimer > 0 ? (player.skillCdTimer / 900) : 0;
+    let skColor = player.skillActiveTimer > 0 ? '#00e5ff' : '#00b0ff';
+    let skIsActive = player.skillActiveTimer > 0;
+
+    drawPixelButton('skill-btn-cvs', sprites.i_skill, skProg, skColor, skIsActive, skCdProg);
     drawPixelButton('pause-btn-cvs', sprites.i_pause, 0, '#fff');
     // [修改] 渲染终极统一入口 Terminal
-    drawPixelButton('terminal-btn-cvs', '+', 0, '#00e5ff'); 
+    drawPixelButton('terminal-btn-cvs', '+', 0, '#00e5ff');
 }
 
 const setupMultiTouchButtons = () => {
@@ -1392,13 +1416,14 @@ function loop(timestamp) {
         }
     } else if (isPlaying) {
         frameCount++;
+        if (bossEnterPhase > 0) bossEnterPhase--;
         if (player && player.hp > 0 && endingState !== 'playerDead') {
             player.update();
             if (player.hp < 30 && endingState === 'none') {
-                if (lowHpShakeCooldown <= 0) { triggerShake(3, 8); lowHpShakeCooldown = 60; }
-                else lowHpShakeCooldown--;
-            } else {
-                lowHpShakeCooldown = 0;
+                if (frameCount % 8 === 0) {
+                    triggerShake(3, 8);
+                    uiOffsets.hp.vy -= 3;
+                }
             }
         }
 
@@ -1499,7 +1524,7 @@ function loop(timestamp) {
             while (wingmanEntities.length > totalWingman) wingmanEntities.pop();
 
             let wLv = totalWingman;
-            let wDmg = player.damage * (1.8 + (wLv - 1) * 0.5);
+            let wDmg = 28;
             let wRadius = 28 + (wLv - 1) * 8;
             let swoopInterval = Math.max(210, 380 - (wLv - 1) * 40);
             let respawnTime = Math.max(80, 180 - (wLv - 1) * 25);
@@ -1518,11 +1543,14 @@ function loop(timestamp) {
                             if (d2 < nearDist) { nearDist = d2; nearest = e; }
                         }
                         if (nearest) {
-                            let dist = Math.sqrt(nearDist) || 1;
-                            w.vx = (nearest.x - w.x) / dist * 5;
-                            w.vy = (nearest.y - w.y) / dist * 5;
+                            w._arcStart = { x: w.x, y: w.y };
+                            let ctrlX = (w.x + nearest.x) / 2 + (Math.random() - 0.5) * 80;
+                            let ctrlY = Math.min(w.y, nearest.y) - 60 - Math.random() * 40;
+                            w._arcCtrl = { x: ctrlX, y: ctrlY };
+                            w._arcEnd = { x: nearest.x, y: nearest.y };
+                            w._arcT = 0; w._arcSpeed = 0.022;
                             w._target = nearest;
-                            w.state = 'seek'; w.seekTimer = 0;
+                            w.state = 'arc';
                         } else {
                             w.swoopCooldown = swoopInterval;
                         }
@@ -1535,29 +1563,26 @@ function loop(timestamp) {
                     ctx.lineTo(w.x, w.y + 4); ctx.lineTo(w.x - 3, w.y);
                     ctx.closePath(); ctx.fill();
                     ctx.restore();
-                } else if (w.state === 'seek') {
+                } else if (w.state === 'arc') {
                     let tgt = w._target;
-                    if (tgt && tgt.active) {
-                        let tx = tgt.x - w.x, ty = tgt.y - w.y;
-                        let tl = Math.sqrt(tx*tx + ty*ty) || 1;
-                        w.vx = w.vx * 0.85 + (tx / tl) * 6 * 0.15;
-                        w.vy = w.vy * 0.85 + (ty / tl) * 6 * 0.15;
-                        let sp = Math.sqrt(w.vx*w.vx + w.vy*w.vy);
-                        if (sp > 6) { w.vx = w.vx/sp*6; w.vy = w.vy/sp*6; }
-                    }
-                    w.x += w.vx; w.y += w.vy;
-                    w.seekTimer++;
-                    let hitTarget = (tgt && tgt.active && (w.x - tgt.x)**2 + (w.y - tgt.y)**2 < 15*15);
-                    let timeout = w.seekTimer > 100;
-                    let targetGone = !tgt || !tgt.active;
-                    if (hitTarget || timeout || targetGone) {
+                    if (tgt && tgt.active) w._arcEnd = { x: tgt.x, y: tgt.y };
+                    w._arcT = Math.min(1, w._arcT + w._arcSpeed);
+                    let t = w._arcT;
+                    let bx = (1-t)*(1-t)*w._arcStart.x + 2*(1-t)*t*w._arcCtrl.x + t*t*w._arcEnd.x;
+                    let by = (1-t)*(1-t)*w._arcStart.y + 2*(1-t)*t*w._arcCtrl.y + t*t*w._arcEnd.y;
+                    let hit = tgt && tgt.active && (bx - tgt.x) ** 2 + (by - tgt.y) ** 2 < 18 * 18;
+                    w.x = bx; w.y = by;
+                    if (hit || w._arcT >= 1) {
                         triggerAOE(w.x, w.y, wDmg, wRadius, '#ffea00');
                         w.state = 'dead'; w.respawnTimer = respawnTime;
                     }
-                    // draw seek: yellow diamond rotated toward velocity
+                    // draw arc: yellow diamond rotated toward motion
                     ctx.save();
                     ctx.translate(w.x, w.y);
-                    let ang = Math.atan2(w.vy, w.vx);
+                    let prevT = Math.max(0, w._arcT - 0.01);
+                    let pbx = (1-prevT)*(1-prevT)*w._arcStart.x + 2*(1-prevT)*prevT*w._arcCtrl.x + prevT*prevT*w._arcEnd.x;
+                    let pby = (1-prevT)*(1-prevT)*w._arcStart.y + 2*(1-prevT)*prevT*w._arcCtrl.y + prevT*prevT*w._arcEnd.y;
+                    let ang = Math.atan2(w.y - pby, w.x - pbx);
                     ctx.rotate(ang + Math.PI / 4);
                     ctx.fillStyle = '#ffea00';
                     ctx.beginPath();
@@ -1605,12 +1630,30 @@ function loop(timestamp) {
     if (flashScreenTimer > 0) { ctx.fillStyle = `rgba(${flashScreenColor}, ${flashScreenTimer * 0.05})`; ctx.fillRect(0, 0, width, height); if (isPlaying) flashScreenTimer--; }
 
     if (damageVignetteTimer > 0) {
-        let alpha = (damageVignetteTimer / 25) * 0.55;
+        let alpha = (damageVignetteTimer / 60) * 0.55;
+        let edgeAlpha = (damageVignetteTimer / 60) * 0.4;
         let grad = ctx.createRadialGradient(width / 2, height / 2, height * 0.3, width / 2, height / 2, height * 0.85);
         grad.addColorStop(0, `rgba(${damageVignetteColor}, 0)`);
         grad.addColorStop(1, `rgba(${damageVignetteColor}, ${alpha})`);
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, width, height);
+        // 四条边线性渐变确保全边覆盖
+        let gL = ctx.createLinearGradient(0, 0, width * 0.25, 0);
+        gL.addColorStop(0, `rgba(${damageVignetteColor},${edgeAlpha})`);
+        gL.addColorStop(1, `rgba(${damageVignetteColor},0)`);
+        ctx.fillStyle = gL; ctx.fillRect(0, 0, width * 0.25, height);
+        let gR = ctx.createLinearGradient(width, 0, width * 0.75, 0);
+        gR.addColorStop(0, `rgba(${damageVignetteColor},${edgeAlpha})`);
+        gR.addColorStop(1, `rgba(${damageVignetteColor},0)`);
+        ctx.fillStyle = gR; ctx.fillRect(width * 0.75, 0, width * 0.25, height);
+        let gT = ctx.createLinearGradient(0, 0, 0, height * 0.2);
+        gT.addColorStop(0, `rgba(${damageVignetteColor},${edgeAlpha})`);
+        gT.addColorStop(1, `rgba(${damageVignetteColor},0)`);
+        ctx.fillStyle = gT; ctx.fillRect(0, 0, width, height * 0.2);
+        let gB = ctx.createLinearGradient(0, height, 0, height * 0.8);
+        gB.addColorStop(0, `rgba(${damageVignetteColor},${edgeAlpha})`);
+        gB.addColorStop(1, `rgba(${damageVignetteColor},0)`);
+        ctx.fillStyle = gB; ctx.fillRect(0, height * 0.8, width, height * 0.2);
         if (isPlaying) damageVignetteTimer--;
     }
 
@@ -1864,6 +1907,7 @@ window.techTreeBuy = function(nodeId) {
     if (player.pt < cost) { triggerShake(4, 4); return; }
     player.pt -= cost;
     player.techTree[nodeId] = curLv + 1;
+    if (nodeId === 'hp_max') player.hp = Math.min(player.maxHp, player.hp + 20);
     switchTerminalTab('tech');
     updateHUD();
 };
@@ -2007,7 +2051,7 @@ function startGame(levelId, useCheckpoint = false) {
     }
     enemies = []; bullets = []; enemyBullets = []; items = []; particles = []; floatingTexts = []; aoeEffects = []; burnEffects = []; wingmanEntities = [];
     score = 0; frameCount = 0; gameTimeSeconds = 0;
-    shakeQueue = []; shakeTimer = 0; hitStopFrames = 0; pendingPostHitstopEffect = null; flashScreenTimer = 0; damageVignetteTimer = 0; lowHpShakeCooldown = 0;
+    shakeQueue = []; shakeTimer = 0; hitStopFrames = 0; pendingPostHitstopEffect = null; flashScreenTimer = 0; damageVignetteTimer = 0; lowHpShakeCooldown = 0; bossEnterPhase = 0;
     comboCount = 0; comboTimer = 0; endingState = 'none'; endingTimer = 0;
     shopInflation = 0.0; wasSkillFull = false; wasInRestPhase = false; currentShopItems = [];
     directorPoints = 0; difficultyScore = 1.0;
