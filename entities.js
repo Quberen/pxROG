@@ -1291,9 +1291,10 @@ class BossScrapDominator extends BaseEnemy {
                     let e = enemies[i];
                     if (!e.isBoss && e.active && Math.abs(e.x - this.x) < 25) e.hp = 0;
                 }
-                if (currentDifficulty >= 3 && this.timer % 8 === 0) {
-                    enemyBullets.push(new EnemyBullet(this.x, this.y, -this.chargeDirY * 3, this.chargeDirX * 3, 'normal'));
-                    enemyBullets.push(new EnemyBullet(this.x, this.y,  this.chargeDirY * 3, -this.chargeDirX * 3, 'normal'));
+                if (currentDifficulty >= 2 && this.timer % 8 === 0) {
+                    let bType = currentDifficulty >= 3 ? 'homing' : 'normal';
+                    enemyBullets.push(new EnemyBullet(this.x, this.y, -this.chargeDirY * 3, this.chargeDirX * 3, bType));
+                    enemyBullets.push(new EnemyBullet(this.x, this.y,  this.chargeDirY * 3, -this.chargeDirX * 3, bType));
                 }
                 let offScreen = this.y > height + 80 || this.y < -80 || this.x < -80 || this.x > width + 80;
                 if (offScreen || this.timer <= 0) {
