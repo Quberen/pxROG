@@ -139,7 +139,7 @@ const BLUE_TECH_TIERS = {
 const ITEM_ICONS = {
     'high_explosive': '⚡', 'spread': '≋',  'burst_core': '≫',  'hp_max':    '♥',
     'homing':         '⊙',  'pulse':  '〰', 'laser':      '━',  'pierce':    '▸',
-    'speed':          '▶',  'debt_protocol': '⚠',
+    'speed':          '▶',
     'rapid_charge':   '◉',  'phase_dodge': '◈', 'afterburn': '✦', 'skill_cd': '⟳',
     'crit_rate': '★',  'crit_dmg': '◆', 'aoe': '◎', 'wingman': '✈',
     'heal': '✚',  'heal_up': '✚', 'magnet': '⊕', 'shield_gen': '◈', 'slot': '▣',
@@ -1232,7 +1232,7 @@ function buyUpgrade(index) {
 
 
 function getPlayerPowerScore() { 
-    let power = (player.damage * (player.equipment['debt_protocol'].equipped ? 0.8 : 1.0) - 12) * 0.2; 
+    let power = (player.damage - 12) * 0.2;
     if(player.equipment.speed.equipped) power += 3; 
     if(player.equipment.spread.equipped) power += 5; 
     if(player.equipment.laser.equipped) power += 10; 
@@ -1249,7 +1249,9 @@ function doDirectorSpawns(sec) {
 function updateDifficultyMetrics() {
     if (frameCount % 60 === 0) {
         gameTimeSeconds++;
-        levelHpMultiplier = 1 + Math.pow(gameTimeSeconds / 100, 1.2) * 0.5;
+        const HP_MULT_CAPS = [2.0, 2.5, 3.0, 3.5];
+        let hpCap = HP_MULT_CAPS[currentDifficulty] !== undefined ? HP_MULT_CAPS[currentDifficulty] : 2.5;
+        levelHpMultiplier = Math.min(hpCap, 1 + Math.pow(gameTimeSeconds / 100, 1.2) * 0.5);
         if (shopInflation > 0) shopInflation = Math.max(0, shopInflation - WORKSHOP.data.economy.cooling_rate);
     }
 }
@@ -1395,7 +1397,9 @@ function loop(timestamp) {
             gameTimeSeconds = Math.floor(sec);
 
             if (frameCount % 60 === 0) {
-                levelHpMultiplier = 1 + Math.pow(sec / 100, 1.2) * 0.5;
+                const HP_MULT_CAPS2 = [2.0, 2.5, 3.0, 3.5];
+                let hpCap2 = HP_MULT_CAPS2[currentDifficulty] !== undefined ? HP_MULT_CAPS2[currentDifficulty] : 2.5;
+                levelHpMultiplier = Math.min(hpCap2, 1 + Math.pow(sec / 100, 1.2) * 0.5);
                 if (shopInflation > 0) shopInflation = Math.max(0, shopInflation - WORKSHOP.data.economy.cooling_rate);
             }
 
@@ -1453,15 +1457,15 @@ function loop(timestamp) {
                     let finalDmg = isCrit ? curDmg * b.critDamage : curDmg;
                     e.takeDamage(finalDmg, true, isCrit, 'bullet');
                     b.hitEnemies.add(e);
-                    if (player.upgrades && player.upgrades.aoe > 0) triggerAOE(e.x, e.y);
+                    if (player.equipment && player.equipment.aoe && player.equipment.aoe.equipped) triggerAOE(e.x, e.y);
                     // afterburn：命中后有概率留下燃烧AOE（小范围持续伤害）
-                    let afterburnLevel = (player.upgrades && player.upgrades.afterburn || 0);
+                    let afterburnLevel = (player.equipment && player.equipment.afterburn && player.equipment.afterburn.equipped) ? player.equipment.afterburn.level : 0;
                     if (afterburnLevel > 0 && Math.random() < 0.25 * afterburnLevel) {
                         triggerAOE(e.x, e.y, player.getStat('damage') * 0.3, 28);
                     }
                     if (b.hitEnemies.size > b.pierceCount) {
                         b.active = false;
-                        if(!player.upgrades || player.upgrades.aoe === 0) particles.push(new Particle(b.x, b.y, isCrit ? '#ffea00' : '#ffffff', (Math.random()-0.5)*4, (Math.random()-0.5)*4, 6));
+                        if (!(player.equipment && player.equipment.aoe && player.equipment.aoe.equipped)) particles.push(new Particle(b.x, b.y, isCrit ? '#ffea00' : '#ffffff', (Math.random()-0.5)*4, (Math.random()-0.5)*4, 6));
                     }
                 }
             });

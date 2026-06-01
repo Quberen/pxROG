@@ -34,7 +34,7 @@ const baseUpgradePool = [
     { id: 'crit_rate',  type: 'stat',    name: '精准校准', rarity: 'R', unlockPT: 1.0,  unlockTime: 0,   desc: '暴击概率+5%/级。' },
     { id: 'crit_dmg',   type: 'stat',    name: '弱点分析', rarity: 'E', unlockPT: 2.0,  unlockTime: 0,   desc: '暴击伤害+20%/级。' },
     { id: 'healer_rate',type: 'utility', name: '补给雷达', rarity: 'E', unlockPT: 2.0,  unlockTime: 30,  desc: '携带修复包的机体概率+3%/级。' },
-    { id: 'aoe',        type: 'stat',    name: '高爆弹头', rarity: 'L', unlockPT: 8.0,  unlockTime: 60,  desc: '部分攻击引发大范围爆炸。' },
+    { id: 'aoe',        type: 'equip',   name: '高爆弹头', slotCost: 2, rarity: 'L', initialCost: 3.0, unlockPT: 8.0,  unlockTime: 60,  desc: '部分攻击引发大范围爆炸。' },
     { id: 'wingman',    type: 'stat',    name: '战斗僚机', rarity: 'R', unlockPT: 12.0, unlockTime: 90,  desc: '部署绕轨僚机，定期飞扑最近敌人并爆炸。' },
     { id: 'slot',       type: 'utility', name: '系统插槽', rarity: 'L', unlockPT: 2.0,  unlockTime: 0,   desc: '背包容量扩充，+1 装备插槽。' },
 
@@ -43,12 +43,11 @@ const baseUpgradePool = [
     { id: 'pulse',    type: 'equip', name: '脉冲发射', rarity: 'R', slotCost: 2, unlockPT: 4.0,  unlockTime: 60,  desc: '点射模式。升级缩短发射间隔。' },
     { id: 'laser',    type: 'equip', name: '高能激光', rarity: 'L', slotCost: 3, unlockPT: 15.0, unlockTime: 120, initialCost: 5.0, desc: '发射贯穿屏障的高频光束。' },
     { id: 'pierce',   type: 'equip', name: '穿透弹头', rarity: 'E', slotCost: 1, unlockPT: 4.0,  unlockTime: 60,  desc: '子弹穿透敌机。升级降低衰减并增加穿透数。' },
-    { id: 'debt_protocol', type: 'equip', name: '恶魔剥削', rarity: 'E', initialCost: 0, cost: 0, costStep: 0, max: 1, slotCost: 0, canUnequip: false, unlockPT: 3.0, unlockTime: 60, desc: '立刻获得 3.0 PT。绑定外置槽不可卸下。代价：火力永久衰减20%。' },
 
     // 新增商品
     { id: 'rapid_charge', type: 'stat',    name: '快速充能', rarity: 'R', unlockPT: 1.0,  unlockTime: 0,  desc: '击杀敌人额外获得+5技能能量/级。' },
     { id: 'phase_dodge',  type: 'stat',    name: '相位闪避', rarity: 'L', unlockPT: 3.0,  unlockTime: 30, desc: '受伤时15%概率完全免疫伤害/级(最高45%)。' },
-    { id: 'afterburn',    type: 'stat',    name: '余烬',     rarity: 'E', unlockPT: 5.0,  unlockTime: 60, desc: '子弹命中后留下燃烧AOE区域，持续灼烧。' },
+    { id: 'afterburn',    type: 'equip',   name: '余烬',     slotCost: 1, rarity: 'E', initialCost: 2.5, unlockPT: 5.0,  unlockTime: 60, desc: '子弹命中后留下燃烧AOE区域，持续灼烧。' },
     { id: 'shield_gen',   type: 'utility', name: '屏障再生', rarity: 'R', unlockPT: 1.5,  unlockTime: 0,  desc: '每次休整波次结束时回复8%最大HP/级。' },
     { id: 'skill_cd',     type: 'upgrade', name: '超频缩减', rarity: 'R', unlockPT: 2.0,  unlockTime: 0,  desc: '技能冷却时间-15%/级(最多-45%)。' }
 ];
@@ -178,8 +177,7 @@ function initSprites() {
         'pulse': createPixelTexture([[1,1,0,0],[0,1,1,0],[0,0,1,1],[0,0,0,0]], ['#00e5ff'], 3),
         'laser': createPixelTexture([[1,1,1,1],[1,1,1,1],[0,0,0,0],[0,0,0,0]], ['#ff1744'], 3),
         'pierce': createPixelTexture([[0,0,1,0],[0,1,1,1],[0,0,1,0],[0,0,0,0]], ['#ffffff'], 3),
-        'debt_protocol': createPixelTexture([[1,0,0,1],[0,1,1,0],[0,1,1,0],[1,0,0,1]], ['#ff1744'], 3),
-        'default': createPixelTexture([[1,1,1,1],[1,0,0,1],[1,0,0,1],[1,1,1,1]], ['#888888'], 3)
+'default': createPixelTexture([[1,1,1,1],[1,0,0,1],[1,0,0,1],[1,1,1,1]], ['#888888'], 3)
     };
 
     sprites.i_pause = createPixelTexture([[0,0,0,0,0,0,0],[0,1,1,0,1,1,0],[0,1,1,0,1,1,0],[0,1,1,0,1,1,0],[0,1,1,0,1,1,0],[0,0,0,0,0,0,0]], ['#fff'], 2);

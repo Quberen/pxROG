@@ -129,9 +129,6 @@ class Player {
         let moreList = (this.metaStats[`more_${statName}`] || []).concat(this.sectorTech[`more_${statName}`] || []);
         moreList.forEach(mult => { finalVal *= mult; });
 
-        if (statName === 'damage' && this.equipment.debt_protocol && this.equipment.debt_protocol.equipped) {
-            finalVal *= 0.8; 
-        }
         
         // 【遗漏修补：暴击率绝对加成机制】
         if (statName === 'critRate') {
@@ -253,7 +250,7 @@ class Player {
                             e.takeDamage(finalDmg, true, isCrit, 'laser');
                             
                             if (particles.length < 180) particles.push(new Particle(e.x, e.y + e.h / 2, '#00e5ff', (Math.random() - 0.5) * 8, Math.random() * 5, 8));
-                            if (this.upgrades.aoe > 0 && Math.random() < 0.1) triggerAOE(e.x, e.y, finalDmg, 40);
+                            if (this.equipment.aoe && this.equipment.aoe.equipped && Math.random() < 0.1) triggerAOE(e.x, e.y, finalDmg, 40);
                         }
                     });
                 }
@@ -281,6 +278,27 @@ class Player {
             
 
         draw(ctx) {
+        if (this.isFiringLaser) {
+            let eq = this.equipment;
+            ctx.save();
+            let drawBeam = (startX, endX) => {
+                ctx.globalAlpha = 0.25 + Math.random() * 0.1;
+                ctx.strokeStyle = '#00e5ff';
+                ctx.lineWidth = 10;
+                ctx.beginPath(); ctx.moveTo(startX, this.y - this.h / 2); ctx.lineTo(endX, 0); ctx.stroke();
+                ctx.globalAlpha = 0.85 + Math.random() * 0.15;
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(startX, this.y - this.h / 2); ctx.lineTo(endX, 0); ctx.stroke();
+            };
+            drawBeam(this.x, this.x);
+            if (eq.spread && eq.spread.equipped) {
+                let off = this.y * 0.15;
+                drawBeam(this.x, this.x - off);
+                drawBeam(this.x, this.x + off);
+            }
+            ctx.restore();
+        }
         if (this.invincible % 4 < 2) {
             let drawX = this.x - this.w / 2;
             let drawY = this.y - this.h / 2;
@@ -791,6 +809,10 @@ class Turret extends BaseEnemy {
         
         this.fireInterval = this.isAbyss ? 120 : 100;
         this.shootTimer = this.fireInterval;
+        let _cas0 = typeof WORKSHOP !== 'undefined' && WORKSHOP.cassettes && WORKSHOP.cassettes[currentLevel];
+        this.spawnWaveType = (_cas0 && _cas0.timeline && _cas0.state)
+            ? (_cas0.timeline[_cas0.state.currentWave] && _cas0.timeline[_cas0.state.currentWave].type)
+            : null;
     }
 
     update() {
@@ -799,7 +821,7 @@ class Turret extends BaseEnemy {
         // 波次结束后缓缓前进离场
         let _cas = typeof WORKSHOP !== 'undefined' && WORKSHOP.cassettes && WORKSHOP.cassettes[currentLevel];
         let _wt = _cas && _cas.timeline && _cas.state && _cas.timeline[_cas.state.currentWave] && _cas.timeline[_cas.state.currentWave].type;
-        if (_wt && _wt !== 'p2_cover') {
+        if (_wt && _wt !== this.spawnWaveType) {
             this.targetY = height + 100;
             if (this.y < this.targetY) this.y += 2;
             this.checkBounds();
@@ -1448,7 +1470,7 @@ function createExplosion(x, y, col, count) {
 }
 
 function triggerAOE(x, y, exDmg = null, exR = null, color = '#ab47bc') {
-    let level = player.upgrades.aoe;
+    let level = (player && player.equipment && player.equipment.aoe && player.equipment.aoe.equipped) ? player.equipment.aoe.level : 0;
     if (level === 0 && exDmg === null) return;
 
     let radius = exR !== null ? exR : (40 + level * 15);

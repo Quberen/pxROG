@@ -18,7 +18,7 @@ window.WORKSHOP = {
             "Formation_V_Strike":    { weight: 12, unlockTime: 20, role: 'formation' }, "Formation_Turret_Wall": { weight: 25, unlockTime: 50, role: 'formation' }, "Formation_Ambush": { weight: 28, unlockTime: 65, role: 'formation' }
         },
         items: {
-            "damage": { cost: 1.4, max: 20 }, "heal": { cost: 0.5, max: 999 }, "heal_up": { cost: 1.0, max: 5 }, "magnet": { cost: 1.0, max: 5 }, "crit_rate": { cost: 1.2, max: 10 }, "crit_dmg": { cost: 1.5, max: 10 }, "healer_rate": { cost: 1.4, max: 5 }, "aoe": { cost: 2.2, max: 3 }, "wingman": { cost: 3.5, max: 4 }, "slot": { cost: 1.8, max: 5 },
+            "damage": { cost: 1.4, max: 20 }, "heal": { cost: 0.5, max: 999 }, "heal_up": { cost: 1.0, max: 5 }, "magnet": { cost: 1.0, max: 5 }, "crit_rate": { cost: 1.2, max: 10 }, "crit_dmg": { cost: 1.5, max: 10 }, "healer_rate": { cost: 1.4, max: 5 }, "aoe": { initialCost: 3.0, cost: 1.5, costStep: 0.5, max: 3 }, "wingman": { cost: 3.5, max: 4 }, "slot": { cost: 1.8, max: 5 },
             "hp_max": { initialCost: 1.8, cost: 1.5, costStep: 0.5, max: 3 }, "speed": { initialCost: 2.0, cost: 1.2, costStep: 0.4, max: 4 },
             "spread":  { initialCost: 4.0, cost: 4.0, costStep: 0.5, max: 4 },
             "homing":  { initialCost: 2.5, cost: 1.6, costStep: 0.4, max: 3 },
@@ -26,7 +26,7 @@ window.WORKSHOP = {
             "laser":   { initialCost: 5.0, cost: 2.5, costStep: 1.0, max: 4 },
             "pierce":  { initialCost: 2.5, cost: 1.2, costStep: 0.8, max: 3 },
             "rapid_charge": { cost: 1.5, max: 3 }, "phase_dodge": { cost: 2.5, max: 3 },
-            "afterburn": { cost: 3.0, max: 2 }, "shield_gen": { cost: 1.8, max: 4 }, "skill_cd": { cost: 2.0, max: 3 }
+            "afterburn": { initialCost: 2.5, cost: 1.5, costStep: 0.5, max: 3 }, "shield_gen": { cost: 1.8, max: 4 }, "skill_cd": { cost: 2.0, max: 3 }
         }
     },
 
@@ -355,6 +355,20 @@ window.WORKSHOP = {
                 let st = this.state;
                 let wave = this.timeline[st.currentWave];
                 if (!wave) return;
+
+                const NON_EARLY_EXIT = ['p0_rest', 'p0_starfall', 'p5_supply', 'p8_boss'];
+                if (!NON_EARLY_EXIT.includes(wave.type) && st.waveTimer >= 2
+                        && typeof enemies !== 'undefined' && enemies.length === 0) {
+                    let nextWave = this.timeline[st.currentWave + 1];
+                    if (nextWave && nextWave.type === 'p0_rest' && player && player.upgrades && player.upgrades.shield_gen > 0) {
+                        let healAmt = player.getStat('maxHp') * 0.08 * player.upgrades.shield_gen;
+                        player.hp = Math.min(player.getStat('maxHp'), player.hp + healAmt);
+                        if (typeof showSystemMessage === 'function') showSystemMessage(`屏障再生 +${Math.round(healAmt)}`, '#00e676');
+                    }
+                    st.currentWave++;
+                    st.waveTimer = 0;
+                    return;
+                }
 
                 if (WORKSHOP.patterns[wave.type]) WORKSHOP.patterns[wave.type](st.waveTimer, frame, currentDifficulty, w);
 
