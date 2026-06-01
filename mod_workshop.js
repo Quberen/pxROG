@@ -52,7 +52,12 @@ window.WORKSHOP = {
         "p10_aerial":   { name: "波次 10: 空中打击",   color: "#ab47bc" },
         "p11_corridor": { name: "波次 11: 移动走廊",   color: "#00e5ff" },
         "p12_crossfire":{ name: "波次 12: 交叉弹幕",   color: "#ff9800" },
-        "p13_blitz":    { name: "波次 13: 闪电压制",   color: "#ff1744" }
+        "p13_blitz":    { name: "波次 13: 闪电压制",   color: "#ff1744" },
+        "s2_starfall":    { name: "开幕：星空坠落",     color: "#b39ddb" },
+        "s2_supply":      { name: "补给方阵",            color: "#00e676" },
+        "s2_cover_fire":  { name: "掩护射击",            color: "#ff9800" },
+        "s2_iron_barrel": { name: "铁通阵",              color: "#00e5ff" },
+        "s2_flanker":     { name: "双翼夹击",            color: "#ff9800" }
     },
 
     // 【核心黑科技】：波次导演的终极七印 + Boss
@@ -293,12 +298,269 @@ window.WORKSHOP = {
             if (diff >= 2 && cycle >= 6 && frame % 120 === 0) {
                 spawn('KamikazeSwarm', Math.random() * (w - 80) + 40, { speedOverride: 1.8 });
             }
-        }
+        },
+
+        // ─── 第二关专属波次 ─────────────────────────────────────────────────
+
+        // 资源类：星空坠落（低初始密度，深渊5%概率出深渊流星）
+        s2_starfall: function(sec, frame, diff, w) {
+            const dMult = [1.0, 1.15, 1.30, 1.30][diff] || 1.0;
+            let baseD = sec < 8 ? 0.015 : sec < 15 ? 0.045 : 0.065;
+            if (Math.random() < baseD * dMult) {
+                let isAbyss = (diff >= 3 && Math.random() < 0.05);
+                let rand = Math.random();
+                spawn(isAbyss ? 'LocatorSwarm' : 'Locator',
+                      Math.random() * (w - 60) + 30, {
+                    speedOverride: 3.0 + diff * 0.4 + Math.random() * 1.2,
+                    hpMod: 0.35,
+                    forceHeal:    !isAbyss && rand < 0.20,
+                    forceBattery: !isAbyss && rand >= 0.20 && rand < 0.40
+                });
+            }
+            let clusterInterval = sec < 10 ? 120 : 90;
+            if (frame % clusterInterval === 0) {
+                let cx = Math.random() * (w - 120) + 60;
+                let baseCnt = sec < 8 ? 2 : (diff >= 2 ? 4 : 3);
+                let cnt = Math.round(baseCnt * dMult);
+                let spd = sec < 12 ? (1.8 + diff * 0.25) : (2.8 + diff * 0.4);
+                let monoType = (frame % 900 === 0) ? (Math.random() < 0.5 ? 'heal' : 'battery') : null;
+                for (let i = 0; i < cnt; i++) {
+                    let isAbyssCluster = (diff >= 3 && Math.random() < 0.05);
+                    let r2 = Math.random();
+                    let opt = { speedOverride: spd, hpMod: 0.45, y: -50 + (Math.random() - 0.5) * 20 };
+                    if (isAbyssCluster) {
+                        spawn('LocatorSwarm', cx + (Math.random() - 0.5) * 20, Object.assign({}, opt, { hpMod: 0.5 }));
+                    } else {
+                        if (monoType === 'heal') opt.forceHeal = true;
+                        else if (monoType === 'battery') opt.forceBattery = true;
+                        else { opt.forceHeal = r2 < 0.15; opt.forceBattery = r2 >= 0.15 && r2 < 0.30; }
+                        spawn('Locator', cx + (Math.random() - 0.5) * 20, opt);
+                    }
+                }
+            }
+            if (sec > 8 && frame % 180 === 0 && Math.random() < 0.15) {
+                spawn('CrystalLocator', Math.random() * (w - 60) + 30, {
+                    speedOverride: 1.0 + Math.random() * 0.8, hpMod: 1.2
+                });
+            }
+        },
+
+        // 资源类：补给方阵（8×rows网格，内置CrystalLocator，深渊外圈变深渊）
+        s2_supply: function(sec, frame, diff, w) {
+            if (sec === 1 && frame % 60 === 0) {
+                const dMult = [1.0, 1.15, 1.30, 1.30][diff] || 1.0;
+                let cols = 8;
+                let rows = Math.min(20, Math.round(14 * dMult));
+                let sW = w / (cols + 1);
+
+                let grid = [];
+                for (let r = 0; r < rows; r++) {
+                    grid[r] = [];
+                    for (let c = 0; c < cols; c++) {
+                        let isOuter = (r === 0 || r === rows - 1 || c === 0 || c === cols - 1);
+                        if (isOuter && diff >= 3) {
+                            grid[r][c] = 'abyss';
+                        } else {
+                            let rnd = Math.random();
+                            grid[r][c] = rnd < 0.05 ? 'battery' : (rnd < 0.10 ? 'heal' : 'normal');
+                        }
+                    }
+                }
+
+                // 选取1~2个内侧非变体不相邻格 → CrystalLocator
+                let eligible = [];
+                for (let r = 1; r < rows - 1; r++)
+                    for (let c = 1; c < cols - 1; c++)
+                        if (grid[r][c] === 'normal') eligible.push([r, c]);
+                for (let i = eligible.length - 1; i > 0; i--) {
+                    let j = Math.floor(Math.random() * (i + 1));
+                    [eligible[i], eligible[j]] = [eligible[j], eligible[i]];
+                }
+                let crystalTarget = Math.floor(Math.random() * 2) + 1;
+                let chosen = [];
+                for (let [r, c] of eligible) {
+                    if (!chosen.some(([cr, cc]) => Math.abs(cr - r) <= 1 && Math.abs(cc - c) <= 1)) {
+                        chosen.push([r, c]);
+                        grid[r][c] = 'crystal';
+                        if (chosen.length >= crystalTarget) break;
+                    }
+                }
+
+                for (let r = 0; r < rows; r++) {
+                    for (let c = 0; c < cols; c++) {
+                        let gx = sW * (c + 1);
+                        let gy = -40 - r * 32;
+                        let cell = grid[r][c];
+                        if (cell === 'crystal') {
+                            spawn('CrystalLocator', gx, { speedOverride: 0.6, y: gy });
+                        } else if (cell === 'abyss') {
+                            spawn('LocatorSwarm', gx, { speedOverride: 0.6, hpMod: 0.45, y: gy });
+                        } else {
+                            spawn('Locator', gx, {
+                                speedOverride: 0.6, hpMod: 0.45, y: gy,
+                                forceHeal:    cell === 'heal',
+                                forceBattery: cell === 'battery'
+                            });
+                        }
+                    }
+                }
+            }
+        },
+
+        // 攻击类：掩护射击（炮台先排列，随后持续弹出Locator编队）
+        s2_cover_fire: function(sec, frame, diff, w) {
+            const dMult = [1.0, 1.15, 1.30, 1.30][diff] || 1.0;
+
+            if (sec === 1 && frame % 60 === 0) {
+                let tCount = Math.round(4 * dMult);
+                for (let i = 0; i < tCount; i++) {
+                    let tx = w * (i + 0.5) / tCount;
+                    let isAbyss = diff >= 3 ? true : (Math.random() < (diff >= 2 ? 0.5 : 0.2));
+                    spawn(isAbyss ? 'TurretSwarm' : 'Turret', tx, { fireInterval: 60 });
+                }
+            }
+
+            let locInterval = Math.round(120 / dMult);
+            if (sec >= 8 && frame % locInterval === 0) {
+                let abyssChance = [0, 0, 0.10, 0.25][diff];
+                let isAbyssGroup = Math.random() < abyssChance;
+                let locType = isAbyssGroup ? 'LocatorSwarm' : 'Locator';
+
+                let r = Math.random() * 22.5;
+                if (r < 1) {
+                    spawn(locType, Math.random() * (w - 80) + 40, { speedOverride: 1.5 });
+                } else if (r < 4.5) {
+                    let cnt = 3 + Math.floor(Math.random() * 2);
+                    let cx = w / 2, spacing = 40;
+                    for (let i = 0; i < cnt; i++)
+                        spawn(locType, cx + (i - (cnt - 1) / 2) * spacing, { speedOverride: 1.3 });
+                } else if (r < 10.5) {
+                    let cnt = 5 + Math.floor(Math.random() * 3);
+                    let cx = w / 2, spacing = Math.min(35, (w - 80) / cnt);
+                    for (let i = 0; i < cnt; i++)
+                        spawn(locType, cx + (i - (cnt - 1) / 2) * spacing, { speedOverride: 1.2 });
+                } else {
+                    let cx = w / 2;
+                    for (let gr = 0; gr < 3; gr++)
+                        for (let gc = 0; gc < 4; gc++)
+                            spawn(locType, cx + (gc - 1.5) * 40, {
+                                speedOverride: 1.1, y: -40 - gr * 30
+                            });
+                }
+            }
+        },
+
+        // 压力类 / 躲避类：直接复用第一关对应波次
+        s2_iron_barrel: null,  // 在文件末尾赋值（解决前向引用）
+        s2_flanker:     null
+
     },
 
     cassettes: {
-        
-        
+
+
+        'sector2': {
+            name: "区域 2: 深邃裂隙",
+            shopItems: ['high_explosive', 'spread', 'skill_duration', 'burst_core',
+                        'rapid_charge', 'phase_dodge', 'afterburn', 'shield_gen', 'skill_cd',
+                        'pierce', 'homing', 'crit_rate', 'heal_up', 'slot'],
+            allowed_enemies: ['Locator', 'LocatorSwarm', 'CrystalLocator',
+                              'Kamikaze', 'KamikazeSwarm',
+                              'Turret', 'TurretSwarm',
+                              'WandererHigh', 'WandererSwarm', 'Tank'],
+            allowed_formations: ['V_Strike', 'Turret_Wall', 'Ambush'],
+            disable_director: true,
+            state: { currentWave: 0, waveTimer: 0 },
+
+            timeline: [
+                // Act 1: 资源建设
+                { type: "s2_starfall",    duration: 25 },
+                { type: "p0_rest",        exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 8 }, { type: "clear_all", value: true }] } },
+                { type: "s2_supply",      duration: 20 },
+                { type: "p0_rest",        duration: 10 },
+
+                // Act 2: 机制学习
+                { type: "s2_cover_fire",  duration: 25 },
+                { type: "p0_rest",        exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 10 }, { type: "clear_all", value: true }] } },
+                { type: "s2_flanker",     duration: 22 },
+                { type: "p0_rest",        exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 10 }, { type: "clear_all", value: true }] } },
+
+                // Act 3: 压力测试
+                { type: "s2_iron_barrel", duration: 25 },
+                { type: "p0_rest",        exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 10 }, { type: "clear_all", value: true }] } },
+
+                // 中场补给
+                { type: "s2_supply",      duration: 20 },
+                { type: "p0_rest",        duration: 12 },
+
+                // Act 4: 强化重演
+                { type: "s2_cover_fire",  duration: 28 },
+                { type: "p0_rest",        exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 10 }, { type: "clear_all", value: true }] } },
+                { type: "s2_iron_barrel", duration: 28 },
+                { type: "p0_rest",        exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 10 }, { type: "clear_all", value: true }] } },
+
+                // Boss
+                { type: "p8_boss",        duration: 9999 }
+            ],
+
+            script: function(sec, frame) {
+                let w = window.innerWidth;
+                let st = this.state;
+                let wave = this.timeline[st.currentWave];
+                if (!wave) return;
+
+                const NON_EARLY_EXIT = ['p0_rest', 's2_starfall', 's2_supply', 'p8_boss'];
+                if (!NON_EARLY_EXIT.includes(wave.type) && st.waveTimer >= 2
+                        && typeof enemies !== 'undefined' && enemies.length === 0) {
+                    let nextWave = this.timeline[st.currentWave + 1];
+                    if (nextWave && nextWave.type === 'p0_rest' && player && player.upgrades && player.upgrades.shield_gen > 0) {
+                        let healAmt = player.getStat('maxHp') * 0.08 * player.upgrades.shield_gen;
+                        player.hp = Math.min(player.getStat('maxHp'), player.hp + healAmt);
+                        if (typeof showSystemMessage === 'function') showSystemMessage(`屏障再生 +${Math.round(healAmt)}`, '#00e676');
+                    }
+                    st.currentWave++;
+                    st.waveTimer = 0;
+                    return;
+                }
+
+                if (WORKSHOP.patterns[wave.type]) WORKSHOP.patterns[wave.type](st.waveTimer, frame, currentDifficulty, w);
+
+                if (frame % 60 === 0) {
+                    if (st.waveTimer === 0) {
+                        let waveMeta = WORKSHOP.waveNames[wave.type] || { name: `未知波次: ${wave.type}`, color: "#ffffff" };
+                        if (typeof EventBus !== 'undefined') EventBus.emit('WAVE_STARTED', waveMeta);
+                    }
+                    st.waveTimer++;
+                    let shouldExit = false;
+                    if (wave.exitConditions) {
+                        let rules = wave.exitConditions.rules || [];
+                        let logic = wave.exitConditions.logic || "OR";
+                        let ruleResults = rules.map(rule => {
+                            if (rule.type === "time_limit") return st.waveTimer >= rule.value;
+                            if (rule.type === "clear_all") return enemies.length === 0 && st.waveTimer > 2;
+                            if (rule.type === "player_hp_below") return (player.hp / player.maxHp) < rule.value;
+                            return false;
+                        });
+                        if (logic === "AND") shouldExit = ruleResults.length > 0 && ruleResults.every(r => r === true);
+                        else shouldExit = ruleResults.some(r => r === true);
+                    } else {
+                        if (st.waveTimer >= (wave.duration || 999)) shouldExit = true;
+                    }
+                    if (shouldExit) {
+                        let nextWave = this.timeline[st.currentWave + 1];
+                        if (nextWave && nextWave.type === 'p0_rest' && player && player.upgrades && player.upgrades.shield_gen > 0) {
+                            let healAmt = player.getStat('maxHp') * 0.08 * player.upgrades.shield_gen;
+                            player.hp = Math.min(player.getStat('maxHp'), player.hp + healAmt);
+                            if (typeof showSystemMessage === 'function') showSystemMessage(`屏障再生 +${Math.round(healAmt)}`, '#00e676');
+                        }
+                        st.currentWave++;
+                        st.waveTimer = 0;
+                    }
+                }
+            }
+        },
+
+
         'sector1': {
 
             name: "区域 1: 废星边缘",
@@ -579,3 +841,7 @@ window.WORKSHOP = {
 };
 
 function spawn(type, x, opt) { window.spawnEnemyByType(type, x, opt); }
+
+// 第二关别名：复用第一关已有波次函数
+WORKSHOP.patterns.s2_iron_barrel = WORKSHOP.patterns.p3_gather;
+WORKSHOP.patterns.s2_flanker     = WORKSHOP.patterns.p9_flanker;

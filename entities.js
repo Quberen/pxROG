@@ -785,7 +785,7 @@ class Kamikaze extends BaseEnemy {
         this.timer = 0;
         this.vx = 0;
         this.vy = 2;
-        this.warnTime = vType === 'special' ? 75 : 45;
+        this.warnTime = vType === 'special' ? 75 : (vType === 'swarm' ? 59 : 45);
         this.dashSpeed = vType === 'special' ? 16 : (8 + Math.random() * 3);
         
         this.isKamikaze = true;
@@ -803,8 +803,20 @@ class Kamikaze extends BaseEnemy {
                 this.timer = this.warnTime;
                 this.sprite = this.vType === 'special' ? sprites.kamikaze_special_warn : (this.vType === 'swarm' ? sprites.kamikaze_swarm_warn : sprites.kamikaze_warn);
             }
+        } else if (this.state === 'LAUNCH') {
+            this.x += (this.launchVx || 0);
+            this.y += (this.launchVy || 2);
+            this.launchTimer = (this.launchTimer || 0) - 1;
+            if (this.launchTimer <= 0) {
+                this.state = 'WARN';
+                this.timer = this.warnTime;
+                this.sprite = this.vType === 'swarm' ? sprites.kamikaze_swarm_warn : sprites.kamikaze_warn;
+            }
         } else if (this.state === 'WARN') {
             this.timer--;
+            if (this.vType === 'swarm') {
+                this.x += (player.x - this.x) * 0.01;
+            }
             this.x += (Math.random() - 0.5) * (this.vType === 'special' ? 3 : 2);
             if (this.timer <= 0) {
                 this.state = 'DASH';
@@ -1088,10 +1100,14 @@ class BossScrapDominator extends BaseEnemy {
             this.timer--;
 
             if (this.timer <= 0) {
-                // 深渊模式：15%概率额外释放2个紫色自爆机
+                // 深渊模式：15%概率额外斜向弹射2个紫色自爆机
                 if (currentDifficulty >= 3 && Math.random() < 0.15) {
-                    enemies.push(new Kamikaze(this.x - 25, this.y + 30, 'swarm'));
-                    enemies.push(new Kamikaze(this.x + 25, this.y + 30, 'swarm'));
+                    let kL = new Kamikaze(this.x, this.y + 10, 'swarm');
+                    kL.state = 'LAUNCH'; kL.launchVx = -4; kL.launchVy = 2.5; kL.launchTimer = 25;
+                    enemies.push(kL);
+                    let kR = new Kamikaze(this.x, this.y + 10, 'swarm');
+                    kR.state = 'LAUNCH'; kR.launchVx = 4; kR.launchVy = 2.5; kR.launchTimer = 25;
+                    enemies.push(kR);
                 }
                 // Phase 4：每次进入HOVER有30%概率额外召唤Kamikaze
                 if (this.phase >= 4 && Math.random() < 0.3) {
