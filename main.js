@@ -148,6 +148,7 @@ const ITEM_ICONS = {
 function getItemIcon(id) { return ITEM_ICONS[id] || (id ? '◆' : '◆'); }
 let bullets = [], enemyBullets = [], enemies = [], particles = [], items = [], floatingTexts = [], stars = [], aoeEffects = [];
 let wingmanEntities = [];
+let isDebugMode = false;
 let score = 0, frameCount = 0, gameTimeSeconds = 0;
 let shakeTimer = 0, shakeIntensity = 0;
 let comboCount = 0, comboTimer = 0;
@@ -654,10 +655,14 @@ function gameOver(title, isVictory) {
         titleEl.style.color = isVictory ? "#00e676" : "#e60050"; 
     }
     
-    titleEl.innerText = fancyTitle; 
-    let extraText = isAbyssClear ? "<br><br><span style='color:#00b0ff'>[DATABASE UNLOCKED]</span>" : ""; 
+    titleEl.innerText = fancyTitle;
+    let extraText = isAbyssClear ? "<br><br><span style='color:#00b0ff'>[DATABASE UNLOCKED]</span>" : "";
     ui.finalScore.innerHTML = `战绩结算: ${score} PTS<br>存活时间: ${m}:${s}${extraText}`;
-    
+
+    if (isVictory) clearCheckpoint(currentLevel);
+    let continueBtn = document.getElementById('btn-continue-ckpt');
+    if (continueBtn) continueBtn.style.display = (!isVictory && hasCheckpoint(currentLevel)) ? '' : 'none';
+
     showScreen('gameOver');
 }
 
@@ -957,6 +962,7 @@ function updateHUD() {
             uiOffsets.terminal.x = (Math.random() > 0.5 ? 1 : -1) * force;
             uiOffsets.terminal.y = (Math.random() > 0.5 ? 1 : -1) * force;
             if (player) player.ironWallUsed = false;
+            if (st.currentWave > 0) saveCheckpoint();  // 进入休整波自动存档
         }
         wasInRestPhase = isRestNow;
     } else {
@@ -1197,9 +1203,9 @@ function buyUpgrade(index) {
     let opt = currentShopItems[index]; 
     if (!opt || opt.soldOut) return;
     
-    let cost = getShopCost(opt); 
-    if (player.pt >= cost) { 
-        player.pt -= cost; 
+    let cost = getShopCost(opt);
+    if (isDebugMode || player.pt >= cost) {
+        player.pt -= cost;
         if (opt.type === 'equip') { 
             if (!player.equipment[opt.id].owned) { 
                 player.equipment[opt.id].owned = true; 
@@ -1648,33 +1654,44 @@ function switchTerminalTab(tabId) {
     if (tabId === 'shop') {
         // 仅在波次缓冲期（p0_rest）允许访问商店
         let _cas = WORKSHOP.cassettes[currentLevel];
-        let _inRest = !!(gameState === 'GAMEOVER' || !(_cas && _cas.timeline) ||
+        let _inRest = !!(isDebugMode || gameState === 'GAMEOVER' || !(_cas && _cas.timeline) ||
                          (_cas.timeline[_cas.state.currentWave] && _cas.timeline[_cas.state.currentWave].type === 'p0_rest'));
         if (!_inRest) {
             view.innerHTML = `<div style="font-family:'Press Start 2P',monospace;font-size:9px;color:#ff9800;text-align:center;padding:40px 20px;line-height:2;">⚠ 战场锁定<br><br>仅限波次缓冲期<br>访问黑市网络</div>`;
             return;
         }
-        if (typeof currentShopItems === 'undefined' || currentShopItems.length === 0) generateShopItems();
+        if (isDebugMode) {
+            currentShopItems = upgradePool.filter(item => {
+                if (item.type === 'equip') {
+                    let eq = player.equipment[item.id];
+                    return !eq || !eq.owned || eq.level < (item.max || 3);
+                }
+                let curLv = player.upgrades[item.id] || 0;
+                return curLv < (item.max || 999);
+            });
+        } else if (typeof currentShopItems === 'undefined' || currentShopItems.length === 0) {
+            generateShopItems();
+        }
         let html = `<div ${S('font-family:'+PIXEL_FONT+';font-size:10px;color:#ff1744;letter-spacing:2px;margin-bottom:10px;')}>⬡ 黑市网络</div>`;
         html += `<div ${S('display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;')}>
             <span ${S('font-size:9px;color:#aaa;font-family:'+PIXEL_FONT)}>算力</span>
             <span ${S('color:#ffea00;font-family:'+PIXEL_FONT+';font-size:12px;')}>${player.pt.toFixed(1)} PT</span>
         </div>`;
-        html += `<div ${S('display:flex;gap:8px;margin-bottom:14px;')}>`;
+        html += `<div ${S('display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;')}>`;
         currentShopItems.forEach((opt, index) => {
-            if (opt.soldOut) {
-                html += `<div ${S('flex:1;border:2px solid #222;padding:12px 8px;background:rgba(0,0,0,0.4);text-align:center;border-radius:4px;')}>
+            if (opt.soldOut && !isDebugMode) {
+                html += `<div ${S('flex:1;min-width:80px;border:2px solid #222;padding:12px 8px;background:rgba(0,0,0,0.4);text-align:center;border-radius:4px;')}>
                     <div ${S('font-size:16px;margin-bottom:6px;color:#333;')}>✕</div>
                     <div ${S('color:#444;font-family:'+PIXEL_FONT+';font-size:7px;')}>已售出</div></div>`;
                 return;
             }
             let cost = getShopCost(opt);
-            let canBuy = player.pt >= cost;
+            let canBuy = isDebugMode || player.pt >= cost;
             let rDef = (typeof RARITY !== 'undefined' && RARITY[opt.rarity]) ? RARITY[opt.rarity] : { color: '#fff', name: '' };
             let icon = getItemIcon(opt.id);
             let borderCol = canBuy ? '#ff1744' : '#333';
             let bgCol = canBuy ? 'rgba(255,23,68,0.07)' : 'rgba(0,0,0,0.25)';
-            html += `<div onclick="${canBuy ? `terminalBuyRed(${index})` : ''}" ${S(`flex:1;border:2px solid ${borderCol};border-radius:4px;padding:12px 8px;background:${bgCol};cursor:${canBuy?'pointer':'not-allowed'};text-align:center;`)}>
+            html += `<div onclick="${canBuy ? `terminalBuyRed(${index})` : ''}" ${S(`flex:1;min-width:80px;border:2px solid ${borderCol};border-radius:4px;padding:12px 8px;background:${bgCol};cursor:${canBuy?'pointer':'not-allowed'};text-align:center;`)}>
                 <div ${S('font-size:22px;margin-bottom:6px;')}>${icon}</div>
                 <div ${S('font-family:'+PIXEL_FONT+';font-size:8px;color:'+rDef.color+';margin-bottom:4px;line-height:1.4;')}>${opt.name}</div>
                 <div ${S('font-size:7px;color:#555;border:1px solid '+rDef.color+'44;border-radius:3px;padding:1px 4px;display:inline-block;margin-bottom:6px;color:'+rDef.color+';')}>${rDef.name || ''}</div>
@@ -1855,10 +1872,104 @@ function quitGame() {
     initUI(); 
 }
 
-function startGame(levelId) {
+// ── 断点存档系统 ──────────────────────────────────────────────
+function saveCheckpoint() {
+    if (!player || !currentLevel || currentLevel === 'debug') return;
+    let cas = WORKSHOP.cassettes[currentLevel];
+    if (!cas || !cas.state) return;
+    let data = {
+        level: currentLevel, difficulty: currentDifficulty,
+        waveIndex: cas.state.currentWave,
+        score, gameTimeSeconds, shopInflation,
+        player: {
+            hp: player.hp, pt: player.pt,
+            totalUpgradePoints: player.totalUpgradePoints,
+            upgrades: { ...player.upgrades },
+            techTree: { ...player.techTree },
+            techLevels: { ...player.techLevels },
+            sectorTech: { ...player.sectorTech },
+            equipment: JSON.parse(JSON.stringify(player.equipment)),
+            usedSlots: player.usedSlots, maxSlots: player.maxSlots,
+            skillEnergy: player.skillEnergy, maxSkillEnergy: player.maxSkillEnergy
+        }
+    };
+    try { localStorage.setItem('pxROG_ckpt_' + currentLevel, JSON.stringify(data)); } catch(e) {}
+}
+
+function hasCheckpoint(levelId) {
+    return !!localStorage.getItem('pxROG_ckpt_' + levelId);
+}
+
+function clearCheckpoint(levelId) {
+    localStorage.removeItem('pxROG_ckpt_' + (levelId || currentLevel));
+}
+
+function restoreFromCheckpoint(data) {
+    let p = data.player;
+    player.hp = p.hp;
+    player.pt = p.pt;
+    player.totalUpgradePoints = p.totalUpgradePoints;
+    player.upgrades = { ...p.upgrades };
+    player.techTree = { ...p.techTree };
+    player.techLevels = { ...p.techLevels };
+    Object.assign(player.sectorTech, p.sectorTech);
+    Object.keys(p.equipment).forEach(id => {
+        if (player.equipment[id]) Object.assign(player.equipment[id], p.equipment[id]);
+    });
+    player.usedSlots = p.usedSlots;
+    player.maxSlots = p.maxSlots;
+    player.skillEnergy = p.skillEnergy;
+    player.maxSkillEnergy = p.maxSkillEnergy;
+    score = data.score;
+    gameTimeSeconds = data.gameTimeSeconds;
+    shopInflation = data.shopInflation;
+    let cas = WORKSHOP.cassettes[currentLevel];
+    if (cas && cas.state) { cas.state.currentWave = data.waveIndex; cas.state.waveTimer = 0; }
+}
+
+function trySelectLevel(levelId) {
+    if (hasCheckpoint(levelId)) {
+        showCheckpointDialog(levelId);
+    } else {
+        startGame(levelId);
+    }
+}
+
+function showCheckpointDialog(levelId) {
+    const PIXEL_FONT = "'Press Start 2P', 'DotGothic16', monospace";
+    let overlay = document.getElementById('ckpt-dialog');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'ckpt-dialog';
+        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;';
+        document.body.appendChild(overlay);
+    }
+    overlay.innerHTML = `
+        <div style="font-family:${PIXEL_FONT};font-size:10px;color:#ffea00;letter-spacing:2px;margin-bottom:20px;">⏎ 检测到存档</div>
+        <div style="font-family:${PIXEL_FONT};font-size:7px;color:#aaa;margin-bottom:30px;">是否从上次离开的波次继续？</div>
+        <div style="display:flex;gap:16px;">
+            <button onclick="document.getElementById('ckpt-dialog').style.display='none';startGame('${levelId}',true)"
+                style="font-family:${PIXEL_FONT};font-size:8px;padding:10px 18px;background:#00e676;color:#000;border:none;cursor:pointer;">继续上局</button>
+            <button onclick="clearCheckpoint('${levelId}');document.getElementById('ckpt-dialog').style.display='none';startGame('${levelId}')"
+                style="font-family:${PIXEL_FONT};font-size:8px;padding:10px 18px;background:#333;color:#fff;border:1px solid #555;cursor:pointer;">新局开始</button>
+        </div>`;
+    overlay.style.display = 'flex';
+}
+
+function toggleDebugMode() {
+    isDebugMode = !isDebugMode;
+    let btn = document.getElementById('debug-toggle-btn');
+    if (btn) btn.textContent = '⚠ 调试: ' + (isDebugMode ? 'ON' : 'OFF');
+    if (btn) btn.style.color = isDebugMode ? '#ffea00' : '#555';
+}
+// ──────────────────────────────────────────────────────────────
+
+function startGame(levelId, useCheckpoint = false) {
+    let ckptData = useCheckpoint ? (() => { try { return JSON.parse(localStorage.getItem('pxROG_ckpt_' + levelId)); } catch(e) { return null; } })() : null;
+    if (ckptData) currentDifficulty = ckptData.difficulty;
     currentLevel = levelId || 'debug';
     resize(); initSprites(); initStars();
-    
+
     player = new Player();
     enemies = []; bullets = []; enemyBullets = []; items = []; particles = []; floatingTexts = []; aoeEffects = []; wingmanEntities = [];
     score = 0; frameCount = 0; gameTimeSeconds = 0;
@@ -1894,8 +2005,10 @@ function startGame(levelId) {
         DirectorSystem.loadChoreography([]);
     }
 
-    updateHUD(); 
-    gameState = 'PLAYING'; 
+    if (ckptData) restoreFromCheckpoint(ckptData);
+
+    updateHUD();
+    gameState = 'PLAYING';
     showScreen(null);
 }
 

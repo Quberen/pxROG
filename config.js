@@ -62,24 +62,24 @@ function getHpMaxBoost(level) {
 }
 
 const TECH_TREE = [
-    { id: 'root',      branch: 'root', maxLevel: 4, costs: [5, 15, 30, 50],
+    { id: 'root',      branch: 'root', maxLevel: 4, costs: [3, 8, 18, 35],
       prereq: null,    minRootLevel: 0,
       name: '系统核心', desc: 'Lv.1一阶 · Lv.2二阶 · Lv.3三阶 · Lv.4特化' },
-    { id: 'atk_dmg',   branch: 'atk', maxLevel: 3, costs: [8, 14, 22],
+    { id: 'atk_dmg',   branch: 'atk', maxLevel: 3, costs: [4, 8, 14],
       prereq: 'root',  minRootLevel: 1, name: '基础攻击',  desc: '每级基础伤害+10%' },
-    { id: 'atk_crit',  branch: 'atk', maxLevel: 1, costs: [30],
+    { id: 'atk_crit',  branch: 'atk', maxLevel: 1, costs: [18],
       prereq: 'atk_dmg', minRootLevel: 4, name: '暴击锐化', desc: '暴击时伤害额外×2' },
-    { id: 'def_red',   branch: 'def', maxLevel: 3, costs: [8, 14, 22],
+    { id: 'def_red',   branch: 'def', maxLevel: 3, costs: [4, 8, 14],
       prereq: 'root',  minRootLevel: 1, name: '伤害减免',  desc: '每级受伤减少5%' },
-    { id: 'def_dodge', branch: 'def', maxLevel: 3, costs: [20, 30, 45],
+    { id: 'def_dodge', branch: 'def', maxLevel: 3, costs: [12, 18, 28],
       prereq: 'def_red', minRootLevel: 4, name: '概率免伤', desc: '每级+10%受击完全免疫概率' },
-    { id: 'hp_max',    branch: 'hp',  maxLevel: 3, costs: [8, 14, 22],
+    { id: 'hp_max',    branch: 'hp',  maxLevel: 3, costs: [4, 8, 14],
       prereq: 'root',  minRootLevel: 1, name: '最大血量',  desc: '每级最大HP+20' },
-    { id: 'hp_regen',  branch: 'hp',  maxLevel: 3, costs: [12, 18, 28],
+    { id: 'hp_regen',  branch: 'hp',  maxLevel: 3, costs: [6, 10, 16],
       prereq: 'hp_max', minRootLevel: 4, name: '纳米修复', desc: '每级每60帧回1HP' },
-    { id: 'spd_rate',  branch: 'spd', maxLevel: 3, costs: [8, 14, 22],
+    { id: 'spd_rate',  branch: 'spd', maxLevel: 3, costs: [4, 8, 14],
       prereq: 'root',  minRootLevel: 1, name: '基础射速',  desc: '每级射速+10%' },
-    { id: 'spd_skill', branch: 'spd', maxLevel: 1, costs: [30],
+    { id: 'spd_skill', branch: 'spd', maxLevel: 1, costs: [18],
       prereq: 'spd_rate', minRootLevel: 4, name: '技能超载', desc: '技能激活期间射速额外+50%' },
 ];
 

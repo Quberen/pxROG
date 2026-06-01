@@ -68,8 +68,8 @@ window.WORKSHOP = {
                 spawn('Locator', Math.random() * (w - 60) + 30, {
                     speedOverride: 3.0 + diff * 0.4 + Math.random() * 1.2,
                     hpMod: 0.35,
-                    forceHeal: rand < 0.40,
-                    forceBattery: rand >= 0.40 && rand < 0.75
+                    forceHeal: rand < 0.20,
+                    forceBattery: rand >= 0.20 && rand < 0.40
                 });
             }
             // 最高难度：极低概率出现深渊流星（LocatorSwarm）
@@ -85,13 +85,13 @@ window.WORKSHOP = {
                 let cy = -50;
                 let cnt = sec < 6 ? 2 : (diff >= 2 ? 4 : 3);
                 let clusterSpeed = sec < 12 ? (1.8 + diff * 0.25) : (2.8 + diff * 0.4);
-                let monoType = (frame % 540 === 0) ? (Math.random() < 0.5 ? 'heal' : 'battery') : null;
+                let monoType = (frame % 900 === 0) ? (Math.random() < 0.5 ? 'heal' : 'battery') : null;
                 for (let i = 0; i < cnt; i++) {
                     let rand2 = Math.random();
                     let opt = { speedOverride: clusterSpeed, hpMod: monoType ? 0.60 : 0.45, y: cy + (Math.random() - 0.5) * 20 };
                     if (monoType === 'heal') opt.forceHeal = true;
                     else if (monoType === 'battery') opt.forceBattery = true;
-                    else { opt.forceHeal = rand2 < 0.35; opt.forceBattery = rand2 >= 0.35 && rand2 < 0.70; }
+                    else { opt.forceHeal = rand2 < 0.15; opt.forceBattery = rand2 >= 0.15 && rand2 < 0.30; }
                     spawn('Locator', cx + (Math.random() - 0.5) * 20, opt);
                 }
             }
@@ -118,7 +118,20 @@ window.WORKSHOP = {
         },
         p2_cover: function(sec, frame, diff, w) {
             let tType = diff >= 2 ? 'TurretSwarm' : 'Turret';
-            if (sec === 1 && frame % 60 === 0) { spawn(tType, w * 0.2); spawn(tType, w * 0.8); if (diff === 3) spawn(tType, w * 0.5); }
+            // 初始批次：极端边缘（5%/18%）
+            if (sec === 1 && frame % 60 === 0) {
+                spawn(tType, w * 0.05);
+                spawn(tType, w * 0.95);
+                if (diff >= 1) { spawn(tType, w * 0.18); spawn(tType, w * 0.82); }
+                if (diff >= 3) spawn(tType, w * 0.5);
+            }
+            // 中期：每250帧在随机边缘补充炮台
+            if (sec >= 8 && frame % 250 === 0) {
+                let ex = Math.random() < 0.5
+                    ? Math.random() * w * 0.15
+                    : w * 0.85 + Math.random() * w * 0.15;
+                spawn(tType, Math.max(10, Math.min(w - 10, ex)));
+            }
             if (frame % 80 === 0) spawn(diff >= 2 ? 'LocatorSwarm' : 'Locator', Math.random() * (w - 60) + 30, { speedOverride: 1.5 });
             // 15秒后加入 ArcFlyer 协同炮台压制
             if (sec >= 15 && frame % 200 === 0) spawn('ArcFlyer', Math.random() * (w - 120) + 60, { speedOverride: 1.1 });

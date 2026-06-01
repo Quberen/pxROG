@@ -227,7 +227,7 @@
 
         <!-- 关卡选择 -->
         <div class="level-list">
-            <div class="level-card lc-red" onclick="startGame('sector1')">
+            <div class="level-card lc-red" onclick="trySelectLevel('sector1')">
                 <div class="lc-icon">◈</div>
                 <div class="lc-body">
                     <div class="lc-name">区域 1: 废星边缘</div>
@@ -248,7 +248,7 @@
 
         <!-- 开发者入口（小字） -->
         <div class="dev-row">
-            <span class="dev-link" onclick="startGame('debug')">⚠ 调试模式</span>
+            <span class="dev-link" id="debug-toggle-btn" onclick="toggleDebugMode()" style="color:#555;">⚠ 调试: OFF</span>
             <span class="dev-link" onclick="openWorkshop()">⚙ 数据工坊</span>
         </div>
     </div>
@@ -403,7 +403,8 @@
         <h1 style="color:#e60050" id="game-over-title">连接丢失</h1>
         <p id="final-score" style="color:#fff;font-size:11px;line-height:2;">最终得分: 0 PTS<br>存活时间: 00:00</p>
         <div class="btn-group" style="margin-top:14px;">
-            <button class="btn btn-red"  onclick="startGame(currentLevel)"><span class="btn-icon">⟳</span>重新部署</button>
+            <button class="btn btn-green" id="btn-continue-ckpt" style="display:none" onclick="startGame(currentLevel,true)"><span class="btn-icon">⏎</span>继续上局</button>
+            <button class="btn btn-red"  onclick="clearCheckpoint(currentLevel);startGame(currentLevel)"><span class="btn-icon">⟳</span>重新部署</button>
             <button class="btn btn-dark" onclick="quitGame()"><span class="btn-icon">←</span>返回主屏</button>
         </div>
     </div>
