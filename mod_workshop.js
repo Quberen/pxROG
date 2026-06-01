@@ -79,20 +79,27 @@ window.WORKSHOP = {
                     hpMod: 0.5
                 });
             }
-            // 流星簇：每90帧一组，全员共用同一速度（视觉整齐）
+            // 流星簇：每90帧一组，全员围绕中心紧密散布（±10px）
             if (frame % 90 === 0) {
                 let cx = Math.random() * (w - 120) + 60;
+                let cy = -50;
                 let cnt = sec < 6 ? 2 : (diff >= 2 ? 4 : 3);
                 let clusterSpeed = sec < 12 ? (1.8 + diff * 0.25) : (2.8 + diff * 0.4);
                 let monoType = (frame % 540 === 0) ? (Math.random() < 0.5 ? 'heal' : 'battery') : null;
                 for (let i = 0; i < cnt; i++) {
                     let rand2 = Math.random();
-                    let opt = { speedOverride: clusterSpeed, hpMod: monoType ? 0.60 : 0.45, y: -40 - i * 22 };
+                    let opt = { speedOverride: clusterSpeed, hpMod: monoType ? 0.60 : 0.45, y: cy + (Math.random() - 0.5) * 20 };
                     if (monoType === 'heal') opt.forceHeal = true;
                     else if (monoType === 'battery') opt.forceBattery = true;
                     else { opt.forceHeal = rand2 < 0.35; opt.forceBattery = rand2 >= 0.35 && rand2 < 0.70; }
-                    spawn('Locator', cx + (Math.random() - 0.5) * 25, opt);
+                    spawn('Locator', cx + (Math.random() - 0.5) * 20, opt);
                 }
+            }
+            // 水晶Locator：第8秒后低概率出现
+            if (sec > 8 && frame % 180 === 0 && Math.random() < 0.15) {
+                spawn('CrystalLocator', Math.random() * (w - 60) + 30, {
+                    speedOverride: 1.0 + Math.random() * 0.8, hpMod: 1.2
+                });
             }
         },
 

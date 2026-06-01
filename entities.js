@@ -108,6 +108,7 @@ class Player {
                 // 提供 20% 加成，每级额外 10%
                 inc += 0.20 + (dmgCore.level - 1) * 0.10;
             }
+            inc += ((this.techTree && this.techTree.atk_dmg) || 0) * 0.10;
         }
         
         if (statName === 'fireRate') {
@@ -119,6 +120,7 @@ class Player {
                 let bonus = [0.20, 0.60, 1.00][Math.min(2, speedCore.level - 1)] || 0;
                 inc += bonus;
             }
+            inc += ((this.techTree && this.techTree.spd_rate) || 0) * 0.10;
         }
 
         inc = Math.max(0.1, inc);
@@ -134,8 +136,10 @@ class Player {
         // 【遗漏修补：暴击率绝对加成机制】
         if (statName === 'critRate') {
             if (this.skillActiveTimer > 0) finalVal += 0.80; // 技能期间提供真实的 80% 绝对暴击率
-            finalVal = Math.min(1.0, finalVal); 
+            finalVal = Math.min(1.0, finalVal);
         }
+
+        if (statName === 'maxHp') finalVal += ((this.techTree && this.techTree.hp_max) || 0) * 20;
 
         return finalVal;
     }
@@ -152,8 +156,8 @@ class Player {
         
         if (this.invincible > 0) this.invincible--;
 
-        if (this.techTree && this.techTree.def_regen && typeof frameCount !== 'undefined' && frameCount % 60 === 0) {
-            this.hp = Math.min(this.getStat('maxHp'), this.hp + this.techTree.def_regen);
+        if (this.techTree && this.techTree.hp_regen && typeof frameCount !== 'undefined' && frameCount % 60 === 0) {
+            this.hp = Math.min(this.getStat('maxHp'), this.hp + this.techTree.hp_regen);
         }
 
         if (this.skillActiveTimer > 0) {
@@ -169,14 +173,14 @@ class Player {
         let eq = this.equipment;
         
         let currentFireRate = this.getStat('fireRate');
+        if (this.skillActiveTimer > 0 && this.techTree && this.techTree.spd_skill >= 1) currentFireRate /= 1.5;
         let currentDamage = this.getStat('damage');
         let actCritRate = this.getStat('critRate');
         let actCritDmg = this.getStat('critDamage');
-        
-        // 【已剿灭旧版 eq.speed 强制覆盖逻辑，射速由四维引擎完美接管】
 
         let baseCritCalc = 0.05 + (this.skillActiveTimer > 0 ? 0.8 : 0) + (this.metaStats.inc_critRate || 0);
         if (baseCritCalc > 1.0) actCritDmg += (baseCritCalc - 1.0);
+        if (this.techTree && this.techTree.atk_crit >= 1) actCritDmg *= 2;
 
         let homingTurn = 0;
         if (eq.homing && eq.homing.equipped) homingTurn = 0.15 + (eq.homing.level - 1) * 0.1;
@@ -190,11 +194,6 @@ class Player {
             pRet = eq.pierce.level >= 2 ? 0.8 : 0.5;
         }
         
-        // tech_overclock：CD期间火力+50%
-        if (this.skillCdTimer > 0 && this.techTree && this.techTree.tech_overclock >= 1) {
-            currentDamage *= 1.5;
-        }
-
         let spawnBullet = (vx, vy) => {
             // [技能视觉反馈：弹道变黄]
             let bulletColor = this.skillActiveTimer > 0 ? '#ffeb3b' : '#ffffff';
@@ -310,14 +309,8 @@ class Player {
         let actualAmount = isPercent ? Math.max(40, Math.floor(currentMaxHp * amount)) : amount;
         if (!isPercent && currentDifficulty === 3) actualAmount *= 1.25;
 
-        // def_ultimate：铁壁——每波首次致命伤害改为保留1HP
-        if (!this.ironWallUsed && this.techTree && this.techTree.def_ultimate >= 1) {
-            if (this.hp - actualAmount <= 0) {
-                actualAmount = this.hp - 1;
-                this.ironWallUsed = true;
-                if (typeof pushFloatingText !== 'undefined') pushFloatingText(this.x, this.y - 35, 'IRON WALL', '#ffea00', true, false, '');
-            }
-        }
+        if (this.techTree && this.techTree.def_red > 0)
+            actualAmount = Math.max(1, Math.round(actualAmount * (1 - this.techTree.def_red * 0.05)));
 
         this.hp -= actualAmount;
         this.invincible = 20;
@@ -1250,7 +1243,7 @@ class Item {
                 pushFloatingText(50 + (Math.random() - 0.5) * 15, 45 + (Math.random() - 0.5) * 10, `+${this.value % 1 === 0 ? this.value : this.value.toFixed(1)}`, '#e0e0e0', false, false, "", 6);
             } else if (this.type === 'hp') {
                 let healBase = this.value.isElite ? player.maxHp * 0.60 : player.maxHp * (0.20 + (player.upgrades.heal_up * 0.05));
-                let healAmt = healBase * (1 + ((player.techTree && player.techTree.def_heal) || 0) * 0.20);
+                let healAmt = healBase;
                 player.heal(healAmt, this.value.isElite);
             } else if (this.type === 'energy') {
                 let extraEnergy = (player.upgrades.rapid_charge || 0) * 5;
@@ -1391,13 +1384,14 @@ function pushFloatingText(x, y, amt, col, isP, isC = false, pre = "", fS = 10) {
 }
 
 class AOEEffect {
-    constructor(x, y, maxR) {
+    constructor(x, y, maxR, color = '#ab47bc') {
         this.x = x;
         this.y = y;
         this.radius = 0;
         this.maxRadius = maxR;
         this.life = 15;
         this.active = true;
+        this.color = color;
     }
 
     update() {
@@ -1409,7 +1403,7 @@ class AOEEffect {
     }
 
     draw(ctx) {
-        ctx.strokeStyle = '#ab47bc';
+        ctx.strokeStyle = this.color;
         ctx.lineWidth = 3;
         ctx.globalAlpha = this.life / 15;
         ctx.beginPath();
@@ -1428,15 +1422,15 @@ function createExplosion(x, y, col, count) {
     }
 }
 
-function triggerAOE(x, y, exDmg = null, exR = null) {
+function triggerAOE(x, y, exDmg = null, exR = null, color = '#ab47bc') {
     let level = player.upgrades.aoe;
     if (level === 0 && exDmg === null) return;
-    
+
     let radius = exR !== null ? exR : (40 + level * 15);
     let aoeDmg = exDmg !== null ? exDmg : (player.damage * (level * 0.2));
-    
-    aoeEffects.push(new AOEEffect(x, y, radius));
-    createExplosion(x, y, '#ab47bc', 8);
+
+    aoeEffects.push(new AOEEffect(x, y, radius, color));
+    createExplosion(x, y, color, 8);
     
     enemies.forEach(e => {
         if (e.active) {

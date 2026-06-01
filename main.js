@@ -147,6 +147,7 @@ const ITEM_ICONS = {
 };
 function getItemIcon(id) { return ITEM_ICONS[id] || (id ? '◆' : '◆'); }
 let bullets = [], enemyBullets = [], enemies = [], particles = [], items = [], floatingTexts = [], stars = [], aoeEffects = [];
+let wingmanEntities = [];
 let score = 0, frameCount = 0, gameTimeSeconds = 0;
 let shakeTimer = 0, shakeIntensity = 0;
 let comboCount = 0, comboTimer = 0;
@@ -373,9 +374,6 @@ const LootSystem = {
     init() {
         EventBus.on('ENTITY_DIED', (data) => {
             if (!data.killedByPlayer) return;
-            if (player && player.techTree && player.techTree.tech_energy) {
-                player.skillEnergy = Math.min(player.maxSkillEnergy, player.skillEnergy + player.techTree.tech_energy * 0.5);
-            }
             if (data.isCrystal) {
                 let cnt = 3 + Math.floor(Math.random() * 3);
                 for (let i = 0; i < cnt; i++) {
@@ -876,19 +874,7 @@ function activateSkill() {
         let bonusFrames = (player.upgrades['skill_duration'] || 0) * 60;
         player.skillActiveTimer = 600 + bonusFrames;
 
-        // tech_ultimate：技能伤害乘区（通过临时标记传递到 Bullet）
-        player.skillDamageMult = player.techTree && player.techTree.tech_ultimate
-            ? Math.pow(1.4, player.techTree.tech_ultimate) : 1.0;
-
-        // fp_ultimate：激活时发射20发全向弹
-        if (player.techTree && player.techTree.fp_ultimate >= 1) {
-            for (let i = 0; i < 20; i++) {
-                let a = (Math.PI * 2 / 20) * i;
-                let b = new Bullet(player.x, player.y, Math.cos(a) * 8, Math.sin(a) * 8,
-                    4, 8, player.getStat('damage') * 0.5, 0, 1.0, 0.05, 1.5, '#ffea00');
-                bullets.push(b);
-            }
-        }
+        player.skillDamageMult = 1.0;
 
         triggerShake(10, 10);
         flashScreenTimer = 15;
@@ -1432,8 +1418,8 @@ function loop(timestamp) {
             if (player.skillActiveTimer > 0) {
                 player.skillActiveTimer--;
                 if (player.skillActiveTimer <= 0) {
-                    // skill_cd 缩减：每级冷却 -15%（tech_skillcd 科技树额外加成）
-                    let totalCdLevels = (player.upgrades.skill_cd || 0) + ((player.techTree && player.techTree.tech_skillcd) || 0);
+                    // skill_cd 缩减：每级冷却 -15%
+                    let totalCdLevels = (player.upgrades.skill_cd || 0);
                     let cdReduction = 1.0 - Math.min(0.60, totalCdLevels * 0.15);
                     player.skillCdTimer = Math.round(900 * cdReduction);
                     player.skillDamageMult = 1.0;
@@ -1463,7 +1449,7 @@ function loop(timestamp) {
                     b.hitEnemies.add(e);
                     if (player.upgrades && player.upgrades.aoe > 0) triggerAOE(e.x, e.y);
                     // afterburn：命中后有概率留下燃烧AOE（小范围持续伤害）
-                    let afterburnLevel = (player.upgrades && player.upgrades.afterburn || 0) + ((player.techTree && player.techTree.fp_afterburn) || 0);
+                    let afterburnLevel = (player.upgrades && player.upgrades.afterburn || 0);
                     if (afterburnLevel > 0 && Math.random() < 0.25 * afterburnLevel) {
                         triggerAOE(e.x, e.y, player.getStat('damage') * 0.3, 28);
                     }
@@ -1475,14 +1461,93 @@ function loop(timestamp) {
             });
         });
 
-        let totalWingman = ((player && player.upgrades && player.upgrades.wingman) || 0) + ((player && player.techTree && player.techTree.tech_wingman) || 0);
-        if (player && totalWingman > 0 && player.hp > 0 && endingState !== 'playerDead') {
-            let wTime = frameCount * 0.05;
-            for (let i = 0; i < totalWingman; i++) {
-                let angle = wTime + (i * Math.PI * 2 / totalWingman);
-                let wx = player.x + Math.cos(angle) * 35; let wy = player.y + Math.sin(angle) * 35;
-                ctx.fillStyle = '#ffea00'; ctx.fillRect(wx - 2, wy - 2, 4, 4);
-                if (frameCount % 45 === 0) { bullets.push(new Bullet(wx, wy, 0, -18, 2, 8, player.damage * 0.4, 0, 1, player.critRate, player.critDamage, '#ffea00')); }
+        // === Wingman State Machine ===
+        if (player && player.hp > 0 && endingState !== 'playerDead') {
+            let totalWingman = (player.upgrades && player.upgrades.wingman) || 0;
+            // sync array size
+            while (wingmanEntities.length < totalWingman) {
+                let idx = wingmanEntities.length;
+                wingmanEntities.push({ state:'orbit', orbitAngle: idx * Math.PI * 2 / Math.max(1, totalWingman),
+                    x: player.x, y: player.y, vx:0, vy:0, seekTimer:0,
+                    swoopCooldown: 180 + idx * 60, respawnTimer:0 });
+            }
+            while (wingmanEntities.length > totalWingman) wingmanEntities.pop();
+
+            let wLv = totalWingman;
+            let wDmg = player.damage * (0.6 + (wLv - 1) * 0.25);
+            let wRadius = 45 + (wLv - 1) * 12;
+            let swoopInterval = Math.max(120, 240 - (wLv - 1) * 30);
+            let respawnTime = Math.max(80, 180 - (wLv - 1) * 25);
+
+            for (let w of wingmanEntities) {
+                if (w.state === 'orbit') {
+                    w.orbitAngle += 0.04;
+                    w.x = player.x + Math.cos(w.orbitAngle) * 35;
+                    w.y = player.y + Math.sin(w.orbitAngle) * 35;
+                    w.swoopCooldown--;
+                    if (w.swoopCooldown <= 0 && enemies.length > 0) {
+                        let nearest = null, nearDist = Infinity;
+                        for (let e of enemies) {
+                            if (!e.active) continue;
+                            let d2 = (e.x - w.x) ** 2 + (e.y - w.y) ** 2;
+                            if (d2 < nearDist) { nearDist = d2; nearest = e; }
+                        }
+                        if (nearest) {
+                            let dist = Math.sqrt(nearDist) || 1;
+                            w.vx = (nearest.x - w.x) / dist * 5;
+                            w.vy = (nearest.y - w.y) / dist * 5;
+                            w._target = nearest;
+                            w.state = 'seek'; w.seekTimer = 0;
+                        } else {
+                            w.swoopCooldown = swoopInterval;
+                        }
+                    }
+                    // draw orbit: yellow diamond
+                    ctx.save();
+                    ctx.fillStyle = '#ffea00';
+                    ctx.beginPath();
+                    ctx.moveTo(w.x, w.y - 4); ctx.lineTo(w.x + 3, w.y);
+                    ctx.lineTo(w.x, w.y + 4); ctx.lineTo(w.x - 3, w.y);
+                    ctx.closePath(); ctx.fill();
+                    ctx.restore();
+                } else if (w.state === 'seek') {
+                    let tgt = w._target;
+                    if (tgt && tgt.active) {
+                        let tx = tgt.x - w.x, ty = tgt.y - w.y;
+                        let tl = Math.sqrt(tx*tx + ty*ty) || 1;
+                        w.vx = w.vx * 0.85 + (tx / tl) * 6 * 0.15;
+                        w.vy = w.vy * 0.85 + (ty / tl) * 6 * 0.15;
+                        let sp = Math.sqrt(w.vx*w.vx + w.vy*w.vy);
+                        if (sp > 6) { w.vx = w.vx/sp*6; w.vy = w.vy/sp*6; }
+                    }
+                    w.x += w.vx; w.y += w.vy;
+                    w.seekTimer++;
+                    let hitTarget = (tgt && tgt.active && (w.x - tgt.x)**2 + (w.y - tgt.y)**2 < 15*15);
+                    let timeout = w.seekTimer > 100;
+                    let targetGone = !tgt || !tgt.active;
+                    if (hitTarget || timeout || targetGone) {
+                        triggerAOE(w.x, w.y, wDmg, wRadius, '#ffea00');
+                        w.state = 'dead'; w.respawnTimer = respawnTime;
+                    }
+                    // draw seek: yellow diamond rotated toward velocity
+                    ctx.save();
+                    ctx.translate(w.x, w.y);
+                    let ang = Math.atan2(w.vy, w.vx);
+                    ctx.rotate(ang + Math.PI / 4);
+                    ctx.fillStyle = '#ffea00';
+                    ctx.beginPath();
+                    ctx.moveTo(0, -4); ctx.lineTo(3, 0);
+                    ctx.lineTo(0, 4); ctx.lineTo(-3, 0);
+                    ctx.closePath(); ctx.fill();
+                    ctx.restore();
+                } else if (w.state === 'dead') {
+                    w.respawnTimer--;
+                    if (w.respawnTimer <= 0) {
+                        w.state = 'orbit';
+                        w.orbitAngle = Math.random() * Math.PI * 2;
+                        w.swoopCooldown = swoopInterval;
+                    }
+                }
             }
         }
     }
@@ -1623,40 +1688,54 @@ function switchTerminalTab(tabId) {
 
     } else if (tabId === 'tech') {
         const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V'];
-        const branchColors = { root: '#00e676', fire: '#ff5722', def: '#42a5f5', tech: '#66bb6a' };
+        const branchColors = { root: '#00e676', atk: '#ff5722', def: '#42a5f5', hp: '#e91e63', spd: '#ffea00' };
 
         let html = `<div ${S('font-family:'+PIXEL_FONT+';font-size:10px;color:#00e676;letter-spacing:2px;margin-bottom:8px;')}>■ 科技树</div>`;
         html += `<div ${S('font-size:9px;color:#aaa;margin-bottom:10px;')}>可用算力: <span ${S('color:#00e5ff;font-family:'+PIXEL_FONT)}>${player.pt.toFixed(1)} PT</span></div>`;
+
+        let rootLv = (player.techTree && player.techTree.root) || 0;
 
         const renderNode = (node) => {
             let curLv = (player.techTree && player.techTree[node.id]) || 0;
             let isMax = curLv >= node.maxLevel;
             let prereqMet = !node.prereq || ((player.techTree && player.techTree[node.prereq]) || 0) >= 1;
+            let rootMet = (node.minRootLevel || 0) <= rootLv;
+            let unlocked = prereqMet && rootMet;
             let cost = isMax ? null : node.costs[curLv];
-            let canBuy = prereqMet && !isMax && player.pt >= cost;
+            let canBuy = unlocked && !isMax && player.pt >= cost;
             let col = branchColors[node.branch] || '#888';
-            let bg = isMax ? 'rgba(0,230,118,0.10)' : (prereqMet ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.2)');
-            let border = isMax ? '#00e676' : (prereqMet ? col : '#333');
+            let bg = isMax ? 'rgba(0,230,118,0.10)' : (unlocked ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.2)');
+            let border = isMax ? '#00e676' : (unlocked ? col : '#333');
             let lvText = isMax ? 'MAX' : (curLv > 0 ? (ROMAN[curLv] || curLv) : '—');
-            return `<div ${S(`border:1px solid ${border};border-radius:3px;padding:6px 5px;background:${bg};margin-bottom:4px;${!prereqMet?'opacity:0.45;':''}`)}>
+            let lockLabel = !prereqMet ? '已锁定' : (!rootMet ? `需核心Lv.${node.minRootLevel}` : cost + 'PT');
+            return `<div ${S(`border:1px solid ${border};border-radius:3px;padding:6px 5px;background:${bg};margin-bottom:4px;${!unlocked?'opacity:0.45;':''}`)}>
                 <div ${S('font-family:'+PIXEL_FONT+';font-size:7px;color:'+col+';margin-bottom:2px;')}>${node.name}<span ${S('color:#888;margin-left:4px;')}>${lvText}</span></div>
                 <div ${S('font-size:6px;color:#555;margin-bottom:4px;line-height:1.3;')}>${node.desc}</div>
-                ${isMax ? `<div ${S('font-size:6px;color:#00e676;font-family:'+PIXEL_FONT)}>■ MAX</div>` : `<button onclick="techTreeBuy('${node.id}')" ${S('width:100%;background:'+(canBuy?col:'#222')+';color:'+(canBuy?'#000':'#444')+';border:none;padding:3px 0;cursor:'+(canBuy?'pointer':'not-allowed')+';font-family:'+PIXEL_FONT+';font-size:6px;border-radius:2px;')}>${prereqMet ? cost+'PT' : '已锁定'}</button>`}
+                ${isMax ? `<div ${S('font-size:6px;color:#00e676;font-family:'+PIXEL_FONT)}>■ MAX</div>` : `<button onclick="techTreeBuy('${node.id}')" ${S('width:100%;background:'+(canBuy?col:'#222')+';color:'+(canBuy?'#000':'#444')+';border:none;padding:3px 0;cursor:'+(canBuy?'pointer':'not-allowed')+';font-family:'+PIXEL_FONT+';font-size:6px;border-radius:2px;')}>${lockLabel}</button>`}
             </div>`;
         };
 
         let rootNode = TECH_TREE.find(n => n.branch === 'root');
         html += `<div ${S('margin-bottom:8px;')}>${renderNode(rootNode)}</div>`;
 
-        let fireNodes = TECH_TREE.filter(n => n.branch === 'fire');
-        let defNodes  = TECH_TREE.filter(n => n.branch === 'def');
-        let techNodes = TECH_TREE.filter(n => n.branch === 'tech');
-        const colHeader = (name, color) => `<div ${S('font-family:'+PIXEL_FONT+';font-size:7px;color:'+color+';text-align:center;margin-bottom:4px;letter-spacing:1px;padding-bottom:3px;border-bottom:1px solid '+color+'44;')}>${name}</div>`;
+        const colHeader = (name, color) => `<div ${S('font-family:'+PIXEL_FONT+';font-size:7px;color:'+color+';margin-bottom:4px;letter-spacing:1px;padding-bottom:3px;border-bottom:1px solid '+color+'44;')}>${name}</div>`;
+
+        let atkNodes = TECH_TREE.filter(n => n.branch === 'atk');
+        let defNodes = TECH_TREE.filter(n => n.branch === 'def');
+        let hpNodes  = TECH_TREE.filter(n => n.branch === 'hp');
+        let spdNodes = TECH_TREE.filter(n => n.branch === 'spd');
 
         html += `<div ${S('display:flex;gap:5px;')}>
-            <div ${S('flex:1;min-width:0;')}>${colHeader('火力','#ff5722')}${fireNodes.map(renderNode).join('')}</div>
-            <div ${S('flex:1;min-width:0;')}>${colHeader('防御','#42a5f5')}${defNodes.map(renderNode).join('')}</div>
-            <div ${S('flex:1;min-width:0;')}>${colHeader('科技','#66bb6a')}${techNodes.map(renderNode).join('')}</div>
+            <div ${S('flex:1;min-width:0;')}>
+                ${colHeader('攻击力','#ff5722')}${atkNodes.map(renderNode).join('')}
+                <div ${S('margin-top:6px;')}></div>
+                ${colHeader('防御力','#42a5f5')}${defNodes.map(renderNode).join('')}
+            </div>
+            <div ${S('flex:1;min-width:0;')}>
+                ${colHeader('血量','#e91e63')}${hpNodes.map(renderNode).join('')}
+                <div ${S('margin-top:6px;')}></div>
+                ${colHeader('射速','#ffea00')}${spdNodes.map(renderNode).join('')}
+            </div>
         </div>`;
         view.innerHTML = html;
 
@@ -1732,7 +1811,9 @@ window.techTreeBuy = function(nodeId) {
     let curLv = (player.techTree && player.techTree[nodeId]) || 0;
     if (curLv >= node.maxLevel) return;
     let prereqMet = !node.prereq || ((player.techTree && player.techTree[node.prereq]) || 0) >= 1;
-    if (!prereqMet) { triggerShake(4, 4); return; }
+    let rootLv    = (player.techTree && player.techTree.root) || 0;
+    let rootMet   = (node.minRootLevel || 0) <= rootLv;
+    if (!prereqMet || !rootMet) { triggerShake(4, 4); return; }
     let cost = node.costs[curLv];
     if (player.pt < cost) { triggerShake(4, 4); return; }
     player.pt -= cost;
@@ -1779,7 +1860,7 @@ function startGame(levelId) {
     resize(); initSprites(); initStars();
     
     player = new Player();
-    enemies = []; bullets = []; enemyBullets = []; items = []; particles = []; floatingTexts = []; aoeEffects = [];
+    enemies = []; bullets = []; enemyBullets = []; items = []; particles = []; floatingTexts = []; aoeEffects = []; wingmanEntities = [];
     score = 0; frameCount = 0; gameTimeSeconds = 0;
     shakeTimer = 0; hitStopFrames = 0; flashScreenTimer = 0;
     comboCount = 0; comboTimer = 0; endingState = 'none'; endingTimer = 0;

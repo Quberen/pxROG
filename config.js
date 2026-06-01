@@ -35,7 +35,7 @@ const baseUpgradePool = [
     { id: 'crit_dmg',   type: 'stat',    name: '弱点分析', rarity: 'E', unlockPT: 2.0,  unlockTime: 0,   desc: '暴击伤害+20%/级。' },
     { id: 'healer_rate',type: 'utility', name: '补给雷达', rarity: 'E', unlockPT: 2.0,  unlockTime: 30,  desc: '携带修复包的机体概率+3%/级。' },
     { id: 'aoe',        type: 'stat',    name: '高爆弹头', rarity: 'L', unlockPT: 8.0,  unlockTime: 60,  desc: '部分攻击引发大范围爆炸。' },
-    { id: 'wingman',    type: 'stat',    name: '战斗僚机', rarity: 'L', unlockPT: 12.0, unlockTime: 90,  desc: '部署自动攻击敌人的浮游炮。' },
+    { id: 'wingman',    type: 'stat',    name: '战斗僚机', rarity: 'R', unlockPT: 12.0, unlockTime: 90,  desc: '部署绕轨僚机，定期飞扑最近敌人并爆炸。' },
     { id: 'slot',       type: 'utility', name: '系统插槽', rarity: 'L', unlockPT: 2.0,  unlockTime: 0,   desc: '背包容量扩充，+1 装备插槽。' },
 
     { id: 'hp_max',   type: 'equip', name: '装甲重塑', rarity: 'E', slotCost: 1, unlockPT: 0,    unlockTime: 0,   desc: '血量上限+30/30/40，获取时自动补血。' },
@@ -47,7 +47,7 @@ const baseUpgradePool = [
 
     // 新增商品
     { id: 'rapid_charge', type: 'stat',    name: '快速充能', rarity: 'R', unlockPT: 1.0,  unlockTime: 0,  desc: '击杀敌人额外获得+5技能能量/级。' },
-    { id: 'phase_dodge',  type: 'stat',    name: '相位闪避', rarity: 'E', unlockPT: 3.0,  unlockTime: 30, desc: '受伤时15%概率完全免疫伤害/级(最高45%)。' },
+    { id: 'phase_dodge',  type: 'stat',    name: '相位闪避', rarity: 'L', unlockPT: 3.0,  unlockTime: 30, desc: '受伤时15%概率完全免疫伤害/级(最高45%)。' },
     { id: 'afterburn',    type: 'stat',    name: '余烬',     rarity: 'E', unlockPT: 5.0,  unlockTime: 60, desc: '子弹命中后留下燃烧AOE区域，持续灼烧。' },
     { id: 'shield_gen',   type: 'utility', name: '屏障再生', rarity: 'R', unlockPT: 1.5,  unlockTime: 0,  desc: '每次休整波次结束时回复8%最大HP/级。' },
     { id: 'skill_cd',     type: 'upgrade', name: '超频缩减', rarity: 'R', unlockPT: 2.0,  unlockTime: 0,  desc: '技能冷却时间-15%/级(最多-45%)。' }
@@ -62,21 +62,25 @@ function getHpMaxBoost(level) {
 }
 
 const TECH_TREE = [
-    { id: 'root',          branch: 'root', maxLevel: 1, costs: [20],          prereq: null,           name: '系统核心',   desc: '激活科技树' },
-    { id: 'fp_scatter',    branch: 'fire', maxLevel: 3, costs: [15, 25, 40],  prereq: 'root',         name: '散射矩阵',   desc: '每级+1弹扩散（无散弹模组时生效）' },
-    { id: 'fp_laser',      branch: 'fire', maxLevel: 3, costs: [15, 25, 40],  prereq: 'root',         name: '激光增幅',   desc: '每级激光伤害×1.25' },
-    { id: 'fp_afterburn',  branch: 'fire', maxLevel: 2, costs: [30, 50],      prereq: 'fp_scatter',   name: '余燃强化',   desc: '每级+1余燃层' },
-    { id: 'fp_ultimate',   branch: 'fire', maxLevel: 1, costs: [60],          prereq: 'fp_laser',     name: '全方位爆发', desc: '技能触发时额外发射20发全向弹' },
-    { id: 'def_regen',     branch: 'def',  maxLevel: 3, costs: [12, 20, 35],  prereq: 'root',         name: '纳米修复',   desc: '每级每60帧回1HP' },
-    { id: 'def_dodge',     branch: 'def',  maxLevel: 3, costs: [12, 20, 35],  prereq: 'root',         name: '规避机动',   desc: '每级+10%闪避率' },
-    { id: 'def_heal',      branch: 'def',  maxLevel: 2, costs: [25, 40],      prereq: 'def_regen',    name: '治愈强化',   desc: '每级治疗道具效果+20%' },
-    { id: 'def_ultimate',  branch: 'def',  maxLevel: 1, costs: [60],          prereq: 'def_dodge',    name: '铁壁',       desc: '每波首次致命伤害改为保留1HP' },
-    { id: 'tech_skillcd',  branch: 'tech', maxLevel: 3, costs: [15, 25, 40],  prereq: 'root',         name: '算力超频',   desc: '每级技能CD-15%' },
-    { id: 'tech_wingman',  branch: 'tech', maxLevel: 3, costs: [15, 25, 40],  prereq: 'root',         name: '僚机扩编',   desc: '每级+1僚机' },
-    { id: 'tech_energy',   branch: 'tech', maxLevel: 2, costs: [20, 35],      prereq: 'tech_skillcd', name: '能量回收',   desc: '每级每次击杀回0.5能量' },
-    { id: 'tech_ultimate', branch: 'tech', maxLevel: 2, costs: [40, 60],      prereq: 'tech_wingman', name: '战略加成',   desc: '每级技能伤害×1.4' },
-    { id: 'def_shield',    branch: 'def',  maxLevel: 1, costs: [80],          prereq: 'def_ultimate', name: '能量护盾',   desc: '激活铁壁后获得3HP额外护盾' },
-    { id: 'tech_overclock',branch: 'tech', maxLevel: 1, costs: [80],          prereq: 'tech_ultimate',name: '极限超频',   desc: '技能冷却期间火力+50%' },
+    { id: 'root',      branch: 'root', maxLevel: 4, costs: [5, 15, 30, 50],
+      prereq: null,    minRootLevel: 0,
+      name: '系统核心', desc: 'Lv.1一阶 · Lv.2二阶 · Lv.3三阶 · Lv.4特化' },
+    { id: 'atk_dmg',   branch: 'atk', maxLevel: 3, costs: [8, 14, 22],
+      prereq: 'root',  minRootLevel: 1, name: '基础攻击',  desc: '每级基础伤害+10%' },
+    { id: 'atk_crit',  branch: 'atk', maxLevel: 1, costs: [30],
+      prereq: 'atk_dmg', minRootLevel: 4, name: '暴击锐化', desc: '暴击时伤害额外×2' },
+    { id: 'def_red',   branch: 'def', maxLevel: 3, costs: [8, 14, 22],
+      prereq: 'root',  minRootLevel: 1, name: '伤害减免',  desc: '每级受伤减少5%' },
+    { id: 'def_dodge', branch: 'def', maxLevel: 3, costs: [20, 30, 45],
+      prereq: 'def_red', minRootLevel: 4, name: '概率免伤', desc: '每级+10%受击完全免疫概率' },
+    { id: 'hp_max',    branch: 'hp',  maxLevel: 3, costs: [8, 14, 22],
+      prereq: 'root',  minRootLevel: 1, name: '最大血量',  desc: '每级最大HP+20' },
+    { id: 'hp_regen',  branch: 'hp',  maxLevel: 3, costs: [12, 18, 28],
+      prereq: 'hp_max', minRootLevel: 4, name: '纳米修复', desc: '每级每60帧回1HP' },
+    { id: 'spd_rate',  branch: 'spd', maxLevel: 3, costs: [8, 14, 22],
+      prereq: 'root',  minRootLevel: 1, name: '基础射速',  desc: '每级射速+10%' },
+    { id: 'spd_skill', branch: 'spd', maxLevel: 1, costs: [30],
+      prereq: 'spd_rate', minRootLevel: 4, name: '技能超载', desc: '技能激活期间射速额外+50%' },
 ];
 
 function createPixelTexture(grid, colors, pixelSize) {
@@ -97,7 +101,7 @@ function initSprites() {
     sprites.pt_core = createPixelTexture([[0,1,0],[1,2,1],[0,1,0]], ['#ffffff', '#e0e0e0'], 3);
     sprites.energy_crystal = createPixelTexture([[0,1,0],[1,2,1],[0,1,0]], ['#00e5ff', '#ffffff'], 3);
     
-    sprites.crystal_locator = createPixelTexture([[0,1,2,1,0],[1,2,3,2,1],[2,3,4,3,2],[1,2,3,2,1],[0,1,2,1,0]], ['#b0bec5', '#cfd8dc', '#e0e0e0', '#ffffff'], 3);
+    sprites.crystal_locator = createPixelTexture([[1,0,0,0,1],[0,1,2,1,0],[1,2,3,2,1],[0,1,2,1,0],[0,1,0,1,0]], ['#90a4ae', '#cfd8dc', '#ffffff'], 3);
     sprites.node_fire  = createPixelTexture([[0,0,1,0,0],[0,1,2,1,0],[1,2,2,2,1],[0,1,2,1,0],[0,0,1,0,0]], ['#ff5722', '#ff8a65'], 3);
     sprites.node_def   = createPixelTexture([[0,1,1,1,0],[1,2,2,2,1],[1,2,2,2,1],[0,1,2,1,0],[0,0,1,0,0]], ['#1565c0', '#42a5f5'], 3);
     sprites.node_tech  = createPixelTexture([[0,0,1,0,0],[0,1,2,1,0],[1,2,1,2,1],[0,1,2,1,0],[0,0,1,0,0]], ['#2e7d32', '#66bb6a'], 3);
