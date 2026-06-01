@@ -171,7 +171,7 @@ window.WORKSHOP = {
                             spawn('CrystalLocator', sW * c, { speedOverride: 0.6, y: -40 - r * 32 });
                         } else {
                             let rand2 = Math.random();
-                            let opt = { speedOverride: 0.7, hpMod: 0.45, y: -40 - r * 32 };
+                            let opt = { speedOverride: 0.6, hpMod: 0.45, y: -40 - r * 32 };
                             if (rand2 < 0.35) opt.forceHeal = true;
                             else if (rand2 < 0.75) opt.forceBattery = true;
                             spawn('Locator', sW * c, opt);

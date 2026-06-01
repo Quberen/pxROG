@@ -1598,7 +1598,7 @@ class BurnEffect {
                     if (!e.active) return;
                     let dx = e.x - this.x, dy = e.y - this.y;
                     if (dx * dx + dy * dy < (this.radius + e.w / 2 * e.scale) ** 2) {
-                        e.takeDamage(this.dmgPerTick, false, false, 'burn');
+                        e.takeDamage(this.dmgPerTick, true, false, 'burn');
                     }
                 });
             }

@@ -606,7 +606,13 @@ window.spawnEnemyByType = function(type, x, options = {}) {
     if (e) {
         if (speedOver !== null && e.speed !== undefined) e.speed = speedOver;
         if (isDF) e.isDumbFire = true;
-        if (forceBat) e.isBattery = true;
+        if (forceBat) {
+            e.isBattery = true;
+            if (e.sprite === sprites.locator)  e.sprite = sprites.locator_battery;
+            else if (e.sprite === sprites.wanderer) e.sprite = sprites.wanderer_battery;
+            else if (e.sprite === sprites.turret)   e.sprite = sprites.turret_battery;
+            e.particleColor = '#00e5ff';
+        }
         if (fireInt !== null) { e.fireInterval = fireInt; e.shootTimer = fireInt; }
         if (options.hpMod !== undefined) { e.hp = Math.max(1, Math.round(e.hp * options.hpMod)); e.maxHp = e.hp; }
         enemies.push(e);
@@ -1006,7 +1012,7 @@ function updateHUD() {
 
 function updatePixelButtons() {
     if (!player) return;
-    let skProg = player.skillEnergy / player.maxSkillEnergy;
+    let skProg = player.skillActiveTimer > 0 ? 1 : (player.skillEnergy / player.maxSkillEnergy);
     let skCdProg = player.skillCdTimer > 0 ? (player.skillCdTimer / 900) : 0;
     let skColor = player.skillActiveTimer > 0 ? '#00e5ff' : '#00b0ff';
     let skIsActive = player.skillActiveTimer > 0;
