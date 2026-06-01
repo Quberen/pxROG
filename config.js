@@ -33,12 +33,10 @@ const baseUpgradePool = [
     { id: 'magnet',     type: 'utility', name: '引力场',   rarity: 'C', unlockPT: 0,    unlockTime: 0,   desc: '扩大能量晶体与补给的拾取范围。' },
     { id: 'crit_rate',  type: 'stat',    name: '精准校准', rarity: 'R', unlockPT: 1.0,  unlockTime: 0,   desc: '暴击概率+5%/级。' },
     { id: 'crit_dmg',   type: 'stat',    name: '弱点分析', rarity: 'E', unlockPT: 2.0,  unlockTime: 0,   desc: '暴击伤害+20%/级。' },
-    { id: 'healer_rate',type: 'utility', name: '补给雷达', rarity: 'E', unlockPT: 2.0,  unlockTime: 30,  desc: '携带修复包的机体概率+3%/级。' },
     { id: 'aoe',        type: 'equip',   name: '高爆弹头', slotCost: 2, rarity: 'L', initialCost: 3.0, unlockPT: 8.0,  unlockTime: 60,  desc: '部分攻击引发大范围爆炸。' },
     { id: 'wingman',    type: 'stat',    name: '战斗僚机', rarity: 'R', unlockPT: 12.0, unlockTime: 90,  desc: '部署绕轨僚机，定期飞扑最近敌人并爆炸。' },
     { id: 'slot',       type: 'utility', name: '系统插槽', rarity: 'L', unlockPT: 2.0,  unlockTime: 0,   desc: '背包容量扩充，+1 装备插槽。' },
 
-    { id: 'hp_max',   type: 'equip', name: '装甲重塑', rarity: 'E', slotCost: 1, unlockPT: 0,    unlockTime: 0,   desc: '血量上限+30/30/40，获取时自动补血。' },
     { id: 'homing',   type: 'equip', name: '追踪模块', rarity: 'E', slotCost: 2, unlockPT: 5.0,  unlockTime: 60,  initialCost: 2.5, desc: '子弹弱追踪敌机。升级提升制导强度。' },
     { id: 'pulse',    type: 'equip', name: '脉冲发射', rarity: 'R', slotCost: 2, unlockPT: 4.0,  unlockTime: 60,  desc: '点射模式。升级缩短发射间隔。' },
     { id: 'laser',    type: 'equip', name: '高能激光', rarity: 'L', slotCost: 3, unlockPT: 15.0, unlockTime: 120, initialCost: 5.0, desc: '发射贯穿屏障的高频光束。' },

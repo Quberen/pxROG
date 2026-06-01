@@ -221,34 +221,47 @@ class Player {
         this.isFiringLaser = false;
         
         if (eq.laser && eq.laser.equipped) {
-            if (eq.pulse && eq.pulse.equipped) { if (this.bursting > 0) this.isFiringLaser = true; } 
+            if (eq.pulse && eq.pulse.equipped) { if (this.bursting > 0) this.isFiringLaser = true; }
             else { this.isFiringLaser = true; }
-            
+
             if (this.isFiringLaser) {
+                // 射速：初始为基础射速的120%，所有射速加成额外提升20%
+                let laserFireInc = 1.2;
+                let speedCore = eq.speed || eq.burst_core;
+                if (speedCore && speedCore.equipped) {
+                    let bonus = [0.20, 0.60, 1.00][Math.min(2, speedCore.level - 1)] || 0;
+                    laserFireInc += bonus * 1.2;
+                }
+                laserFireInc += ((this.techTree && this.techTree.spd_rate) || 0) * 0.10 * 1.2;
+                if (this.skillActiveTimer > 0 && this.techTree && this.techTree.spd_skill >= 1) laserFireInc *= 1.5;
+                let laserInterval = Math.max(1, Math.floor(this.baseStats.fireRate / laserFireInc));
+
                 this.laserTick++;
-                if (this.laserTick % 5 === 0) {
+                if (this.laserTick % laserInterval === 0) {
+                    // 伤害只受基础伤害和等级影响（不受高能弹头加成）
                     let laserMult = 0.25 + (eq.laser.level - 1) * 0.15;
-                    laserMult *= (1 + ((this.techTree && this.techTree.fp_laser) || 0) * 0.25);
-                    let laserDmg = currentDamage * laserMult;
-                    
+                    let laserDmg = this.baseStats.damage * laserMult;
+
+                    let laserHitSet = new Set();
                     enemies.forEach(e => {
-                        if (!e.active) return;
+                        if (!e.active || laserHitSet.has(e)) return;
                         let hit = false;
-                        if (Math.abs(e.x - this.x) < e.w / 2 + 16 && e.y < this.y) hit = true;
+                        if (Math.abs(e.x - this.x) < e.w * e.scale / 2 + 27 && e.y < this.y) hit = true;
                         if (!hit && eq.spread && eq.spread.equipped) {
                             let dy = this.y - e.y;
                             if (dy > 0) {
                                 let offset = dy * 0.15;
-                                if (Math.abs(e.x - (this.x - offset)) < e.w / 2 + 16) hit = true;
-                                else if (Math.abs(e.x - (this.x + offset)) < e.w / 2 + 16) hit = true;
+                                if (Math.abs(e.x - (this.x - offset)) < e.w * e.scale / 2 + 27) hit = true;
+                                else if (Math.abs(e.x - (this.x + offset)) < e.w * e.scale / 2 + 27) hit = true;
                             }
                         }
-                        
+
                         if (hit) {
+                            laserHitSet.add(e);
                             let isCrit = Math.random() < actCritRate;
                             let finalDmg = isCrit ? laserDmg * actCritDmg : laserDmg;
                             e.takeDamage(finalDmg, true, isCrit, 'laser');
-                            
+
                             if (particles.length < 180) particles.push(new Particle(e.x, e.y + e.h / 2, '#00e5ff', (Math.random() - 0.5) * 8, Math.random() * 5, 8));
                             if (this.equipment.aoe && this.equipment.aoe.equipped && Math.random() < 0.1) triggerAOE(e.x, e.y, finalDmg, 40);
                         }
@@ -332,18 +345,33 @@ class Player {
 
         this.hp -= actualAmount;
         this.invincible = 20;
-        
+
         let dmgMag = 15 + Math.min(20, actualAmount * 0.6);
         let dmgAng = Math.random() * Math.PI * 2;
         uiOffsets.hp.x += Math.cos(dmgAng) * dmgMag;
         uiOffsets.hp.y += Math.sin(dmgAng) * dmgMag;
-        
+
+        // 受伤视觉与卡帧
+        let isAbyssSource = (sourceStr === 'abyss' || sourceStr === 'boss' || sourceStr === 'abyss_bullet');
+        if (typeof damageVignetteTimer !== 'undefined') {
+            damageVignetteTimer = 25;
+            damageVignetteColor = isAbyssSource ? '171,71,188' : '220,0,50';
+        }
+        if (typeof hitStopFrames !== 'undefined') {
+            if (sourceStr === 'kamikaze') {
+                hitStopFrames = 14;
+                if (typeof pendingPostHitstopEffect !== 'undefined') pendingPostHitstopEffect = { intensity: 10, duration: 12 };
+            } else {
+                hitStopFrames = Math.max(hitStopFrames, 4);
+            }
+        }
+
         if (typeof EventBus !== 'undefined') EventBus.emit('ENTITY_DAMAGED', { isPlayer: true });
-        
+
         if (config.dmgText) pushFloatingText(this.x, this.y - 20, Math.floor(actualAmount), '#ff3333', true);
-        
+
         comboCount = Math.floor(comboCount / 2);
-        
+
         if (this.hp <= 0) { this.hp = 0; startEnding('playerDead'); }
         if (typeof updateHUD !== 'undefined') updateHUD();
     }
@@ -467,7 +495,7 @@ class EnemyBullet {
         
         if (Math.abs(this.x - player.x) < player.w / 2 + 2 && Math.abs(this.y - player.y) < player.h / 2 + 2) {
             let diffDmg = (this.type === 'homing' ? 12 : 10) * DIFF_CONFIG[currentDifficulty].dmgMod;
-            player.takeDamage(diffDmg);
+            player.takeDamage(diffDmg, false, this.type === 'homing' ? 'abyss_bullet' : 'bullet');
             this.active = false;
         }
     }
@@ -527,19 +555,20 @@ class BaseEnemy {
         }
     }
 
-    checkPlayerCollision(isPercent = false, overrideDmg = null) {
+    checkPlayerCollision(isPercent = false, overrideDmg = null, sourceOverride = null) {
         let r_w = this.w * this.scale;
         let r_h = this.h * this.scale;
-        
+
         if (Math.abs(this.x - player.x) < (r_w / 2 + player.w / 2 - 8) && Math.abs(this.y - player.y) < (r_h / 2 + player.h / 2 - 8)) {
             let baseDmg = this.isAbyss ? 18 : 15;
             if (overrideDmg !== null) baseDmg = overrideDmg;
-            
+
             let actualDmg = isPercent ? baseDmg : (baseDmg * DIFF_CONFIG[currentDifficulty].dmgMod);
             if (this.isElite) actualDmg *= 2;
-            
-            player.takeDamage(actualDmg, isPercent, 'collision');
-            
+
+            let src = sourceOverride || (this.isBoss ? 'boss' : (this.isAbyss ? 'abyss' : 'collision'));
+            player.takeDamage(actualDmg, isPercent, src);
+
             if (!this.isBoss) {
                 if (this.isSpecial) specialKamikazeMisses = 0;
                 this.die(false);
@@ -788,9 +817,9 @@ class Kamikaze extends BaseEnemy {
         }
         
         if (this.vType === 'special') {
-            this.checkPlayerCollision(true, 0.35);
+            this.checkPlayerCollision(true, 0.35, 'kamikaze');
         } else {
-            this.checkPlayerCollision(false, 30);
+            this.checkPlayerCollision(false, 30, 'kamikaze');
         }
     }
 }
@@ -951,9 +980,16 @@ class BossScrapDominator extends BaseEnemy {
         if (typeof AudioSystem !== 'undefined') AudioSystem.playBGM('boss');
     }
 
+    _enterHoverAfter(attackState) {
+        const BOSS_CD = { ATTACK_SPAWN: 55, ATTACK_RING: 90, ATTACK_SPIRAL: 100, ATTACK_LASER: 120, ATTACK_CHARGE: 150, ATTACK_TURRETS: 80, ATTACK_RUSH: 110 };
+        const cdScale = [1.0, 0.85, 0.65][this.phase - 1];
+        this.state = 'HOVER';
+        this.timer = Math.round((BOSS_CD[attackState] || 90) * cdScale);
+    }
+
     update() {
         if (endingState === 'bossDead') return;
-        
+
         let hpPct = Math.max(0, this.hp / this.maxHp);
         ui.bossHpFill.style.width = `${hpPct * 100}%`;
         ui.bossHpDelay.style.width = `${hpPct * 100}%`;
@@ -1000,52 +1036,55 @@ class BossScrapDominator extends BaseEnemy {
                     window.spawnEnemyByType('Kamikaze', Math.random() * (width - 80) + 40, { speedOverride: 2.5 });
                 }
                 let roll = Math.random();
+                // 技能权重冷却表（帧数），Phase缩放：1.0 / 0.85 / 0.65
+                const BOSS_CD = { SPAWN: 55, RING: 90, SPIRAL: 100, LASER: 120, CHARGE: 150, TURRETS: 80, RUSH: 110 };
+                const cdScale = [1.0, 0.85, 0.65][this.phase - 1];
+                let nextState = 'HOVER', nextTimer = 90;
+
                 if (this.phase === 1) {
                     if (roll < 0.30) {
-                        this.state = 'ATTACK_SPAWN'; this.timer = 45;
-                    } else if (roll < 0.60) {
-                        this.state = 'ATTACK_RING'; this.timer = 60;
-                    } else if (roll < 0.80) {
-                        this.state = 'ATTACK_CHARGE'; this.chargePhase = 'WARN'; this.timer = 50;
+                        nextState = 'ATTACK_SPAWN'; this.timer = 45;
+                    } else if (roll < 0.62) {
+                        nextState = 'ATTACK_RING'; this.timer = 60;
+                    } else if (roll < 0.72) {
+                        nextState = 'ATTACK_CHARGE'; this.chargePhase = 'WARN'; this.timer = 50;
                     } else {
-                        this.state = 'ATTACK_LASER';
-                        this.laserWarnTimer = 45; this.laserFireTimer = 60;
-                        this.laserDriftDir = (Math.random() < 0.5 ? -1 : 1) * 0.7;
+                        nextState = 'ATTACK_LASER';
+                        this.laserWarnTimer = 45; this.laserFireTimer = 60; this.laserApproachMoved = 0;
                     }
                 } else if (this.phase === 2) {
                     if (roll < 0.15) {
-                        this.state = 'ATTACK_SPAWN'; this.timer = 40;
+                        nextState = 'ATTACK_SPAWN'; this.timer = 40;
                     } else if (roll < 0.40) {
-                        this.state = 'ATTACK_RING'; this.timer = 60;
+                        nextState = 'ATTACK_RING'; this.timer = 60;
                     } else if (roll < 0.65) {
-                        this.state = 'ATTACK_SPIRAL'; this.timer = 90; this.spiralAngle = 0;
+                        nextState = 'ATTACK_SPIRAL'; this.timer = 90; this.spiralAngle = 0;
                     } else if (roll < 0.82) {
-                        this.state = 'ATTACK_LASER';
-                        this.laserWarnTimer = 40; this.laserFireTimer = 60;
-                        this.laserDriftDir = (Math.random() < 0.5 ? -1 : 1) * 0.7;
+                        nextState = 'ATTACK_LASER';
+                        this.laserWarnTimer = 40; this.laserFireTimer = 60; this.laserApproachMoved = 0;
                     } else if (roll < 0.93) {
-                        this.state = 'ATTACK_CHARGE'; this.chargePhase = 'WARN'; this.timer = 50;
+                        nextState = 'ATTACK_CHARGE'; this.chargePhase = 'WARN'; this.timer = 50;
                     } else {
-                        this.state = 'ATTACK_TURRETS'; this.timer = 30;
+                        nextState = 'ATTACK_TURRETS'; this.timer = 30;
                     }
                 } else {
                     // Phase 3：暴走模式
                     if (roll < 0.20) {
-                        this.state = 'ATTACK_SPAWN'; this.timer = 30;
+                        nextState = 'ATTACK_SPAWN'; this.timer = 30;
                     } else if (roll < 0.42) {
-                        this.state = 'ATTACK_RING'; this.timer = 45;
+                        nextState = 'ATTACK_RING'; this.timer = 45;
                     } else if (roll < 0.62) {
-                        this.state = 'ATTACK_SPIRAL'; this.timer = 80; this.spiralAngle = 0;
+                        nextState = 'ATTACK_SPIRAL'; this.timer = 80; this.spiralAngle = 0;
                     } else if (roll < 0.76) {
-                        this.state = 'ATTACK_RUSH'; this.timer = 120; this.rushDir = null; this.rushCount = 0;
+                        nextState = 'ATTACK_RUSH'; this.timer = 120; this.rushDir = null; this.rushCount = 0;
                     } else if (roll < 0.90) {
-                        this.state = 'ATTACK_CHARGE'; this.chargePhase = 'WARN'; this.timer = 40;
+                        nextState = 'ATTACK_CHARGE'; this.chargePhase = 'WARN'; this.timer = 40;
                     } else {
-                        this.state = 'ATTACK_LASER';
-                        this.laserWarnTimer = 30; this.laserFireTimer = 60;
-                        this.laserDriftDir = (Math.random() < 0.5 ? -1 : 1) * 0.7;
+                        nextState = 'ATTACK_LASER';
+                        this.laserWarnTimer = 30; this.laserFireTimer = 60; this.laserApproachMoved = 0;
                     }
                 }
+                this.state = nextState;
             }
             
             if (Math.abs(this.targetX - this.x) < 10 && Math.random() < 0.02) {
@@ -1072,8 +1111,7 @@ class BossScrapDominator extends BaseEnemy {
                         enemies.push(e);
                     }
                 }
-                this.state = 'HOVER';
-                this.timer = 60;
+                this._enterHoverAfter('ATTACK_SPAWN');
             }
         } else if (this.state === 'ATTACK_RING') {
             this.timer--;
@@ -1088,10 +1126,7 @@ class BossScrapDominator extends BaseEnemy {
                 }
             }
 
-            if (this.timer <= 0) {
-                this.state = 'HOVER';
-                this.timer = this.phase === 1 ? 60 : (this.phase === 3 ? 35 : 75);
-            }
+            if (this.timer <= 0) { this._enterHoverAfter('ATTACK_RING'); }
         } else if (this.state === 'ATTACK_SPIRAL') {
             this.timer--;
             this.spiralAngle = (this.spiralAngle || 0) + 0.15;
@@ -1105,10 +1140,7 @@ class BossScrapDominator extends BaseEnemy {
                 }
             }
 
-            if (this.timer <= 0) {
-                this.state = 'HOVER';
-                this.timer = this.phase === 3 ? 20 : 60;
-            }
+            if (this.timer <= 0) { this._enterHoverAfter('ATTACK_SPIRAL'); }
         } else if (this.state === 'ATTACK_RUSH') {
             if (!this.rushDir) this.rushDir = this.x < width / 2 ? 8 : -8;
             this.x += this.rushDir;
@@ -1126,42 +1158,46 @@ class BossScrapDominator extends BaseEnemy {
 
             this.timer--;
             if (this.timer <= 0 || (this.rushCount || 0) >= 2) {
-                this.state = 'HOVER';
-                this.timer = 20;
                 this.rushDir = null; this.rushCount = 0;
+                this._enterHoverAfter('ATTACK_RUSH');
             }
         } else if (this.state === 'ATTACK_TURRETS') {
             this.timer--;
             if (this.timer === 0) {
                 window.spawnEnemyByType('TurretSwarm', 40, { y: 60, isDumbFire: true, fireInterval: 30 });
                 window.spawnEnemyByType('TurretSwarm', width - 40, { y: 60, isDumbFire: true, fireInterval: 30 });
-                this.state = 'HOVER';
-                this.timer = 60;
+                this._enterHoverAfter('ATTACK_TURRETS');
             }
         } else if (this.state === 'ATTACK_LASER') {
             if (this.laserWarnTimer > 0) {
                 this.laserWarnTimer--;
             } else if (this.laserFireTimer > 0) {
                 this.laserFireTimer--;
-                // 激光发射期间缓慢横移
-                this.x += (this.laserDriftDir || 0);
+                // 激光发射期间缓慢向玩家X位移，最多100px
+                if (!this.laserApproachMoved) this.laserApproachMoved = 0;
+                let moveX = (player.x - this.x) * 0.018;
+                if (Math.abs(this.laserApproachMoved) < 100) {
+                    this.x += moveX;
+                    this.laserApproachMoved += Math.abs(moveX);
+                }
                 this.x = Math.max(40, Math.min(width - 40, this.x));
                 if (Math.abs(player.x - this.x) < 30 && player.y > this.y) {
                     let diffDmg = 20 * DIFF_CONFIG[currentDifficulty].dmgMod;
-                    player.takeDamage(diffDmg, false, 'special');
+                    player.takeDamage(diffDmg, false, 'boss');
                 }
                 triggerShake(3, 2);
             } else {
-                this.state = 'HOVER';
-                this.timer = this.phase === 3 ? 35 : 75;
+                this.laserApproachMoved = 0;
                 this.targetX = Math.random() * (width - 100) + 50;
+                this._enterHoverAfter('ATTACK_LASER');
             }
         } else if (this.state === 'ATTACK_CHARGE') {
             this.timer--;
             if (this.chargePhase === 'WARN') {
-                this.x += Math.sin(this.timer * 0.4) * 2.5;
+                // 前摇使用随机抖动（参考自爆机 WARN 阶段）
+                this.x += (Math.random() - 0.5) * 4;
+                this.x = Math.max(60, Math.min(width - 60, this.x));
                 if (this.timer <= 0) {
-                    // 锁定玩家方向
                     let dx = player.x - this.x, dy = player.y - this.y;
                     let dist = Math.sqrt(dx*dx + dy*dy) || 1;
                     this.chargeDirX = dx / dist;
@@ -1178,7 +1214,6 @@ class BossScrapDominator extends BaseEnemy {
                     if (!e.isBoss && e.active && Math.abs(e.x - this.x) < 25) e.hp = 0;
                 }
                 if (currentDifficulty >= 3 && this.timer % 8 === 0) {
-                    // 垂直于冲刺方向射出侧弹
                     enemyBullets.push(new EnemyBullet(this.x, this.y, -this.chargeDirY * 3, this.chargeDirX * 3, 'normal'));
                     enemyBullets.push(new EnemyBullet(this.x, this.y,  this.chargeDirY * 3, -this.chargeDirX * 3, 'normal'));
                 }
@@ -1187,20 +1222,19 @@ class BossScrapDominator extends BaseEnemy {
                     this.chargePhase = 'RETURN';
                     this.timer = 90;
                     this.x = this.targetX;
-                    this.y = -100;  // 从顶部重新入场
+                    this.y = -100;
                 }
             } else {
                 this.y += 3.0;
                 if (this.y >= 80) {
                     this.damageReduction = 0;
                     this.chargePhase = null;
-                    this.state = 'HOVER';
-                    this.timer = this.phase === 3 ? 35 : 75;
+                    this._enterHoverAfter('ATTACK_CHARGE');
                 }
             }
         }
 
-        this.checkPlayerCollision(false, 40);
+        this.checkPlayerCollision(false, 40, 'boss');
     }
 
     draw(ctx) {
@@ -1457,6 +1491,56 @@ class AOEEffect {
         ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
         ctx.stroke();
         ctx.globalAlpha = 1;
+    }
+}
+
+class BurnEffect {
+    constructor(x, y, radius, dmgPerTick) {
+        this.x = x; this.y = y;
+        this.radius = radius;
+        this.life = 180;
+        this.dmgPerTick = dmgPerTick;
+        this.tickTimer = 0;
+        this.tickInterval = 20;
+        this.active = true;
+    }
+
+    update() {
+        this.life--;
+        if (this.life <= 0) { this.active = false; return; }
+
+        if (Math.random() < 0.4 && typeof particles !== 'undefined' && particles.length < 200) {
+            let angle = Math.random() * Math.PI * 2;
+            let r = Math.random() * this.radius;
+            particles.push(new Particle(
+                this.x + Math.cos(angle) * r, this.y + Math.sin(angle) * r,
+                '#ab47bc', (Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5 - 0.3, 30));
+        }
+
+        this.tickTimer++;
+        if (this.tickTimer >= this.tickInterval) {
+            this.tickTimer = 0;
+            if (typeof enemies !== 'undefined') {
+                enemies.forEach(e => {
+                    if (!e.active) return;
+                    let dx = e.x - this.x, dy = e.y - this.y;
+                    if (dx * dx + dy * dy < (this.radius + e.w / 2 * e.scale) ** 2) {
+                        e.takeDamage(this.dmgPerTick, false, false, 'burn');
+                    }
+                });
+            }
+        }
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.globalAlpha = (this.life / 180) * 0.18;
+        ctx.fillStyle = '#ab47bc';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.restore();
     }
 }
 

@@ -58,8 +58,10 @@ let width, height;
 
 let overlayHistory = 'START';
 let hitStopFrames = 0;
+let pendingPostHitstopEffect = null;
 let flashScreenTimer = 0;
 let flashScreenColor = '255,0,0';
+let damageVignetteTimer = 0, damageVignetteColor = '220,0,50';
 let currentLevel = 'debug';
 
 let currentDifficulty = 0;
@@ -146,11 +148,13 @@ const ITEM_ICONS = {
     'healer_rate': '✚', 'skill_duration': '◉'
 };
 function getItemIcon(id) { return ITEM_ICONS[id] || (id ? '◆' : '◆'); }
-let bullets = [], enemyBullets = [], enemies = [], particles = [], items = [], floatingTexts = [], stars = [], aoeEffects = [];
+let bullets = [], enemyBullets = [], enemies = [], particles = [], items = [], floatingTexts = [], stars = [], aoeEffects = [], burnEffects = [];
 let wingmanEntities = [];
 let isDebugMode = false;
 let score = 0, frameCount = 0, gameTimeSeconds = 0;
+let shakeQueue = [];
 let shakeTimer = 0, shakeIntensity = 0;
+let lowHpShakeCooldown = 0;
 let comboCount = 0, comboTimer = 0;
 const maxComboTimer = 90;
 let endingState = 'none', endingTimer = 0;
@@ -808,10 +812,9 @@ function backToSettingsMain() {
     document.getElementById('settings-title').innerText = "系统设置"; 
 }
 
-function triggerShake(intensity, duration) { 
-    if (!config.shake) return; 
-    shakeIntensity = intensity; 
-    shakeTimer = duration; 
+function triggerShake(intensity, duration) {
+    if (!config.shake) return;
+    shakeQueue.push({ intensity, endAt: frameCount + duration });
 }
 
 function showSystemMessage(msg, color) { 
@@ -1375,17 +1378,29 @@ function loop(timestamp) {
     ctx.fillStyle = '#050510'; ctx.fillRect(0, 0, width, height); updateAndDrawStars(ctx, isPlaying);
 
     ctx.save();
-    if (shakeTimer > 0) {
-        let dx = (Math.random() - 0.5) * shakeIntensity; let dy = (Math.random() - 0.5) * shakeIntensity;
-        ctx.translate(dx, dy);
-        if (isPlaying) shakeTimer--;
+    shakeQueue = shakeQueue.filter(s => s.endAt > frameCount);
+    if (shakeQueue.length > 0) {
+        let s = shakeQueue[0];
+        ctx.translate((Math.random() - 0.5) * s.intensity, (Math.random() - 0.5) * s.intensity);
     }
 
     if (isPlaying && hitStopFrames > 0) {
         hitStopFrames--;
+        if (hitStopFrames === 0 && pendingPostHitstopEffect) {
+            triggerShake(pendingPostHitstopEffect.intensity, pendingPostHitstopEffect.duration);
+            pendingPostHitstopEffect = null;
+        }
     } else if (isPlaying) {
         frameCount++;
-        if (player && player.hp > 0 && endingState !== 'playerDead') player.update();
+        if (player && player.hp > 0 && endingState !== 'playerDead') {
+            player.update();
+            if (player.hp < 30 && endingState === 'none') {
+                if (lowHpShakeCooldown <= 0) { triggerShake(3, 8); lowHpShakeCooldown = 60; }
+                else lowHpShakeCooldown--;
+            } else {
+                lowHpShakeCooldown = 0;
+            }
+        }
 
         // === [绝对音频时钟与导演系统] ===
                 // === [绝对音频时钟与导演系统] ===
@@ -1458,10 +1473,10 @@ function loop(timestamp) {
                     e.takeDamage(finalDmg, true, isCrit, 'bullet');
                     b.hitEnemies.add(e);
                     if (player.equipment && player.equipment.aoe && player.equipment.aoe.equipped) triggerAOE(e.x, e.y);
-                    // afterburn：命中后有概率留下燃烧AOE（小范围持续伤害）
+                    // afterburn：命中后有概率留下持续燃烧区域
                     let afterburnLevel = (player.equipment && player.equipment.afterburn && player.equipment.afterburn.equipped) ? player.equipment.afterburn.level : 0;
                     if (afterburnLevel > 0 && Math.random() < 0.25 * afterburnLevel) {
-                        triggerAOE(e.x, e.y, player.getStat('damage') * 0.3, 28);
+                        burnEffects.push(new BurnEffect(e.x, e.y, 30, player.getStat('damage') * 0.18));
                     }
                     if (b.hitEnemies.size > b.pierceCount) {
                         b.active = false;
@@ -1484,9 +1499,9 @@ function loop(timestamp) {
             while (wingmanEntities.length > totalWingman) wingmanEntities.pop();
 
             let wLv = totalWingman;
-            let wDmg = player.damage * (0.6 + (wLv - 1) * 0.25);
-            let wRadius = 45 + (wLv - 1) * 12;
-            let swoopInterval = Math.max(120, 240 - (wLv - 1) * 30);
+            let wDmg = player.damage * (1.8 + (wLv - 1) * 0.5);
+            let wRadius = 28 + (wLv - 1) * 8;
+            let swoopInterval = Math.max(210, 380 - (wLv - 1) * 40);
             let respawnTime = Math.max(80, 180 - (wLv - 1) * 25);
 
             for (let w of wingmanEntities) {
@@ -1565,7 +1580,7 @@ function loop(timestamp) {
     if (player && player.hp > 0 && endingState !== 'playerDead') player.draw(ctx);
     ctx.globalAlpha = 1.0; 
     
-    processGroup(aoeEffects, isPlaying); processGroup(items, isPlaying); processGroup(bullets, isPlaying); processGroup(enemyBullets, isPlaying); processGroup(enemies, isPlaying); processGroup(particles, isPlaying); processGroup(floatingTexts, isPlaying);
+    processGroup(aoeEffects, isPlaying); processGroup(burnEffects, isPlaying); processGroup(items, isPlaying); processGroup(bullets, isPlaying); processGroup(enemyBullets, isPlaying); processGroup(enemies, isPlaying); processGroup(particles, isPlaying); processGroup(floatingTexts, isPlaying);
 
     // === [生死结算状态机：之前被遗漏覆盖的区域] ===
     if (isPlaying && endingState !== 'none') {
@@ -1588,6 +1603,16 @@ function loop(timestamp) {
     }
 
     if (flashScreenTimer > 0) { ctx.fillStyle = `rgba(${flashScreenColor}, ${flashScreenTimer * 0.05})`; ctx.fillRect(0, 0, width, height); if (isPlaying) flashScreenTimer--; }
+
+    if (damageVignetteTimer > 0) {
+        let alpha = (damageVignetteTimer / 25) * 0.55;
+        let grad = ctx.createRadialGradient(width / 2, height / 2, height * 0.3, width / 2, height / 2, height * 0.85);
+        grad.addColorStop(0, `rgba(${damageVignetteColor}, 0)`);
+        grad.addColorStop(1, `rgba(${damageVignetteColor}, ${alpha})`);
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, width, height);
+        if (isPlaying) damageVignetteTimer--;
+    }
 
     if (comboCount > 1 || comboTimer > 0) {
         ctx.save();
@@ -1914,9 +1939,9 @@ function restoreFromCheckpoint(data) {
     player.pt = p.pt;
     player.totalUpgradePoints = p.totalUpgradePoints;
     player.upgrades = { ...p.upgrades };
-    player.techTree = { ...p.techTree };
-    player.techLevels = { ...p.techLevels };
-    Object.assign(player.sectorTech, p.sectorTech);
+    if (p.techTree && Object.keys(p.techTree).length > 0) player.techTree = { ...p.techTree };
+    if (p.techLevels) player.techLevels = { ...player.techLevels, ...p.techLevels };
+    if (p.sectorTech) player.sectorTech = { ...player.sectorTech, ...p.sectorTech };
     Object.keys(p.equipment).forEach(id => {
         if (player.equipment[id]) Object.assign(player.equipment[id], p.equipment[id]);
     });
@@ -1975,9 +2000,14 @@ function startGame(levelId, useCheckpoint = false) {
     resize(); initSprites(); initStars();
 
     player = new Player();
-    enemies = []; bullets = []; enemyBullets = []; items = []; particles = []; floatingTexts = []; aoeEffects = []; wingmanEntities = [];
+    if (!useCheckpoint) {
+        player.pt = 0;
+        player.techTree = {};
+        player.techLevels = { fireRate: 0, damage: 0, maxHp: 0 };
+    }
+    enemies = []; bullets = []; enemyBullets = []; items = []; particles = []; floatingTexts = []; aoeEffects = []; burnEffects = []; wingmanEntities = [];
     score = 0; frameCount = 0; gameTimeSeconds = 0;
-    shakeTimer = 0; hitStopFrames = 0; flashScreenTimer = 0;
+    shakeQueue = []; shakeTimer = 0; hitStopFrames = 0; pendingPostHitstopEffect = null; flashScreenTimer = 0; damageVignetteTimer = 0; lowHpShakeCooldown = 0;
     comboCount = 0; comboTimer = 0; endingState = 'none'; endingTimer = 0;
     shopInflation = 0.0; wasSkillFull = false; wasInRestPhase = false; currentShopItems = [];
     directorPoints = 0; difficultyScore = 1.0;
