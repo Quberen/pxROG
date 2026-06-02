@@ -157,6 +157,7 @@ let wingmanEntities = [];
 let interceptorBullets = [];
 let avengerMissiles = [];
 let avengerSlotCds = [];
+let avengerFireQueues = [];
 let pendingLoadoutData = { wingman: [], subweapon: [] };
 let isDebugMode = false;
 let score = 0, frameCount = 0, gameTimeSeconds = 0;
@@ -1038,17 +1039,24 @@ function updatePixelButtons() {
     drawPixelButton('pause-btn-cvs', sprites.i_pause, 0, '#fff');
     drawPixelButton('terminal-btn-cvs', '+', 0, '#00e5ff');
     if (sprites.i_avenger && player.subweaponLoadout) {
-        let avengerCount = player.subweaponLoadout.filter(t => t === 'avenger').length;
-        for (let i = 0; i < 2; i++) {
-            let el = document.getElementById('avenger-btn-' + i + '-cvs');
-            if (!el) continue;
-            if (i < avengerCount) {
+        let avengerBtnIdx = 0;
+        let slotOffset = 0;
+        for (let g = 0; g < (player.subweaponGroups || []).length; g++) {
+            let isAvenger = player.subweaponLoadout[slotOffset] === 'avenger';
+            slotOffset += player.subweaponGroups[g];
+            if (!isAvenger) continue;
+            let btnId = 'avenger-btn-' + avengerBtnIdx + '-cvs';
+            let el = document.getElementById(btnId);
+            if (el) {
                 el.style.display = 'block';
-                let cdProg = Math.min(1, (avengerSlotCds[i] || 0) / 360);
-                drawPixelButton('avenger-btn-' + i + '-cvs', sprites.i_avenger, 1, '#ab47bc', false, cdProg);
-            } else {
-                el.style.display = 'none';
+                let cdProg = Math.min(1, (avengerSlotCds[avengerBtnIdx] || 0) / 360);
+                drawPixelButton(btnId, sprites.i_avenger, 1, '#ff9800', false, cdProg);
             }
+            avengerBtnIdx++;
+        }
+        for (let i = avengerBtnIdx; i < 2; i++) {
+            let el = document.getElementById('avenger-btn-' + i + '-cvs');
+            if (el) el.style.display = 'none';
         }
     }
 }
@@ -1634,7 +1642,7 @@ function loop(timestamp) {
                     x: player.x, y: player.y, vx: 0, vy: 0,
                     swoopCooldown: swoopCD, respawnTimer: 0,
                     type: wType, groupId: gId, slotId: idx,
-                    shootTimer: 180
+                    shootTimer: 60
                 });
             }
             while (wingmanEntities.length > count) wingmanEntities.pop();
@@ -1656,23 +1664,28 @@ function loop(timestamp) {
                     } else { w.vx *= 0.8; w.vy *= 0.8; }
                     w.x += w.vx; w.y += w.vy;
 
-                    w.shootTimer = (w.shootTimer || 180) - 1;
+                    w.shootTimer = (w.shootTimer || 60) - 1;
                     let isFast = (w.vx*w.vx + w.vy*w.vy) > 9;
-                    if (w.shootTimer <= 0 && !isFast && enemyBullets.length > 0) {
-                        let nearBul = null, nearD2 = Infinity;
+                    if (w.shootTimer <= 0 && !isFast) {
+                        let nearTarget = null, nearD2 = Infinity;
                         for (let eb of enemyBullets) {
                             if (!eb.active) continue;
                             let d2 = (eb.x-w.x)**2+(eb.y-w.y)**2;
-                            if (d2 < nearD2) { nearD2 = d2; nearBul = eb; }
+                            if (d2 < nearD2) { nearD2 = d2; nearTarget = eb; }
                         }
-                        if (nearBul) interceptorBullets.push(new InterceptorBullet(w.x, w.y, nearBul));
-                        w.shootTimer = 180;
+                        for (let e of enemies) {
+                            if (!e.active || !e.isKamikaze) continue;
+                            let d2 = (e.x-w.x)**2+(e.y-w.y)**2;
+                            if (d2 < nearD2) { nearD2 = d2; nearTarget = e; }
+                        }
+                        if (nearTarget) interceptorBullets.push(new InterceptorBullet(w.x, w.y, nearTarget));
+                        w.shootTimer = 60;
                     }
                     ctx.save();
                     ctx.fillStyle = '#00b0ff'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1;
                     ctx.beginPath();
-                    ctx.moveTo(w.x, w.y-5); ctx.lineTo(w.x+5, w.y);
-                    ctx.lineTo(w.x, w.y+5); ctx.lineTo(w.x-5, w.y);
+                    ctx.moveTo(w.x, w.y-4); ctx.lineTo(w.x+4, w.y);
+                    ctx.lineTo(w.x, w.y+4); ctx.lineTo(w.x-4, w.y);
                     ctx.closePath(); ctx.fill(); ctx.stroke();
                     ctx.restore();
                 } else {
@@ -1776,8 +1789,9 @@ function loop(timestamp) {
                                 2, 4, 0.5, 0, 1.0, 0, 1.0, '#ff9800'
                             );
                             rfaBullet.isRFA = true;
+                            rfaBullet.alignToVelocity = true;
                             bullets.push(rfaBullet);
-                            player.subweaponTimers[slotIdx] = 24;
+                            player.subweaponTimers[slotIdx] = 12;
                         }
                         slotIdx++;
                     }
@@ -1785,6 +1799,16 @@ function loop(timestamp) {
                 // Decrement avenger CDs
                 for (let i = 0; i < avengerSlotCds.length; i++) {
                     if (avengerSlotCds[i] > 0) avengerSlotCds[i]--;
+                }
+                // Process missile fire queue
+                for (let i = avengerFireQueues.length-1; i >= 0; i--) {
+                    let q = avengerFireQueues[i];
+                    if (q.timer <= 0) {
+                        avengerMissiles.push(new AvengerMissile(player.x, player.y - player.h/2, q.sharedTargetRef));
+                        avengerFireQueues.splice(i, 1);
+                    } else {
+                        q.timer--;
+                    }
                 }
             }
         }
@@ -2280,21 +2304,33 @@ function renderShipPreviews() {
     });
 }
 
-function fireAvenger(idx) {
+function fireAvenger(btnIdx) {
     if (!player || gameState !== 'PLAYING') return;
-    if ((avengerSlotCds[idx] || 0) > 0) return;
-    avengerMissiles.push(new AvengerMissile(player.x, player.y - player.h / 2));
-    avengerSlotCds[idx] = 360;
+    if ((avengerSlotCds[btnIdx] || 0) > 0) return;
+    let avengerCount = -1, targetGroupIdx = -1;
+    let slotOffset = 0;
+    for (let g = 0; g < (player.subweaponGroups || []).length; g++) {
+        if (player.subweaponLoadout[slotOffset] === 'avenger') {
+            avengerCount++;
+            if (avengerCount === btnIdx) { targetGroupIdx = g; break; }
+        }
+        slotOffset += player.subweaponGroups[g];
+    }
+    if (targetGroupIdx < 0) return;
+    let groupSize = player.subweaponGroups[targetGroupIdx];
+    let sharedTargetRef = { target: null };
+    for (let s = 0; s < groupSize; s++) {
+        avengerFireQueues.push({ timer: s * 12, sharedTargetRef });
+    }
+    avengerSlotCds[btnIdx] = 360;
 }
 
 window.openLoadoutSelect = function(levelId, shipType) {
     let cfg = SHIPS[shipType];
     if (!cfg) { startGame(levelId, false, shipType); return; }
-    let wTotal = cfg.wingmanGroups.reduce((a,b) => a+b, 0);
-    let sTotal = cfg.subweaponGroups.reduce((a,b) => a+b, 0);
     pendingLoadoutData = {
-        wingman: Array(wTotal).fill('as1'),
-        subweapon: Array(sTotal).fill('rfa')
+        wingman: Array(cfg.wingmanGroups.length).fill('as1'),
+        subweapon: Array(cfg.subweaponGroups.length).fill('rfa')
     };
     let screen = document.getElementById('loadout-select-screen');
     if (!screen) { startGame(levelId, false, shipType); return; }
@@ -2317,31 +2353,28 @@ function buildLoadoutUI(shipType) {
         sec.innerHTML = '<div class="ls-section-title">' + title + '</div>';
         let row = document.createElement('div');
         row.className = 'ls-slots-row';
-        let si = 0;
         groups.forEach((groupSize, gIdx) => {
             if (gIdx > 0) {
                 let sep = document.createElement('div');
                 sep.className = 'ls-group-sep';
                 row.appendChild(sep);
             }
-            for (let s = 0; s < groupSize; s++) {
-                let i = si;
-                let card = document.createElement('div');
-                card.className = 'ls-slot-card';
-                let type = loadoutArr[i] || Object.keys(typeMap)[0];
-                let def = typeMap[type] || typeMap[Object.keys(typeMap)[0]];
-                card.innerHTML = '<div class="ls-slot-name">' + def.name + '</div><div class="ls-slot-type" style="color:' + def.color + '">' + def.desc.split('。')[0] + '</div>';
-                card.onclick = (function(idx, f) {
-                    return function() {
-                        let keys = Object.keys(typeMap);
-                        let cur = pendingLoadoutData[f][idx] || keys[0];
-                        pendingLoadoutData[f][idx] = keys[(keys.indexOf(cur) + 1) % keys.length];
-                        buildLoadoutUI(document.getElementById('loadout-select-screen').dataset.shipType);
-                    };
-                })(i, field);
-                row.appendChild(card);
-                si++;
-            }
+            // One card per group (all slots in same group share the same type)
+            let card = document.createElement('div');
+            card.className = 'ls-slot-card';
+            let type = loadoutArr[gIdx] || Object.keys(typeMap)[0];
+            let def = typeMap[type] || typeMap[Object.keys(typeMap)[0]];
+            let multiplierLabel = groupSize > 1 ? ' <span style="color:#888;font-size:6px">×' + groupSize + '</span>' : '';
+            card.innerHTML = '<div class="ls-slot-name">' + def.name + multiplierLabel + '</div><div class="ls-slot-type" style="color:' + def.color + '">' + def.desc.split('。')[0] + '</div>';
+            card.onclick = (function(g, f) {
+                return function() {
+                    let keys = Object.keys(typeMap);
+                    let cur = pendingLoadoutData[f][g] || keys[0];
+                    pendingLoadoutData[f][g] = keys[(keys.indexOf(cur) + 1) % keys.length];
+                    buildLoadoutUI(document.getElementById('loadout-select-screen').dataset.shipType);
+                };
+            })(gIdx, field);
+            row.appendChild(card);
         });
         sec.appendChild(row);
         container.appendChild(sec);
@@ -2379,9 +2412,17 @@ function startGame(levelId, useCheckpoint = false, shipType = 'rt1', loadoutData
 
     player = new Player(shipType);
     if (loadoutData) {
-        player.wingmanLoadout   = loadoutData.wingman || [];
-        player.subweaponLoadout = loadoutData.subweapon || [];
-        player.subweaponTimers  = Array(player.subweaponSlots).fill(0);
+        // Expand per-group loadout data to per-slot arrays
+        let shipCfg = SHIPS[shipType] || SHIPS.rt1;
+        player.wingmanLoadout = [];
+        shipCfg.wingmanGroups.forEach((size, g) => {
+            for (let s = 0; s < size; s++) player.wingmanLoadout.push(loadoutData.wingman[g] || 'as1');
+        });
+        player.subweaponLoadout = [];
+        shipCfg.subweaponGroups.forEach((size, g) => {
+            for (let s = 0; s < size; s++) player.subweaponLoadout.push(loadoutData.subweapon[g] || 'rfa');
+        });
+        player.subweaponTimers = Array(player.subweaponSlots).fill(0);
     } else if (useCheckpoint && ckptData && ckptData.loadout) {
         player.wingmanLoadout   = ckptData.loadout.wingman || [];
         player.subweaponLoadout = ckptData.loadout.subweapon || [];
@@ -2397,7 +2438,7 @@ function startGame(levelId, useCheckpoint = false, shipType = 'rt1', loadoutData
         player.techLevels = { fireRate: 0, damage: 0, maxHp: 0 };
     }
     enemies = []; bullets = []; enemyBullets = []; items = []; particles = []; floatingTexts = []; aoeEffects = []; burnEffects = []; wingmanEntities = [];
-    interceptorBullets = []; avengerMissiles = []; avengerSlotCds = [];
+    interceptorBullets = []; avengerMissiles = []; avengerSlotCds = []; avengerFireQueues = [];
     score = 0; frameCount = 0; gameTimeSeconds = 0;
     shakeQueue = []; shakeTimer = 0; hitStopFrames = 0; pendingPostHitstopEffect = null; flashScreenTimer = 0; damageVignetteTimer = 0; lowHpShakeCooldown = 0; bossEnterPhase = 0;
     comboCount = 0; comboTimer = 0; endingState = 'none'; endingTimer = 0;

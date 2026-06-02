@@ -495,8 +495,18 @@ class Bullet {
     }
 
     draw(ctx) {
-        ctx.fillStyle = this.color;
-        ctx.fillRect(this.x - this.w / 2, this.y - this.h / 2, this.w, this.h);
+        if (this.alignToVelocity) {
+            let ang = Math.atan2(this.vy, this.vx);
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            ctx.rotate(ang + Math.PI / 2);
+            ctx.fillStyle = this.color;
+            ctx.fillRect(-this.w / 2, -this.h / 2, this.w, this.h);
+            ctx.restore();
+        } else {
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.x - this.w / 2, this.y - this.h / 2, this.w, this.h);
+        }
     }
 }
 
@@ -1694,15 +1704,14 @@ function createExplosion(x, y, col, count) {
 }
 
 class InterceptorBullet {
-    constructor(x, y, targetBullet) {
+    constructor(x, y, target) {
         this.x = x; this.y = y;
-        this.target = targetBullet;
+        this.target = target;
         let spd = 16 * 1.2;
-        let ang = Math.atan2(targetBullet.y - y, targetBullet.x - x);
+        let ang = Math.atan2(target.y - y, target.x - x);
         this.vx = Math.cos(ang) * spd;
         this.vy = Math.sin(ang) * spd;
         this.active = true;
-        this.size = 4;
     }
 
     update() {
@@ -1727,24 +1736,42 @@ class InterceptorBullet {
                 return;
             }
         }
+        for (let e of enemies) {
+            if (!e.active || !e.isKamikaze) continue;
+            if (Math.sqrt((e.x-this.x)**2+(e.y-this.y)**2) < hitR) {
+                e.takeDamage(8, true, false, 'interceptor');
+                createExplosion(this.x, this.y, '#00b0ff', 8);
+                this.active = false;
+                return;
+            }
+        }
         if (this.y < -20 || this.y > height+20 || this.x < -20 || this.x > width+20) this.active = false;
     }
 
     draw(ctx) {
-        ctx.fillStyle = '#00b0ff';
-        ctx.fillRect(this.x-2, this.y-2, 4, 4);
+        ctx.save();
+        ctx.fillStyle = '#00b0ff'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(this.x, this.y-4); ctx.lineTo(this.x+4, this.y);
+        ctx.lineTo(this.x, this.y+4); ctx.lineTo(this.x-4, this.y);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.restore();
     }
 }
 
 class AvengerMissile {
-    constructor(x, y) {
+    constructor(x, y, sharedTargetRef = null) {
         this.x = x; this.y = y;
+        this.angle = -Math.PI / 2;
         this.vx = 0; this.vy = -2;
         this.speed = 2;
         this.maxSpeed = 16 * 0.8;
         this.accelFrames = 108;
+        this.trackingDelay = 30;
         this.timer = 0;
         this.active = true;
+        this.lockedTarget = null;
+        this.sharedTargetRef = sharedTargetRef;
     }
 
     update() {
@@ -1754,44 +1781,68 @@ class AvengerMissile {
         } else {
             this.speed = this.maxSpeed;
         }
-        let nearest = null, minD2 = Infinity;
+        // Collision check active entire flight
         for (let e of enemies) {
             if (!e.active) continue;
-            let d2 = (e.x-this.x)**2 + (e.y-this.y)**2;
-            if (d2 < minD2) { minD2 = d2; nearest = e; }
-        }
-        if (nearest) {
-            let dx = nearest.x - this.x, dy = nearest.y - this.y;
-            let d = Math.sqrt(dx*dx+dy*dy) || 1;
-            this.vx = (dx/d)*this.speed; this.vy = (dy/d)*this.speed;
-        }
-        this.x += this.vx; this.y += this.vy;
-        if (nearest && Math.sqrt((nearest.x-this.x)**2+(nearest.y-this.y)**2) < 14) {
-            nearest.takeDamage(35, true, false, 'avenger');
-            for (let e of enemies) {
-                if (!e.active || e === nearest) continue;
-                let d = Math.sqrt((e.x-this.x)**2+(e.y-this.y)**2);
-                if (d < 50) e.takeDamage(25, true, false, 'avenger');
+            if (Math.sqrt((e.x-this.x)**2+(e.y-this.y)**2) < 14) {
+                this._explode(e); return;
             }
-            aoeEffects.push(new AOEEffect(this.x, this.y, 50, '#ab47bc'));
-            createExplosion(this.x, this.y, '#ab47bc', 20);
-            triggerShake(8, 15);
-            this.active = false;
+        }
+        // Tracking starts after delay
+        if (this.timer > this.trackingDelay) {
+            if (!this.lockedTarget || !this.lockedTarget.active) {
+                if (this.sharedTargetRef && this.sharedTargetRef.target && this.sharedTargetRef.target.active) {
+                    this.lockedTarget = this.sharedTargetRef.target;
+                } else {
+                    let nearest = null, minD2 = Infinity;
+                    for (let e of enemies) {
+                        if (!e.active) continue;
+                        let d2 = (e.x-this.x)**2+(e.y-this.y)**2;
+                        if (d2 < minD2) { minD2 = d2; nearest = e; }
+                    }
+                    this.lockedTarget = nearest;
+                    if (this.sharedTargetRef) this.sharedTargetRef.target = nearest;
+                }
+            }
+            if (this.lockedTarget && this.lockedTarget.active) {
+                let dx = this.lockedTarget.x - this.x, dy = this.lockedTarget.y - this.y;
+                let desired = Math.atan2(dy, dx);
+                let diff = desired - this.angle;
+                while (diff > Math.PI) diff -= Math.PI * 2;
+                while (diff < -Math.PI) diff += Math.PI * 2;
+                let angSpeed = Math.min(0.12, 0.02 + this.timer * 0.0003);
+                this.angle += Math.sign(diff) * Math.min(angSpeed, Math.abs(diff));
+                this.angle += (Math.random() - 0.5) * 0.03;
+            }
+        }
+        this.vx = Math.cos(this.angle) * this.speed;
+        this.vy = Math.sin(this.angle) * this.speed;
+        this.x += this.vx; this.y += this.vy;
+        if (particles.length < 300) {
+            particles.push(new Particle(this.x, this.y, '#ff9800',
+                (Math.random()-0.5)*1.5, (Math.random()-0.5)*1.5, 12));
         }
         if (this.y < -60 || this.y > height+60 || this.x < -60 || this.x > width+60) this.active = false;
     }
 
+    _explode(nearest) {
+        nearest.takeDamage(35, true, false, 'avenger');
+        for (let e of enemies) {
+            if (!e.active || e === nearest) continue;
+            if (Math.sqrt((e.x-this.x)**2+(e.y-this.y)**2) < 50) e.takeDamage(25, true, false, 'avenger');
+        }
+        aoeEffects.push(new AOEEffect(this.x, this.y, 50, '#ff9800'));
+        createExplosion(this.x, this.y, '#ff9800', 20);
+        triggerShake(8, 15);
+        this.active = false;
+    }
+
     draw(ctx) {
         ctx.save();
-        let ang = Math.atan2(this.vy, this.vx);
         ctx.translate(this.x, this.y);
-        ctx.rotate(ang + Math.PI/2);
-        ctx.fillStyle = '#ab47bc';
-        ctx.fillRect(-3, -6, 6, 12);
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(-1, -8, 2, 4);
-        ctx.fillStyle = '#ff9800';
-        ctx.fillRect(-3, 6, 6, 4);
+        ctx.rotate(this.angle + Math.PI / 2);
+        let spr = sprites.i_avenger_orange;
+        ctx.drawImage(spr, -spr.width / 2, -spr.height / 2);
         ctx.restore();
     }
 }
