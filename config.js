@@ -16,6 +16,21 @@ const DIFF_CONFIG = [
 const RARITY = { C: { name: '普通', color: '#fff', weight: 80 }, R: { name: '稀有', color: '#00b0ff', weight: 15 }, E: { name: '史诗', color: '#ab47bc', weight: 5 }, L: { name: '传说', color: '#ffea00', weight: 5 } };
 const TYPE_TAGS = { 'equip': { label: '装' }, 'stat': { label: '属' }, 'utility': { label: '辅' } };
 
+const SHIPS = {
+    default: {
+        name: '默认战机', nameEn: 'SENTINEL',
+        desc: '全能型战机。三联僚机提供稳定的战场覆盖。',
+        shootSlots: 1, wingmanSlots: 3, subweaponSlots: 3, initSlots: 5,
+        sprite: 'player'
+    },
+    experimental: {
+        name: '实验性战机', nameEn: 'X-DUAL',
+        desc: '双炮设计。并行射击输出更高，僚机和副武器搭载受限。',
+        shootSlots: 2, wingmanSlots: 2, subweaponSlots: 1, initSlots: 4,
+        sprite: 'player_exp'
+    }
+};
+
 // 【动态拼装】：从工坊读取数值，拼装为引擎可用的敌人数组
 const ENEMY_TYPES = Object.keys(WORKSHOP.data.enemies).map(key => {
     return { type: key, ...WORKSHOP.data.enemies[key] };
@@ -34,7 +49,7 @@ const baseUpgradePool = [
     { id: 'crit_rate',  type: 'stat',    name: '精准校准', rarity: 'C', unlockPT: 1.0,  unlockTime: 0,   prices: [2,4,6,8,10],  desc: '暴击概率+5%/级。' },
     { id: 'crit_dmg',   type: 'stat',    name: '弱点分析', rarity: 'C', unlockPT: 2.0,  unlockTime: 0,   prices: [2,5,7,9,12],  desc: '暴击伤害+25%/级。' },
     { id: 'aoe',        type: 'equip',   name: '高爆弹头', slotCost: 2, rarity: 'E', initialCost: 3.0, unlockPT: 8.0,  unlockTime: 60,  desc: '部分攻击引发大范围爆炸。' },
-    { id: 'wingman',    type: 'stat',    name: '战斗僚机', rarity: 'E', unlockPT: 12.0, unlockTime: 90, prices: [9,16,24], desc: '部署战斗僚机，弧线突袭最近敌人并引爆。' },
+    { id: 'wingman',    type: 'stat',    name: '战斗僚机', rarity: 'E', unlockPT: 12.0, unlockTime: 90, prices: [9,16,24], desc: '强化战斗僚机系统，提升伤害与冷却效率。' },
     { id: 'slot',       type: 'utility', name: '系统插槽', rarity: 'R', unlockPT: 2.0,  unlockTime: 0,   desc: '背包容量扩充，+1 装备插槽。' },
 
     { id: 'homing',   type: 'equip', name: '追踪模块', rarity: 'E', slotCost: 2, unlockPT: 5.0,  unlockTime: 60,  initialCost: 2.5, desc: '子弹弱追踪敌机。升级提升制导强度。' },
@@ -92,6 +107,7 @@ const sprites = {};
 function initSprites() {
     const pSize = 3; 
     sprites.player = createPixelTexture([[0,0,0,0,0,1,0,0,0,0,0],[0,0,0,0,1,2,1,0,0,0,0],[0,0,0,0,1,2,1,0,0,0,0],[0,0,1,1,1,2,1,1,1,0,0],[0,1,2,2,1,2,1,2,2,1,0],[1,2,2,2,2,3,2,2,2,2,1],[1,1,1,1,1,1,1,1,1,1,1],[1,0,0,1,0,3,0,1,0,0,1]], ['#ffffff', '#00b0ff', '#00e676'], pSize);
+    sprites.player_exp = createPixelTexture([[0,0,1,0,0,0,0,0,1,0,0],[0,1,2,1,0,0,0,1,2,1,0],[0,1,2,1,0,1,0,1,2,1,0],[1,2,2,2,1,2,1,2,2,2,1],[1,2,2,2,2,3,2,2,2,2,1],[1,1,2,2,1,1,1,2,2,1,1],[1,1,1,1,1,1,1,1,1,1,1],[0,1,3,1,0,0,0,1,3,1,0]], ['#ffffff', '#00b0ff', '#00e676'], pSize);
     sprites.hp = createPixelTexture([[0,1,0],[1,2,1],[0,1,0]], ['#00e676', '#ffffff'], pSize);
     
     sprites.pt_shard = createPixelTexture([[1]], ['#eeeeee'], 3);

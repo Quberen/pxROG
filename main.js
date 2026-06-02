@@ -98,7 +98,8 @@ const screens = {
     shop: document.getElementById('shop-menu'),
     loadout: document.getElementById('loadout-menu'),
     gameOver: document.getElementById('game-over-screen'),
-    workshop: document.getElementById('workshop-menu')
+    workshop: document.getElementById('workshop-menu'),
+    'ship-select': document.getElementById('ship-select-screen')
 };
 
 const ui = {
@@ -132,6 +133,7 @@ const ui = {
 // --- [5] 游戏状态数据 ---
 let gameState = 'START';
 let player;
+let selectedShipType = 'default';
 // [L2 蓝轨超频阶梯配置]
 const BLUE_TECH_TIERS = {
     fireRate: { values: [0.05, 0.08, 0.13, 0.20], costs: [0.8, 1.5, 2.5, 3.8] },
@@ -635,7 +637,7 @@ function showScreen(screenId) {
     
     const inGameUIElements = [ui.topLeftCont, ui.sideBtns];
     
-    if (screenId === 'start' || screenId === 'gameOver' || screenId === 'workshop') { 
+    if (screenId === 'start' || screenId === 'gameOver' || screenId === 'workshop' || screenId === 'ship-select') {
         inGameUIElements.forEach(el => { if (el) el.classList.add('hud-hidden'); }); 
         if (ui.bossHpCont) ui.bossHpCont.style.opacity = 0; 
         ui.waveToast.style.opacity = 0; 
@@ -1576,8 +1578,8 @@ function loop(timestamp) {
         // === Wingman State Machine ===
         if (player && player.hp > 0 && endingState !== 'playerDead') {
             let wLv = (player.upgrades && player.upgrades.wingman) || 0;
-            let count = wLv >= 3 ? 3 : (wLv >= 1 ? 2 : 0);
-            let swoopCD    = [720, 660, 600][wLv - 1] || 720;
+            let count = player.wingmanSlots || 0;
+            let swoopCD    = [720, 680, 640, 600][wLv];
 
             while (wingmanEntities.length < count) {
                 let idx = wingmanEntities.length;
@@ -1586,11 +1588,9 @@ function loop(timestamp) {
             }
             while (wingmanEntities.length > count) wingmanEntities.pop();
 
-            if (wLv < 1) { wingmanEntities = []; }
-
-            let directDmg  = [50, 75, 125][wLv - 1] || 50;
-            let splashDmg  = [20, 30,  50][wLv - 1] || 20;
-            let arcFrames  = [60, 48, 36][wLv - 1] || 60;
+            let directDmg  = [50, 65, 85, 110][wLv];
+            let splashDmg  = [25, 35, 48,  65][wLv];
+            let arcFrames  = [60, 52, 44,  36][wLv];
             let splashR    = 50;
 
             for (let w of wingmanEntities) {
@@ -2032,6 +2032,7 @@ function saveCheckpoint() {
     if (!cas || !cas.state) return;
     let data = {
         level: currentLevel, difficulty: currentDifficulty,
+        shipType: player.shipType || 'default',
         waveIndex: cas.state.currentWave,
         score, gameTimeSeconds, shopInflation,
         player: {
@@ -2085,7 +2086,7 @@ function trySelectLevel(levelId) {
     if (hasCheckpoint(levelId)) {
         showCheckpointDialog(levelId);
     } else {
-        startGame(levelId);
+        openShipSelect(levelId, false);
     }
 }
 
@@ -2102,9 +2103,9 @@ function showCheckpointDialog(levelId) {
         <div style="font-family:${PIXEL_FONT};font-size:10px;color:#ffea00;letter-spacing:2px;margin-bottom:20px;">⏎ 检测到存档</div>
         <div style="font-family:${PIXEL_FONT};font-size:7px;color:#aaa;margin-bottom:30px;">是否从上次离开的波次继续？</div>
         <div style="display:flex;gap:16px;">
-            <button onclick="document.getElementById('ckpt-dialog').style.display='none';startGame('${levelId}',true)"
+            <button onclick="document.getElementById('ckpt-dialog').style.display='none';openShipSelect('${levelId}',true)"
                 style="font-family:${PIXEL_FONT};font-size:8px;padding:10px 18px;background:#00e676;color:#000;border:none;cursor:pointer;">继续上局</button>
-            <button onclick="clearCheckpoint('${levelId}');document.getElementById('ckpt-dialog').style.display='none';startGame('${levelId}')"
+            <button onclick="clearCheckpoint('${levelId}');document.getElementById('ckpt-dialog').style.display='none';openShipSelect('${levelId}',false)"
                 style="font-family:${PIXEL_FONT};font-size:8px;padding:10px 18px;background:#333;color:#fff;border:1px solid #555;cursor:pointer;">新局开始</button>
         </div>`;
     overlay.style.display = 'flex';
@@ -2118,13 +2119,56 @@ function toggleDebugMode() {
 }
 // ──────────────────────────────────────────────────────────────
 
-function startGame(levelId, useCheckpoint = false) {
+window.openShipSelect = function(levelId, useCheckpoint) {
+    if (useCheckpoint) {
+        let ckpt = (() => { try { return JSON.parse(localStorage.getItem('pxROG_ckpt_' + levelId)); } catch(e) { return null; } })();
+        startGame(levelId, true, (ckpt && ckpt.shipType) || 'default');
+        return;
+    }
+    resize(); initSprites();
+    selectedShipType = 'default';
+    let screen = document.getElementById('ship-select-screen');
+    screen.dataset.levelId = levelId;
+    document.querySelectorAll('.ship-card').forEach(c => c.classList.remove('selected'));
+    let defCard = document.getElementById('ship-card-default');
+    if (defCard) defCard.classList.add('selected');
+    renderShipPreviews();
+    showScreen('ship-select');
+};
+
+window.selectShip = function(shipType) {
+    selectedShipType = shipType;
+    document.querySelectorAll('.ship-card').forEach(c => c.classList.remove('selected'));
+    let card = document.getElementById('ship-card-' + shipType);
+    if (card) card.classList.add('selected');
+};
+
+window.confirmShipSelect = function() {
+    let levelId = document.getElementById('ship-select-screen').dataset.levelId;
+    startGame(levelId, false, selectedShipType);
+};
+
+function renderShipPreviews() {
+    Object.keys(SHIPS).forEach(type => {
+        let cvs = document.getElementById('preview-' + type);
+        if (!cvs) return;
+        let pctx = cvs.getContext('2d');
+        let spr = sprites[SHIPS[type].sprite];
+        if (!spr) return;
+        pctx.clearRect(0, 0, cvs.width, cvs.height);
+        let scale = Math.min(cvs.width / spr.width, cvs.height / spr.height);
+        pctx.imageSmoothingEnabled = false;
+        pctx.drawImage(spr, (cvs.width - spr.width * scale) / 2, (cvs.height - spr.height * scale) / 2, spr.width * scale, spr.height * scale);
+    });
+}
+
+function startGame(levelId, useCheckpoint = false, shipType = 'default') {
     let ckptData = useCheckpoint ? (() => { try { return JSON.parse(localStorage.getItem('pxROG_ckpt_' + levelId)); } catch(e) { return null; } })() : null;
     if (ckptData) currentDifficulty = ckptData.difficulty;
     currentLevel = levelId || 'debug';
     resize(); initSprites(); initStars();
 
-    player = new Player();
+    player = new Player(shipType);
     if (!useCheckpoint) {
         player.pt = 0;
         player.techTree = {};

@@ -2,10 +2,15 @@
 // 游戏实体库：包含玩家、敌人、子弹、道具与特效
 
 class Player {
-    constructor() {
-        this.sprite = sprites.player;
+    constructor(shipType = 'default') {
+        let shipCfg = SHIPS[shipType] || SHIPS.default;
+        this.shipType       = shipType;
+        this.sprite         = sprites[shipCfg.sprite];
         this.w = this.sprite.width;
         this.h = this.sprite.height;
+        this.shootSlots     = shipCfg.shootSlots;
+        this.wingmanSlots   = shipCfg.wingmanSlots;
+        this.subweaponSlots = shipCfg.subweaponSlots;
         this.x = width / 2;
         this.y = height - 120;
         this.targetX = this.x;
@@ -81,7 +86,7 @@ class Player {
         this.skillActiveTimer = 0;
         this.skillCdTimer = 0;
         
-        this.maxSlots = 3;
+        this.maxSlots = shipCfg.initSlots;
         this.usedSlots = 0;
         
         this.fireCooldown = 0;
@@ -202,31 +207,36 @@ class Player {
             pRet = eq.pierce.level >= 2 ? 0.8 : 0.5;
         }
         
-        let spawnBullet = (vx, vy, damageMult = 1.0) => {
+        let spawnBullet = (vx, vy, damageMult = 1.0, xOffset = 0) => {
             // [技能视觉反馈：弹道变黄]
             let bulletColor = this.skillActiveTimer > 0 ? '#ffeb3b' : '#ffffff';
             let skillMult = (this.skillActiveTimer > 0 && this.skillDamageMult) ? this.skillDamageMult : 1.0;
-            let b = new Bullet(this.x, this.y - this.h / 2, vx, vy, cw, ch, currentDamage * skillMult * damageMult, pCnt, pRet, actCritRate, actCritDmg, bulletColor);
+            let b = new Bullet(this.x + xOffset, this.y - this.h / 2, vx, vy, cw, ch, currentDamage * skillMult * damageMult, pCnt, pRet, actCritRate, actCritDmg, bulletColor);
             b.isHoming = eq.homing && eq.homing.equipped;
             b.homingTurn = homingTurn;
             bullets.push(b);
         };
-        
+
         let doShoot = () => {
             if (eq.laser && eq.laser.equipped) return;
-            if (eq.spread && eq.spread.equipped) {
-                let spreadBase = eq.spread.level + 1;
-                let techSpread = (this.techTree && this.techTree.fp_scatter) || 0;
-                let count = Math.min(7, spreadBase + techSpread);
-                let startVx = -1.5 * (count - 1) / 2;
-                let pelletMult = 1 - 0.20 * eq.spread.level;
-                for (let i = 0; i < count; i++) spawnBullet(startVx + 1.5 * i, -16, pelletMult);
-            } else if (this.techTree && this.techTree.fp_scatter > 0) {
-                let count = Math.min(3, 1 + this.techTree.fp_scatter);
-                let startVx = -1.5 * (count - 1) / 2;
-                for (let i = 0; i < count; i++) spawnBullet(startVx + 1.5 * i, -16);
-            } else {
-                spawnBullet(0, -16);
+            let slots = this.shootSlots || 1;
+            let slotGap = slots > 1 ? 10 : 0;
+            for (let s = 0; s < slots; s++) {
+                let xOff = (s - (slots - 1) / 2) * slotGap;
+                if (eq.spread && eq.spread.equipped) {
+                    let spreadBase = eq.spread.level + 1;
+                    let techSpread = (this.techTree && this.techTree.fp_scatter) || 0;
+                    let count = Math.min(7, spreadBase + techSpread);
+                    let startVx = -1.5 * (count - 1) / 2;
+                    let pelletMult = 1 - 0.20 * eq.spread.level;
+                    for (let i = 0; i < count; i++) spawnBullet(startVx + 1.5 * i, -16, pelletMult, xOff);
+                } else if (this.techTree && this.techTree.fp_scatter > 0) {
+                    let count = Math.min(3, 1 + this.techTree.fp_scatter);
+                    let startVx = -1.5 * (count - 1) / 2;
+                    for (let i = 0; i < count; i++) spawnBullet(startVx + 1.5 * i, -16, 1.0, xOff);
+                } else {
+                    spawnBullet(0, -16, 1.0, xOff);
+                }
             }
         };
         
@@ -487,7 +497,7 @@ class Bullet {
 }
 
 class EnemyBullet {
-    constructor(x, y, vx, vy, type = 'normal') {
+    constructor(x, y, vx, vy, type = 'normal', guidanceFactor = 0.12) {
         this.x = x;
         this.y = y;
         this.vx = vx;
@@ -496,6 +506,7 @@ class EnemyBullet {
         this.active = true;
         this.type = type;
         this.homingTimer = 60;
+        this.guidanceFactor = guidanceFactor;
         this.color = type === 'homing' ? '#ab47bc' : '#ff1744';
         this.coreColor = type === 'homing' ? '#00b0ff' : '#ffeb3b';
     }
@@ -507,8 +518,8 @@ class EnemyBullet {
             let dy = player.y - this.y;
             let dist = Math.sqrt(dx * dx + dy * dy) || 1;
             
-            this.vx += (dx / dist) * 0.12;
-            this.vy += (dy / dist) * 0.12;
+            this.vx += (dx / dist) * this.guidanceFactor;
+            this.vy += (dy / dist) * this.guidanceFactor;
             
             let speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
             if (speed > 4.0) {
@@ -1118,7 +1129,7 @@ class BossScrapDominator extends BaseEnemy {
                 let positions = [width * 0.2, width * 0.4, width * 0.6, width * 0.8];
                 positions.forEach(px => {
                     for (let k = 0; k < 3; k++) {
-                        let bul = new EnemyBullet(px + (Math.random()-0.5)*40, -20 + k*30, (Math.random()-0.5)*1.5, 2 + Math.random(), 'homing');
+                        let bul = new EnemyBullet(px + (Math.random()-0.5)*40, -20 + k*30, (Math.random()-0.5)*1.5, 2 + Math.random(), 'homing', 0.05);
                         enemyBullets.push(bul);
                     }
                 });
