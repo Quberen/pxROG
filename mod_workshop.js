@@ -7,26 +7,27 @@ window.WORKSHOP = {
         physics: { hp_bounce_force: 0.6, hp_damping: 0.65, skill_vibrate_force: 20, dmg_text_player_speed_x: 3, dmg_text_player_speed_y: -4, dmg_text_player_gravity: 0.25 },
         economy: { inflation_growth: 5.0, inflation_min_buy: 10.0, cooling_rate: 0.4, refresh_inflation: 5.0 },
         enemies: {
-            "Locator":       { hp: 12,  weight: 1,  unlockTime: 0,   role: 'fodder' }, "WandererLow":   { hp: 18,  weight: 3,  unlockTime: 5,   role: 'fodder' },
-            "Kamikaze":      { hp: 18,  weight: 4,  unlockTime: 20,  role: 'special' }, "LocatorSwarm":  { hp: 18,  weight: 6,  unlockTime: 20,  role: 'swarm' },
-            "WandererHigh":  { hp: 24,  weight: 15, unlockTime: 15,  role: 'elite' }, "Turret":        { hp: 48,  weight: 10, unlockTime: 45,  role: 'elite' },
-            "ArcFlyer":      { hp: 72,  weight: 12, unlockTime: 30,  role: 'special' }, "WandererSwarm": { hp: 30,  weight: 15, unlockTime: 25,  role: 'swarm' },
-            "KamikazeSwarm": { hp: 12,  weight: 16, unlockTime: 40,  role: 'swarm' }, "ArcFlyerSwarm": { hp: 144, weight: 20, unlockTime: 50,  role: 'swarm' },
-            "TurretSwarm":   { hp: 72,  weight: 22, unlockTime: 70,  role: 'swarm' }, "KamikazeSpec":  { hp: 180, weight: 30, unlockTime: 60,  role: 'elite' },
-            "Tank":          { hp: 120, weight: 30, unlockTime: 85,  role: 'tank' }, "TankSwarm":     { hp: 180, weight: 40, unlockTime: 100, role: 'tank' },
+            "Locator":       { hp: 18,  weight: 1,  unlockTime: 0,   role: 'fodder' }, "WandererLow":   { hp: 30,  weight: 3,  unlockTime: 5,   role: 'fodder' },
+            "Kamikaze":      { hp: 24,  weight: 4,  unlockTime: 20,  role: 'special' }, "LocatorSwarm":  { hp: 36,  weight: 6,  unlockTime: 20,  role: 'swarm' },
+            "WandererHigh":  { hp: 30,  weight: 15, unlockTime: 15,  role: 'elite' }, "Turret":        { hp: 60,  weight: 10, unlockTime: 45,  role: 'elite' },
+            "ArcFlyer":      { hp: 30,  weight: 12, unlockTime: 30,  role: 'special' }, "WandererSwarm": { hp: 50,  weight: 15, unlockTime: 25,  role: 'swarm' },
+            "KamikazeSwarm": { hp: 60,  weight: 16, unlockTime: 40,  role: 'swarm' }, "ArcFlyerSwarm": { hp: 50,  weight: 20, unlockTime: 50,  role: 'swarm' },
+            "TurretSwarm":   { hp: 100, weight: 22, unlockTime: 70,  role: 'swarm' }, "KamikazeSpec":  { hp: 180, weight: 30, unlockTime: 60,  role: 'elite' },
+            "Tank":          { hp: 240, weight: 30, unlockTime: 85,  role: 'tank' }, "TankSwarm":     { hp: 500, weight: 40, unlockTime: 100, role: 'tank' },
             "CrystalLocator": { hp: 120, weight: 5, unlockTime: 0, role: 'elite' },
             "Formation_V_Strike":    { weight: 12, unlockTime: 20, role: 'formation' }, "Formation_Turret_Wall": { weight: 25, unlockTime: 50, role: 'formation' }, "Formation_Ambush": { weight: 28, unlockTime: 65, role: 'formation' }
         },
         items: {
-            "damage": { cost: 1.4, max: 20 }, "heal": { cost: 0.5, max: 999 }, "heal_up": { cost: 1.0, max: 5 }, "magnet": { cost: 1.0, max: 5 }, "crit_rate": { cost: 1.2, max: 10 }, "crit_dmg": { cost: 1.5, max: 10 }, "healer_rate": { cost: 1.4, max: 5 }, "aoe": { initialCost: 3.0, cost: 1.5, costStep: 0.5, max: 3 }, "wingman": { cost: 3.5, max: 4 }, "slot": { cost: 1.8, max: 5 },
+            "damage": { cost: 1.4, max: 20 }, "heal": { cost: 0.5, max: 999 }, "heal_up": { cost: 1.0, max: 5 }, "magnet": { cost: 1.0, max: 5 }, "crit_rate": { cost: 1.2, max: 5 }, "crit_dmg": { cost: 1.5, max: 5 }, "healer_rate": { cost: 1.4, max: 5 }, "aoe": { initialCost: 3.0, cost: 1.5, costStep: 0.5, max: 3 }, "wingman": { cost: 3.5, max: 3 }, "slot": { cost: 1.8, max: 5 },
             "hp_max": { initialCost: 1.8, cost: 1.5, costStep: 0.5, max: 3 }, "speed": { initialCost: 2.0, cost: 1.2, costStep: 0.4, max: 4 },
             "spread":  { initialCost: 4.0, cost: 4.0, costStep: 0.5, max: 4 },
             "homing":  { initialCost: 2.5, cost: 1.6, costStep: 0.4, max: 3 },
             "pulse":   { initialCost: 2.5, cost: 1.5, costStep: 0.5, max: 3 },
             "laser":   { initialCost: 5.0, cost: 2.5, costStep: 1.0, max: 4 },
             "pierce":  { initialCost: 2.5, cost: 1.2, costStep: 0.8, max: 3 },
-            "rapid_charge": { cost: 1.5, max: 3 }, "phase_dodge": { cost: 2.5, max: 3 },
-            "afterburn": { initialCost: 2.5, cost: 1.5, costStep: 0.5, max: 3 }, "shield_gen": { cost: 1.8, max: 4 }, "skill_cd": { cost: 2.0, max: 3 }
+            "rapid_charge": { cost: 1.5, max: 5 }, "phase_dodge": { cost: 2.5, max: 4 },
+            "afterburn": { initialCost: 2.5, cost: 1.5, costStep: 0.5, max: 3 }, "shield_gen": { cost: 1.8, max: 4 }, "skill_cd": { cost: 2.0, max: 5 },
+            "temp_armor": { max: 999 }
         }
     },
 
@@ -72,7 +73,7 @@ window.WORKSHOP = {
                 let rand = Math.random();
                 spawn('Locator', Math.random() * (w - 60) + 30, {
                     speedOverride: 3.0 + diff * 0.4 + Math.random() * 1.2,
-                    hpMod: 0.35,
+                    hpMod: 0.5,
                     forceHeal: rand < 0.20,
                     forceBattery: rand >= 0.20 && rand < 0.40
                 });
@@ -93,7 +94,7 @@ window.WORKSHOP = {
                 let monoType = (frame % 900 === 0) ? (Math.random() < 0.5 ? 'heal' : 'battery') : null;
                 for (let i = 0; i < cnt; i++) {
                     let rand2 = Math.random();
-                    let opt = { speedOverride: clusterSpeed, hpMod: monoType ? 0.60 : 0.45, y: cy + (Math.random() - 0.5) * 20 };
+                    let opt = { speedOverride: clusterSpeed, hpMod: monoType ? 0.60 : 0.5, y: cy + (Math.random() - 0.5) * 20 };
                     if (monoType === 'heal') opt.forceHeal = true;
                     else if (monoType === 'battery') opt.forceBattery = true;
                     else { opt.forceHeal = rand2 < 0.15; opt.forceBattery = rand2 >= 0.15 && rand2 < 0.30; }
@@ -312,7 +313,7 @@ window.WORKSHOP = {
                 spawn(isAbyss ? 'LocatorSwarm' : 'Locator',
                       Math.random() * (w - 60) + 30, {
                     speedOverride: 3.0 + diff * 0.4 + Math.random() * 1.2,
-                    hpMod: 0.35,
+                    hpMod: 0.5,
                     forceHeal:    !isAbyss && rand < 0.20,
                     forceBattery: !isAbyss && rand >= 0.20 && rand < 0.40
                 });
@@ -327,7 +328,7 @@ window.WORKSHOP = {
                 for (let i = 0; i < cnt; i++) {
                     let isAbyssCluster = (diff >= 3 && Math.random() < 0.05);
                     let r2 = Math.random();
-                    let opt = { speedOverride: spd, hpMod: 0.45, y: -50 + (Math.random() - 0.5) * 20 };
+                    let opt = { speedOverride: spd, hpMod: 0.5, y: -50 + (Math.random() - 0.5) * 20 };
                     if (isAbyssCluster) {
                         spawn('LocatorSwarm', cx + (Math.random() - 0.5) * 20, Object.assign({}, opt, { hpMod: 0.5 }));
                     } else {
@@ -461,9 +462,7 @@ window.WORKSHOP = {
 
         'sector2': {
             name: "区域 2: 深邃裂隙",
-            shopItems: ['high_explosive', 'spread', 'skill_duration', 'burst_core',
-                        'rapid_charge', 'phase_dodge', 'afterburn', 'shield_gen', 'skill_cd',
-                        'pierce', 'homing', 'crit_rate', 'heal_up', 'slot'],
+            shopItems: 'ALL',
             allowed_enemies: ['Locator', 'LocatorSwarm', 'CrystalLocator',
                               'Kamikaze', 'KamikazeSwarm',
                               'Turret', 'TurretSwarm',

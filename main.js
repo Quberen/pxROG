@@ -121,6 +121,7 @@ const ui = {
     coreSlotsGrid: document.getElementById('core-slots-grid'),
     extSlotsGrid: document.getElementById('ext-slots-grid'),
     inventoryList: document.getElementById('loadout-inventory-list'),
+    modList: document.getElementById('loadout-mod-list'),
     sysMessage: document.getElementById('system-message'),
     topLeftCont: document.getElementById('hud-top-left'),
     sideBtns: document.getElementById('side-btns-container'),
@@ -144,7 +145,7 @@ const ITEM_ICONS = {
     'speed':          '▶',
     'rapid_charge':   '◉',  'phase_dodge': '◈', 'afterburn': '✦', 'skill_cd': '⟳',
     'crit_rate': '★',  'crit_dmg': '◆', 'aoe': '◎', 'wingman': '✈',
-    'heal': '✚',  'heal_up': '✚', 'magnet': '⊕', 'shield_gen': '◈', 'slot': '▣',
+    'heal': '✚',  'heal_up': '✚', 'magnet': '⊕', 'shield_gen': '◈', 'slot': '▣', 'temp_armor': '◧',
     'healer_rate': '✚', 'skill_duration': '◉'
 };
 function getItemIcon(id) { return ITEM_ICONS[id] || (id ? '◆' : '◆'); }
@@ -386,7 +387,7 @@ const LootSystem = {
                     items.push(new Item(
                         data.x + (Math.random() - 0.5) * 30,
                         data.y + (Math.random() - 0.5) * 10,
-                        'pale_crystal', 3.0
+                        'pale_crystal', 2.0
                     ));
                 }
                 return;
@@ -396,10 +397,16 @@ const LootSystem = {
             } else if (data.isBattery) {
                 items.push(new Item(data.x, data.y, 'energy', Math.max(15, (data.weight || 1) * 5)));
             } else {
-                let ptVal = (data.weight || 1) * 0.1;
-                if (data.isElite) ptVal *= 30;
-                if (data.isBossMinion) ptVal *= 1.5;
-                items.push(new Item(data.x, data.y, ptVal >= 1.0 ? 'pt_core' : 'pt_shard', ptVal));
+                let pt = data.dropPt || (data.weight || 1) * 0.1;
+                if (data.isElite) pt *= 3;
+                let nC = Math.floor(pt / 2);
+                let nS = Math.round((pt - nC * 2) / 0.2);
+                for (let i = 0; i < nC; i++) {
+                    items.push(new Item(data.x + (Math.random() - 0.5) * 20, data.y + (Math.random() - 0.5) * 10, 'pale_crystal', 2.0));
+                }
+                for (let i = 0; i < nS; i++) {
+                    items.push(new Item(data.x + (Math.random() - 0.5) * 20, data.y + (Math.random() - 0.5) * 10, 'pt_shard', 0.2));
+                }
             }
         });
     }
@@ -913,6 +920,7 @@ function activateSkill() {
 
         let bonusFrames = (player.upgrades['skill_duration'] || 0) * 60;
         player.skillActiveTimer = 600 + bonusFrames;
+        player.skillActiveMax = 600 + bonusFrames;
 
         player.skillDamageMult = 1.0;
 
@@ -973,7 +981,7 @@ function updateHUD() {
     else if (hpPercent > 0.2) hpColor = '#ff9800';
 
     ui.hpVal.style.color = hpColor;
-    ui.hpVal.innerText = `${Math.floor(player.hp)}%`;
+    ui.hpVal.innerText = `${Math.floor(player.hp)}%` + (player.armor > 0 ? `+${player.armor}` : '');
 
     let indColor = '#00e676';
     let cassette = WORKSHOP.cassettes[currentLevel];
@@ -1012,7 +1020,9 @@ function updateHUD() {
 
 function updatePixelButtons() {
     if (!player) return;
-    let skProg = player.skillActiveTimer > 0 ? 1 : (player.skillEnergy / player.maxSkillEnergy);
+    let skProg = player.skillActiveTimer > 0
+        ? (player.skillActiveTimer / (player.skillActiveMax || 600))
+        : (player.skillEnergy / player.maxSkillEnergy);
     let skCdProg = player.skillCdTimer > 0 ? (player.skillCdTimer / 900) : 0;
     let skColor = player.skillActiveTimer > 0 ? '#00e5ff' : '#00b0ff';
     let skIsActive = player.skillActiveTimer > 0;
@@ -1040,20 +1050,30 @@ const setupMultiTouchButtons = () => {
 
 
 // --- [12] 商店与背包逻辑 ---
-function getShopCost(opt) { 
-    let baseCst = (opt.type === 'equip' && !player.equipment[opt.id].owned) ? opt.initialCost : (opt.type === 'equip' ? opt.cost + player.equipment[opt.id].level * opt.costStep : opt.cost); 
-    let diffMult = currentDifficulty === 3 ? 1.2 : 1.0; 
-    let inflationMult = 1.0 + (shopInflation / 100.0); 
-    return parseFloat((baseCst * diffMult * inflationMult).toFixed(1)); 
+function getShopCost(opt) {
+    let baseCst;
+    if (opt.prices) {
+        let lvl = (opt.type === 'equip')
+            ? (player.equipment[opt.id] && player.equipment[opt.id].owned ? player.equipment[opt.id].level : 0)
+            : (player.upgrades[opt.id] || 0);
+        baseCst = opt.prices[Math.min(lvl, opt.prices.length - 1)];
+    } else {
+        baseCst = (opt.type === 'equip' && !player.equipment[opt.id].owned) ? opt.initialCost
+                : (opt.type === 'equip' ? opt.cost + player.equipment[opt.id].level * opt.costStep : opt.cost);
+    }
+    let diffMult = currentDifficulty === 3 ? 1.2 : 1.0;
+    let inflationMult = 1.0 + (shopInflation / 100.0);
+    return parseFloat((baseCst * diffMult * inflationMult).toFixed(1));
 }
 
 function getWeightedRandomItem(excludeIds) { 
     let cassette = WORKSHOP.cassettes[currentLevel] || WORKSHOP.cassettes['debug']; 
     let shopItems = cassette.shopItems || 'ALL'; 
     let availableItems = upgradePool.filter(item => { 
-        if (excludeIds.includes(item.id)) return false; 
-        if (item.id === 'repair' || item.id === 'emergency_repair') return false; 
-        if (shopItems !== 'ALL' && !shopItems.includes(item.id)) return false; 
+        if (excludeIds.includes(item.id)) return false;
+        if (item.id === 'repair' || item.id === 'emergency_repair' || item.id === 'heal') return false;
+        if (item.id === 'temp_armor' && player.armor >= 150) return false;
+        if (shopItems !== 'ALL' && !shopItems.includes(item.id)) return false;
         if (shopItems === 'ALL') { 
             if (player.totalUpgradePoints < item.unlockPT || gameTimeSeconds < item.unlockTime) return false; 
         } 
@@ -1129,40 +1149,68 @@ function createIconCvs(id) {
     return iconCvs; 
 }
 
-function renderLoadout() { 
-    ui.loadoutSlotsText.innerText = `${player.usedSlots} / ${player.maxSlots}`; 
-    ui.coreSlotsGrid.innerHTML = ''; 
-    ui.extSlotsGrid.innerHTML = ''; 
-    ui.inventoryList.innerHTML = ''; 
-    let renderedCoreSlots = 0; 
-    let hasInv = false; 
-    
-    for (let id in player.equipment) { 
-        let eq = player.equipment[id]; 
-        if (!eq.owned) continue; 
-        
-        if (eq.equipped) { 
-            let chip = document.createElement('div'); 
-            let isLocked = eq.canUnequip === false; 
-            chip.className = `equip-chip ${eq.slotCost > 0 ? 'core-chip' : 'ext-chip'} ${isLocked ? 'locked-chip' : ''}`; 
-            chip.innerHTML = `<span style="font-size:8px; color:#fff">${eq.name} Lv.${eq.level}</span>`; 
-            chip.onclick = function () { toggleEquipment(id); }; 
-            
-            if (eq.slotCost > 0) { 
-                ui.coreSlotsGrid.appendChild(chip); 
-                renderedCoreSlots += eq.slotCost; 
-            } else { 
-                ui.extSlotsGrid.appendChild(chip); 
-            } 
-        } else { 
-            hasInv = true; 
-            let card = document.createElement('div'); 
-            card.className = 'upgrade-card equip-inactive'; 
-            card.innerHTML = `<div class="card-title">${eq.name}</div>`; 
-            card.onclick = function () { toggleEquipment(id); }; 
-            ui.inventoryList.appendChild(card); 
-        } 
-    } 
+function toRoman(n) {
+    const vals = [10,9,5,4,1], syms = ['X','IX','V','IV','I'];
+    let r = '';
+    for (let i = 0; i < vals.length; i++) { while (n >= vals[i]) { r += syms[i]; n -= vals[i]; } }
+    return r || String(n);
+}
+
+function renderLoadout() {
+    ui.loadoutSlotsText.innerText = `${player.usedSlots} / ${player.maxSlots}`;
+    ui.coreSlotsGrid.innerHTML = '';
+    ui.extSlotsGrid.innerHTML = '';
+    ui.inventoryList.innerHTML = '';
+    if (ui.modList) ui.modList.innerHTML = '';
+
+    for (let id in player.equipment) {
+        let eq = player.equipment[id];
+        if (!eq.owned) continue;
+
+        if (eq.equipped) {
+            let chip = document.createElement('div');
+            let isLocked = eq.canUnequip === false;
+            chip.className = `equip-chip ${eq.slotCost > 0 ? 'core-chip' : 'ext-chip'} ${isLocked ? 'locked-chip' : ''}`;
+            chip.innerHTML = `<span style="font-size:8px; color:#fff">${eq.name} ${toRoman(eq.level)}</span>`;
+            chip.onclick = function () { toggleEquipment(id); };
+
+            if (eq.slotCost > 0) {
+                ui.coreSlotsGrid.appendChild(chip);
+            } else {
+                ui.extSlotsGrid.appendChild(chip);
+            }
+        } else {
+            let card = document.createElement('div');
+            card.className = 'upgrade-card equip-inactive';
+            card.innerHTML = `<div class="card-title">${eq.name} ${toRoman(eq.level)}</div>`;
+            card.onclick = function () { toggleEquipment(id); };
+            ui.inventoryList.appendChild(card);
+        }
+    }
+
+    if (ui.modList) {
+        let poolMap = {};
+        upgradePool.forEach(item => { if (item.type !== 'equip') poolMap[item.id] = item; });
+
+        for (let id in player.upgrades) {
+            let lv = player.upgrades[id];
+            if (!lv || lv <= 0) continue;
+            let def = poolMap[id];
+            if (!def) continue;
+            let rDef = (typeof RARITY !== 'undefined' && RARITY[def.rarity]) ? RARITY[def.rarity] : { color: '#fff' };
+            let chip = document.createElement('div');
+            chip.style.cssText = 'display:inline-flex;align-items:center;gap:4px;background:#111;border:2px solid ' + rDef.color + '44;border-radius:4px;padding:3px 7px;margin:3px;font-size:8px;';
+            chip.innerHTML = `<span style="color:${rDef.color}">${def.name}</span><span style="color:#aaa">${toRoman(lv)}</span>`;
+            ui.modList.appendChild(chip);
+        }
+        if (player.armor > 0) {
+            let layers = Math.ceil(player.armor / 50);
+            let chip = document.createElement('div');
+            chip.style.cssText = 'display:inline-flex;align-items:center;gap:4px;background:#111;border:2px solid #00b0ff44;border-radius:4px;padding:3px 7px;margin:3px;font-size:8px;';
+            chip.innerHTML = `<span style="color:#00b0ff">临时装甲</span><span style="color:#aaa">${player.armor}pt (${layers}层)</span>`;
+            ui.modList.appendChild(chip);
+        }
+    }
 }
 
 function toggleEquipment(id) { 
@@ -1250,6 +1298,13 @@ function buyUpgrade(index) {
             } else { 
                 player.equipment[opt.id].level++; 
             } 
+        } else if (opt.id === 'temp_armor') {
+            if (player.armor < 150) {
+                player.armor += 50;
+            } else {
+                player.pt += cost;
+                return;
+            }
         } else {
             player.upgrades[opt.id] = (player.upgrades[opt.id] || 0) + 1;
             if (opt.id === 'slot') player.maxSlots = 3 + player.upgrades.slot;
@@ -1474,9 +1529,9 @@ function loop(timestamp) {
             if (player.skillActiveTimer > 0) {
                 player.skillActiveTimer--;
                 if (player.skillActiveTimer <= 0) {
-                    // skill_cd 缩减：每级冷却 -15%
+                    // skill_cd 缩减：每级冷却 -10%，满级-50%
                     let totalCdLevels = (player.upgrades.skill_cd || 0);
-                    let cdReduction = 1.0 - Math.min(0.60, totalCdLevels * 0.15);
+                    let cdReduction = 1.0 - Math.min(0.50, totalCdLevels * 0.10);
                     player.skillCdTimer = Math.round(900 * cdReduction);
                     player.skillDamageMult = 1.0;
                     // 技能结束时的短暂红色提示
@@ -1507,7 +1562,12 @@ function loop(timestamp) {
                     // afterburn：命中后有概率留下持续燃烧区域
                     let afterburnLevel = (player.equipment && player.equipment.afterburn && player.equipment.afterburn.equipped) ? player.equipment.afterburn.level : 0;
                     if (afterburnLevel > 0 && Math.random() < 0.25 * afterburnLevel) {
-                        burnEffects.push(new BurnEffect(e.x, e.y, 30, player.getStat('damage') * 0.18));
+                        const BASE_BURN_R = 30;
+                        let burnDmg = [2, 3, 5][afterburnLevel - 1] || 2;
+                        let burnRadius = BASE_BURN_R * 1.1 * (1 + 0.05 * (afterburnLevel - 1));
+                        let burnLife = Math.round(180 * (1 + 0.10 * (afterburnLevel - 1)));
+                        let burnTick = Math.round(20 / (afterburnLevel >= 3 ? 1.2 : 1.0));
+                        burnEffects.push(new BurnEffect(e.x, e.y, burnRadius, burnDmg, burnLife, burnTick));
                     }
                     if (b.hitEnemies.size > b.pierceCount) {
                         b.active = false;
@@ -1519,21 +1579,23 @@ function loop(timestamp) {
 
         // === Wingman State Machine ===
         if (player && player.hp > 0 && endingState !== 'playerDead') {
-            let totalWingman = (player.upgrades && player.upgrades.wingman) || 0;
-            // sync array size
-            while (wingmanEntities.length < totalWingman) {
-                let idx = wingmanEntities.length;
-                wingmanEntities.push({ state:'orbit', orbitAngle: idx * Math.PI * 2 / Math.max(1, totalWingman),
-                    x: player.x, y: player.y, vx:0, vy:0, seekTimer:0,
-                    swoopCooldown: 180 + idx * 60, respawnTimer:0 });
-            }
-            while (wingmanEntities.length > totalWingman) wingmanEntities.pop();
+            let wLv = (player.upgrades && player.upgrades.wingman) || 0;
+            let count = wLv >= 3 ? 3 : (wLv >= 1 ? 2 : 0);
 
-            let wLv = totalWingman;
-            let wDmg = 28;
-            let wRadius = 28 + (wLv - 1) * 8;
-            let swoopInterval = Math.max(210, 380 - (wLv - 1) * 40);
-            let respawnTime = Math.max(80, 180 - (wLv - 1) * 25);
+            while (wingmanEntities.length < count) {
+                let idx = wingmanEntities.length;
+                wingmanEntities.push({ state: 'orbit', orbitAngle: idx * Math.PI * 2 / Math.max(1, count),
+                    x: player.x, y: player.y, swoopCooldown: 60, respawnTimer: 0 });
+            }
+            while (wingmanEntities.length > count) wingmanEntities.pop();
+
+            if (wLv < 1) { wingmanEntities = []; }
+
+            let directDmg  = [50, 75, 125][wLv - 1] || 50;
+            let splashDmg  = [20, 30,  50][wLv - 1] || 20;
+            let swoopCD    = [720, 660, 600][wLv - 1] || 720;
+            let arcFrames  = [60, 48, 36][wLv - 1] || 60;
+            let splashR    = 50;
 
             for (let w of wingmanEntities) {
                 if (w.state === 'orbit') {
@@ -1549,19 +1611,23 @@ function loop(timestamp) {
                             if (d2 < nearDist) { nearDist = d2; nearest = e; }
                         }
                         if (nearest) {
+                            // predict target position using last-frame velocity
+                            let vx = nearest.x - (nearest._prevX || nearest.x);
+                            let vy = nearest.y - (nearest._prevY || nearest.y);
+                            let predictX = nearest.x + vx * arcFrames;
+                            let predictY = nearest.y + vy * arcFrames;
                             w._arcStart = { x: w.x, y: w.y };
-                            let ctrlX = (w.x + nearest.x) / 2 + (Math.random() - 0.5) * 80;
-                            let ctrlY = Math.min(w.y, nearest.y) - 60 - Math.random() * 40;
+                            let ctrlX = (w.x + predictX) / 2 + (Math.random() - 0.5) * 80;
+                            let ctrlY = Math.min(w.y, predictY) - 60 - Math.random() * 40;
                             w._arcCtrl = { x: ctrlX, y: ctrlY };
-                            w._arcEnd = { x: nearest.x, y: nearest.y };
-                            w._arcT = 0; w._arcSpeed = 0.022;
+                            w._arcEnd = { x: predictX, y: predictY };
+                            w._arcProgress = 0;
                             w._target = nearest;
                             w.state = 'arc';
                         } else {
-                            w.swoopCooldown = swoopInterval;
+                            w.swoopCooldown = swoopCD;
                         }
                     }
-                    // draw orbit: yellow diamond
                     ctx.save();
                     ctx.fillStyle = '#ffea00';
                     ctx.beginPath();
@@ -1571,21 +1637,33 @@ function loop(timestamp) {
                     ctx.restore();
                 } else if (w.state === 'arc') {
                     let tgt = w._target;
-                    if (tgt && tgt.active) w._arcEnd = { x: tgt.x, y: tgt.y };
-                    w._arcT = Math.min(1, w._arcT + w._arcSpeed);
-                    let t = w._arcT;
+                    if (tgt && tgt.active) {
+                        let vx = tgt.x - (tgt._prevX || tgt.x);
+                        let vy = tgt.y - (tgt._prevY || tgt.y);
+                        w._arcEnd = { x: tgt.x + vx * (arcFrames - w._arcProgress), y: tgt.y + vy * (arcFrames - w._arcProgress) };
+                    }
+                    w._arcProgress = (w._arcProgress || 0) + 1;
+                    let arcT = Math.min(1, Math.pow(w._arcProgress / arcFrames, 1.5));
+                    let t = arcT;
                     let bx = (1-t)*(1-t)*w._arcStart.x + 2*(1-t)*t*w._arcCtrl.x + t*t*w._arcEnd.x;
                     let by = (1-t)*(1-t)*w._arcStart.y + 2*(1-t)*t*w._arcCtrl.y + t*t*w._arcEnd.y;
-                    let hit = tgt && tgt.active && (bx - tgt.x) ** 2 + (by - tgt.y) ** 2 < 18 * 18;
+                    let hit = tgt && tgt.active && (bx - tgt.x) ** 2 + (by - tgt.y) ** 2 < 10 * 10;
                     w.x = bx; w.y = by;
-                    if (hit || w._arcT >= 1) {
-                        triggerAOE(w.x, w.y, wDmg, wRadius, '#ffea00');
-                        w.state = 'dead'; w.respawnTimer = respawnTime;
+                    if (hit || arcT >= 1) {
+                        if (tgt && tgt.active) tgt.takeDamage(directDmg, true, false, 'wingman');
+                        aoeEffects.push(new AOEEffect(w.x, w.y, splashR, '#ffea00'));
+                        createExplosion(w.x, w.y, '#ffea00', 10);
+                        enemies.forEach(e => {
+                            if (e.active && e !== tgt) {
+                                let dx = e.x - w.x, dy = e.y - w.y;
+                                if (dx*dx + dy*dy < splashR * splashR) e.takeDamage(splashDmg, true, false, 'wingman');
+                            }
+                        });
+                        w.state = 'dead'; w.respawnTimer = Math.round(swoopCD * 0.3);
                     }
-                    // draw arc: yellow diamond rotated toward motion
                     ctx.save();
                     ctx.translate(w.x, w.y);
-                    let prevT = Math.max(0, w._arcT - 0.01);
+                    let prevT = Math.max(0, arcT - 0.02);
                     let pbx = (1-prevT)*(1-prevT)*w._arcStart.x + 2*(1-prevT)*prevT*w._arcCtrl.x + prevT*prevT*w._arcEnd.x;
                     let pby = (1-prevT)*(1-prevT)*w._arcStart.y + 2*(1-prevT)*prevT*w._arcCtrl.y + prevT*prevT*w._arcEnd.y;
                     let ang = Math.atan2(w.y - pby, w.x - pbx);
@@ -1601,7 +1679,7 @@ function loop(timestamp) {
                     if (w.respawnTimer <= 0) {
                         w.state = 'orbit';
                         w.orbitAngle = Math.random() * Math.PI * 2;
-                        w.swoopCooldown = swoopInterval;
+                        w.swoopCooldown = swoopCD;
                     }
                 }
             }

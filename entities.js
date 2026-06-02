@@ -66,7 +66,11 @@ class Player {
 
         // 【关键修复】：补全旧版 upgrade 字典，防止 Item 拾取时读取 heal_up 和 magnet 报错
         this.upgrades = { aoe: 0, wingman: 0, heal_up: 0, magnet: 0,
-                          rapid_charge: 0, phase_dodge: 0, afterburn: 0, shield_gen: 0, skill_cd: 0 }; 
+                          rapid_charge: 0, phase_dodge: 0, afterburn: 0, shield_gen: 0, skill_cd: 0,
+                          crit_rate: 0, crit_dmg: 0, temp_armor: 0 };
+
+        this.armor = 0;
+        this.skillActiveMax = 600;
 
         this.hp = this.getStat('maxHp');
         this.pt = 0;
@@ -99,14 +103,10 @@ class Player {
         
         if (statName === 'damage') {
             if (this.equipment.homing && this.equipment.homing.equipped) inc += (-0.4 + (this.equipment.homing.level - 1) * 0.15);
-            if (this.equipment.spread && this.equipment.spread.equipped) inc += (-0.2 + (this.equipment.spread.level - 1) * 0.05);
-            
-            // 【L1 架构修复：高能弹药/伤害乘区接线】
-            // 兼容防错：无论你的 ID 叫 damage 还是 high_explosive
+
             let dmgCore = this.equipment.damage || this.equipment.high_explosive;
             if (dmgCore && dmgCore.equipped) {
-                // 提供 20% 加成，每级额外 10%
-                inc += 0.20 + (dmgCore.level - 1) * 0.10;
+                inc += 0.20 * dmgCore.level;
             }
             const ATK_DMG_FLAT = [0, 2, 5, 9];
             let atkLv = (this.techTree && this.techTree.atk_dmg) || 0;
@@ -132,10 +132,18 @@ class Player {
         moreList.forEach(mult => { finalVal *= mult; });
 
         
-        // 【遗漏修补：暴击率绝对加成机制】
         if (statName === 'critRate') {
-            if (this.skillActiveTimer > 0) finalVal += 0.80; // 技能期间提供真实的 80% 绝对暴击率
+            finalVal += (this.upgrades.crit_rate || 0) * 0.05;
+            if (this.skillActiveTimer > 0) finalVal += 0.80;
             finalVal = Math.min(1.0, finalVal);
+        }
+
+        if (statName === 'critDamage') {
+            finalVal += (this.upgrades.crit_dmg || 0) * 0.25;
+        }
+
+        if (statName === 'healEfficiency') {
+            finalVal += (this.upgrades.heal_up || 0) * 0.80;
         }
 
         if (statName === 'maxHp') finalVal += ((this.techTree && this.techTree.hp_max) || 0) * 20;
@@ -332,8 +340,8 @@ class Player {
         if (this.invincible > 0 || endingState !== 'none') return;
         if (typeof bossEnterPhase !== 'undefined' && bossEnterPhase > 0) return;
 
-        // phase_dodge：受伤时有概率完全免疫（每级+15%，科技树def_dodge额外+10%/级）
-        let dodgeChance = (this.upgrades.phase_dodge || 0) * 0.15 + ((this.techTree && this.techTree.def_dodge) || 0) * 0.10;
+        // phase_dodge：受伤时有概率完全免疫（每级+2/2/2/4%减免，满级共-10%）
+        let dodgeChance = (this.upgrades.phase_dodge || 0) * 0.02 + ((this.techTree && this.techTree.def_dodge) || 0) * 0.10;
         if (dodgeChance > 0 && Math.random() < dodgeChance) {
             if (typeof pushFloatingText !== 'undefined') pushFloatingText(this.x, this.y - 25, 'DODGE', '#00e5ff', true, false, '');
             this.invincible = 12;
@@ -347,32 +355,46 @@ class Player {
         if (this.techTree && this.techTree.def_red > 0)
             actualAmount = Math.max(1, Math.round(actualAmount * (1 - this.techTree.def_red * 0.05)));
 
-        this.hp -= actualAmount;
+        // 临时装甲吸收
+        let hpDamage = actualAmount;
+        if (this.armor > 0) {
+            let absorbed = Math.min(this.armor, hpDamage);
+            this.armor -= absorbed;
+            hpDamage -= absorbed;
+        }
+
         this.invincible = 20;
 
-        let dmgMag = 15 + Math.min(20, actualAmount * 0.6);
-        let dmgAng = Math.random() * Math.PI * 2;
-        uiOffsets.hp.x += Math.cos(dmgAng) * dmgMag;
-        uiOffsets.hp.y += Math.sin(dmgAng) * dmgMag;
+        if (hpDamage > 0) {
+            this.hp -= hpDamage;
 
-        // 受伤视觉与卡帧
-        let isAbyssSource = (sourceStr === 'abyss' || sourceStr === 'boss' || sourceStr === 'abyss_bullet');
-        if (typeof damageVignetteTimer !== 'undefined') {
-            damageVignetteTimer = 60;
-            damageVignetteColor = isAbyssSource ? '171,71,188' : '220,0,50';
-        }
-        if (typeof hitStopFrames !== 'undefined') {
-            if (sourceStr === 'kamikaze') {
-                hitStopFrames = 14;
-                if (typeof pendingPostHitstopEffect !== 'undefined') pendingPostHitstopEffect = { intensity: 10, duration: 12 };
-            } else {
-                hitStopFrames = Math.max(hitStopFrames, 4);
+            let dmgMag = 15 + Math.min(20, hpDamage * 0.6);
+            let dmgAng = Math.random() * Math.PI * 2;
+            uiOffsets.hp.x += Math.cos(dmgAng) * dmgMag;
+            uiOffsets.hp.y += Math.sin(dmgAng) * dmgMag;
+
+            // 受伤视觉与卡帧
+            let isAbyssSource = (sourceStr === 'abyss' || sourceStr === 'boss' || sourceStr === 'abyss_bullet');
+            if (typeof damageVignetteTimer !== 'undefined') {
+                damageVignetteTimer = 60;
+                damageVignetteColor = isAbyssSource ? '171,71,188' : '220,0,50';
             }
+            if (typeof hitStopFrames !== 'undefined') {
+                if (sourceStr === 'kamikaze') {
+                    hitStopFrames = 14;
+                    if (typeof pendingPostHitstopEffect !== 'undefined') pendingPostHitstopEffect = { intensity: 10, duration: 12 };
+                } else {
+                    hitStopFrames = Math.max(hitStopFrames, 4);
+                }
+            }
+
+            if (config.dmgText) pushFloatingText(this.x, this.y - 20, Math.floor(hpDamage), '#ff3333', true);
+        } else {
+            // 仅破甲：给一个青色提示
+            if (config.dmgText) pushFloatingText(this.x, this.y - 20, 'ARMOR', '#00e5ff', true, false, '');
         }
 
         if (typeof EventBus !== 'undefined') EventBus.emit('ENTITY_DAMAGED', { isPlayer: true });
-
-        if (config.dmgText) pushFloatingText(this.x, this.y - 20, Math.floor(actualAmount), '#ff3333', true);
 
         comboCount = Math.floor(comboCount / 2);
 
@@ -498,7 +520,7 @@ class EnemyBullet {
         }
         
         if (Math.abs(this.x - player.x) < player.w / 2 + 2 && Math.abs(this.y - player.y) < player.h / 2 + 2) {
-            let diffDmg = (this.type === 'homing' ? 12 : 10) * DIFF_CONFIG[currentDifficulty].dmgMod;
+            let diffDmg = (this.type === 'homing' ? 16 : 11) * DIFF_CONFIG[currentDifficulty].dmgMod;
             player.takeDamage(diffDmg, false, this.type === 'homing' ? 'abyss_bullet' : 'bullet');
             this.active = false;
         }
@@ -564,7 +586,7 @@ class BaseEnemy {
         let r_h = this.h * this.scale;
 
         if (Math.abs(this.x - player.x) < (r_w / 2 + player.w / 2 - 8) && Math.abs(this.y - player.y) < (r_h / 2 + player.h / 2 - 8)) {
-            let baseDmg = this.isAbyss ? 18 : 15;
+            let baseDmg = this.isAbyss ? 24 : 16;
             if (overrideDmg !== null) baseDmg = overrideDmg;
 
             let actualDmg = isPercent ? baseDmg : (baseDmg * DIFF_CONFIG[currentDifficulty].dmgMod);
@@ -581,6 +603,8 @@ class BaseEnemy {
     }
 
     baseUpdate() {
+       this._prevX = this.x;
+       this._prevY = this.y;
        if (!this._initMods) {
     this._initMods = true;
     if (!this.isHealer && !this.isSpecial && !this.isBoss && !this.isAbyss && !this.isBattery) {
@@ -677,7 +701,8 @@ class BaseEnemy {
             isBossMinion: this.isBossMinion,
             isCrystal: this.isCrystal,
             particleColor: this.particleColor,
-            weight: this.weight
+            weight: this.weight,
+            dropPt: this.dropPt || 0
         });
     }
 }
@@ -687,10 +712,11 @@ class Locator extends BaseEnemy {
         let pColor = isHealer ? '#00e676' : (isAbyss ? '#ab47bc' : '#757575');
         let def = WORKSHOP.data.enemies[isAbyss ? 'LocatorSwarm' : 'Locator'];
         super(x, y, isHealer ? sprites.locator_healer : (isAbyss ? sprites.locator_swarm : sprites.locator), def.hp, def.weight, pColor);
-        
+
         this.speed = speedOverride || (isAbyss ? 1.5 : 1.0 + Math.random() * 0.5);
         this.isHealer = isHealer;
         this.isAbyss = isAbyss;
+        this.dropPt = isAbyss ? 0.6 : 0.2;
     }
 
     update() {
@@ -728,6 +754,7 @@ class Wanderer extends BaseEnemy {
         this.isAbyss = isAbyss;
         this.side = side;
         this.swayPhase = phase !== null ? phase : Math.random() * Math.PI * 2;
+        this.dropPt = isAbyss ? 2.8 : 1.5;
         
         let baseSpeed = isHighThreat ? (1.6 + Math.random() * 1.5) : (0.8 + Math.random() * 0.6);
         this.swayAmp = isHighThreat ? (3.5 + Math.random() * 3.5) : (1.0 + Math.random() * 1.5);
@@ -787,10 +814,11 @@ class Kamikaze extends BaseEnemy {
         this.vy = 2;
         this.warnTime = vType === 'special' ? 75 : (vType === 'swarm' ? 59 : 45);
         this.dashSpeed = vType === 'special' ? 16 : (8 + Math.random() * 3);
-        
+
         this.isKamikaze = true;
         this.isSpecial = vType === 'special';
         this.isAbyss = vType === 'swarm';
+        this.dropPt = vType === 'swarm' ? 3.0 : (vType === 'special' ? 0 : 1.8);
     }
 
     update() {
@@ -815,7 +843,7 @@ class Kamikaze extends BaseEnemy {
         } else if (this.state === 'WARN') {
             this.timer--;
             if (this.vType === 'swarm') {
-                this.x += (player.x - this.x) * 0.01;
+                this.x += (player.x - this.x) * 0.012;
             }
             this.x += (Math.random() - 0.5) * (this.vType === 'special' ? 3 : 2);
             if (this.timer <= 0) {
@@ -823,19 +851,23 @@ class Kamikaze extends BaseEnemy {
                 let dx = player.x - this.x;
                 let dy = player.y - this.y;
                 let dist = Math.sqrt(dx * dx + dy * dy) || 1;
-                this.vx = (dx / dist) * this.dashSpeed;
-                this.vy = (dy / dist) * this.dashSpeed;
+                this.dashDirX = dx / dist;
+                this.dashDirY = dy / dist;
+                this.dashElapsed = 0;
+                this.dashRamp = this.isAbyss ? 36 : 60;
             }
         } else if (this.state === 'DASH') {
-            this.x += this.vx;
-            this.y += this.vy;
+            this.dashElapsed = (this.dashElapsed || 0) + 1;
+            let sp = this.dashSpeed * Math.min(1, this.dashElapsed / (this.dashRamp || 60));
+            this.x += (this.dashDirX || 0) * sp;
+            this.y += (this.dashDirY || 1) * sp;
             this.checkBounds();
         }
-        
+
         if (this.vType === 'special') {
             this.checkPlayerCollision(true, 0.35, 'kamikaze');
         } else {
-            this.checkPlayerCollision(false, 30, 'kamikaze');
+            this.checkPlayerCollision(false, this.isAbyss ? 45 : 25, 'kamikaze');
         }
     }
 }
@@ -851,7 +883,8 @@ class Turret extends BaseEnemy {
         this.targetY = 50 + Math.random() * 100;
         this.isHealer = isHealer;
         this.isDumbFire = isDumbFire;
-        
+        this.dropPt = isAbyss ? 2.0 : 1.0;
+
         this.fireInterval = this.isAbyss ? 120 : 100;
         this.shootTimer = this.fireInterval;
         let _cas0 = typeof WORKSHOP !== 'undefined' && WORKSHOP.cassettes && WORKSHOP.cassettes[currentLevel];
@@ -908,6 +941,7 @@ class ArcFlyer extends BaseEnemy {
         this.progress = progressOffset;
         this.bombTimer = 0;
         this.isAbyss = isAbyss;
+        this.dropPt = isAbyss ? 4.0 : 2.2;
     }
 
     update() {
@@ -942,12 +976,13 @@ class Tank extends BaseEnemy {
         this.speed = isAbyss ? 0.15 : 0.4;
         this.spawnTimer = 180;
         this.isAbyss = isAbyss;
+        this.dropPt = isAbyss ? 3.0 : 1.8;
     }
 
     update() {
         this.baseUpdate();
         this.y += this.speed;
-        
+
         if (this.isAbyss && this.y > 0 && this.y < height * 0.7) {
             this.spawnTimer--;
             if (this.spawnTimer <= 0) {
@@ -970,8 +1005,8 @@ class Tank extends BaseEnemy {
 
 class BossScrapDominator extends BaseEnemy {
     constructor(x, y) {
-        super(x, y, sprites.boss_scrap, (currentDifficulty <= 1) ? 8800 : 17600, 100, '#7b1fa2');
-        this.hp = this.maxHp;
+        super(x, y, sprites.boss_scrap, 100, 100, '#7b1fa2');
+        this.hp = this.maxHp = (currentDifficulty <= 1 ? 3000 : 5000);
         this.phase = 1;
         this.state = 'ENTER';
         this.timer = 120;
@@ -1125,7 +1160,7 @@ class BossScrapDominator extends BaseEnemy {
                         nextState = 'ATTACK_CHARGE'; this.chargePhase = 'WARN'; this.timer = 65;
                     } else {
                         nextState = 'ATTACK_LASER';
-                        this.laserWarnTimer = 45; this.laserFireTimer = 60; this.laserApproachMoved = 0;
+                        this.laserWarnTimer = 45; this.laserFireTimer = currentDifficulty <= 1 ? 80 : 100; this.laserApproachMoved = 0;
                     }
                 } else if (this.phase === 2) {
                     if (roll < 0.15) {
@@ -1136,7 +1171,7 @@ class BossScrapDominator extends BaseEnemy {
                         nextState = 'ATTACK_SPIRAL'; this.timer = 200; this.spiralAngle = 0;
                     } else if (roll < 0.82) {
                         nextState = 'ATTACK_LASER';
-                        this.laserWarnTimer = 40; this.laserFireTimer = 60; this.laserApproachMoved = 0;
+                        this.laserWarnTimer = 40; this.laserFireTimer = currentDifficulty <= 1 ? 80 : 100; this.laserApproachMoved = 0;
                     } else if (roll < 0.93) {
                         nextState = 'ATTACK_CHARGE'; this.chargePhase = 'WARN'; this.timer = 65;
                     } else {
@@ -1156,7 +1191,7 @@ class BossScrapDominator extends BaseEnemy {
                         nextState = 'ATTACK_CHARGE'; this.chargePhase = 'WARN'; this.timer = 55;
                     } else {
                         nextState = 'ATTACK_LASER';
-                        this.laserWarnTimer = 30; this.laserFireTimer = 60; this.laserApproachMoved = 0;
+                        this.laserWarnTimer = 30; this.laserFireTimer = currentDifficulty <= 1 ? 80 : 100; this.laserApproachMoved = 0;
                     }
                 }
                 this.state = nextState;
@@ -1258,9 +1293,9 @@ class BossScrapDominator extends BaseEnemy {
                     this.laserApproachMoved += Math.abs(moveX);
                 }
                 this.x = Math.max(40, Math.min(width - 40, this.x));
-                if (Math.abs(player.x - this.x) < 30 && player.y > this.y) {
-                    let laserEff = (this.phase >= 3) ? 1.2 : 1.0;
-                    let diffDmg = 20 * DIFF_CONFIG[currentDifficulty].dmgMod * laserEff;
+                let laserHitInterval = currentDifficulty <= 1 ? 20 : 16;
+                if (this.laserFireTimer % laserHitInterval === 0 && Math.abs(player.x - this.x) < 30 && player.y > this.y) {
+                    let diffDmg = currentDifficulty <= 1 ? 16 : 24;
                     player.takeDamage(diffDmg, false, 'boss');
                 }
                 triggerShake(3, 2);
@@ -1313,7 +1348,10 @@ class BossScrapDominator extends BaseEnemy {
             }
         }
 
-        this.checkPlayerCollision(false, 40, 'boss');
+        let bossColDmg = (this.chargePhase === 'DASH')
+            ? (currentDifficulty <= 1 ? 40 : 60)
+            : (currentDifficulty <= 1 ? 24 : 32);
+        this.checkPlayerCollision(false, bossColDmg, 'boss');
     }
 
     draw(ctx) {
@@ -1413,12 +1451,12 @@ class Item {
                 player.pt += this.value;
                 pushFloatingText(50 + (Math.random() - 0.5) * 15, 45 + (Math.random() - 0.5) * 10, `+${this.value % 1 === 0 ? this.value : this.value.toFixed(1)}`, '#e0e0e0', false, false, "", 6);
             } else if (this.type === 'hp') {
-                let healBase = this.value.isElite ? player.maxHp * 0.60 : player.maxHp * (0.20 + (player.upgrades.heal_up * 0.05));
-                let healAmt = healBase;
-                player.heal(healAmt, this.value.isElite);
+                let healBase = this.value.isElite ? 60 : 15;
+                player.heal(healBase, this.value.isElite);
             } else if (this.type === 'energy') {
-                let extraEnergy = (player.upgrades.rapid_charge || 0) * 5;
-                player.skillEnergy = Math.min(player.maxSkillEnergy, player.skillEnergy + this.value + extraEnergy);
+                let extraMultiplier = 1 + 0.15 * (player.upgrades.rapid_charge || 0);
+                let gain = this.value * extraMultiplier;
+                player.skillEnergy = Math.min(player.maxSkillEnergy, player.skillEnergy + gain);
                 pushFloatingText(skillBtnRect.x, skillBtnRect.y - 30, `+ENG`, '#00e5ff', false, false, "", 8);
                 updateHUD();
             } else if (this.type === 'pale_crystal') {
@@ -1585,13 +1623,13 @@ class AOEEffect {
 }
 
 class BurnEffect {
-    constructor(x, y, radius, dmgPerTick) {
+    constructor(x, y, radius, dmgPerTick, life, tickInterval) {
         this.x = x; this.y = y;
         this.radius = radius;
-        this.life = 180;
+        this.life = life !== undefined ? life : 180;
         this.dmgPerTick = dmgPerTick;
         this.tickTimer = 0;
-        this.tickInterval = 20;
+        this.tickInterval = tickInterval !== undefined ? tickInterval : 20;
         this.active = true;
     }
 
