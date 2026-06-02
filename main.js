@@ -1667,18 +1667,31 @@ function loop(timestamp) {
                     w.shootTimer = (w.shootTimer || 60) - 1;
                     let isFast = (w.vx*w.vx + w.vy*w.vy) > 9;
                     if (w.shootTimer <= 0 && !isFast) {
-                        let nearTarget = null, nearD2 = Infinity;
+                        // 150° forward arc (forward = straight up, ±75°)
+                        const ARC_LIMIT = Math.PI * 5 / 12; // 75 degrees
+                        function inArc(tx, ty) {
+                            let ang = Math.atan2(ty - w.y, tx - w.x);
+                            let diff = ang - (-Math.PI / 2);
+                            while (diff > Math.PI) diff -= Math.PI * 2;
+                            while (diff < -Math.PI) diff += Math.PI * 2;
+                            return Math.abs(diff) <= ARC_LIMIT;
+                        }
+                        let arcTarget = null, arcD2 = Infinity;
+                        let anyTarget = null, anyD2 = Infinity;
                         for (let eb of enemyBullets) {
                             if (!eb.active) continue;
                             let d2 = (eb.x-w.x)**2+(eb.y-w.y)**2;
-                            if (d2 < nearD2) { nearD2 = d2; nearTarget = eb; }
+                            if (d2 < anyD2) { anyD2 = d2; anyTarget = eb; }
+                            if (inArc(eb.x, eb.y) && d2 < arcD2) { arcD2 = d2; arcTarget = eb; }
                         }
                         for (let e of enemies) {
                             if (!e.active || !e.isKamikaze) continue;
                             let d2 = (e.x-w.x)**2+(e.y-w.y)**2;
-                            if (d2 < nearD2) { nearD2 = d2; nearTarget = e; }
+                            if (d2 < anyD2) { anyD2 = d2; anyTarget = e; }
+                            if (inArc(e.x, e.y) && d2 < arcD2) { arcD2 = d2; arcTarget = e; }
                         }
-                        if (nearTarget) interceptorBullets.push(new InterceptorBullet(w.x, w.y, nearTarget));
+                        let chosen = arcTarget || anyTarget;
+                        if (chosen) interceptorBullets.push(new InterceptorBullet(w.x, w.y, chosen));
                         w.shootTimer = 60;
                     }
                     ctx.save();
@@ -1786,7 +1799,7 @@ function loop(timestamp) {
                             let rfaBullet = new Bullet(
                                 player.x + xOff, player.y - player.h/2,
                                 (sdx/sd)*spd, (sdy/sd)*spd,
-                                2, 4, 0.5, 0, 1.0, 0, 1.0, '#ff9800'
+                                2, 4, 1, 0, 1.0, 0, 1.0, '#ff9800'
                             );
                             rfaBullet.isRFA = true;
                             rfaBullet.alignToVelocity = true;

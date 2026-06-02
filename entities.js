@@ -1739,7 +1739,8 @@ class InterceptorBullet {
         for (let e of enemies) {
             if (!e.active || !e.isKamikaze) continue;
             if (Math.sqrt((e.x-this.x)**2+(e.y-this.y)**2) < hitR) {
-                e.takeDamage(8, true, false, 'interceptor');
+                let dmg = Math.max(8, Math.ceil(e.maxHp * 0.3));
+                e.takeDamage(dmg, true, false, 'interceptor');
                 createExplosion(this.x, this.y, '#00b0ff', 8);
                 this.active = false;
                 return;
@@ -1749,12 +1750,12 @@ class InterceptorBullet {
     }
 
     draw(ctx) {
+        let ang = Math.atan2(this.vy, this.vx);
         ctx.save();
-        ctx.fillStyle = '#00b0ff'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(this.x, this.y-4); ctx.lineTo(this.x+4, this.y);
-        ctx.lineTo(this.x, this.y+4); ctx.lineTo(this.x-4, this.y);
-        ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(ang + Math.PI / 2);
+        ctx.fillStyle = '#00b0ff';
+        ctx.fillRect(-1, -2, 2, 4);
         ctx.restore();
     }
 }
