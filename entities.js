@@ -1795,14 +1795,19 @@ class AvengerMissile {
                 if (this.sharedTargetRef && this.sharedTargetRef.target && this.sharedTargetRef.target.active) {
                     this.lockedTarget = this.sharedTargetRef.target;
                 } else {
-                    let nearest = null, minD2 = Infinity;
+                    let pvx = (player.targetX - player.x) * 0.3;
+                    let pvy = (player.targetY - player.y) * 0.3;
+                    let best = null, bestT = -Infinity;
                     for (let e of enemies) {
                         if (!e.active) continue;
-                        let d2 = (e.x-this.x)**2+(e.y-this.y)**2;
-                        if (d2 < minD2) { minD2 = d2; nearest = e; }
+                        let evx = e.x-(e._prevX||e.x), evy = e.y-(e._prevY||e.y);
+                        let dx = e.x-player.x, dy = e.y-player.y;
+                        let dist = Math.sqrt(dx*dx+dy*dy) || 1;
+                        let t = -(dx*(evx-pvx) + dy*(evy-pvy)) / dist;
+                        if (t > bestT) { bestT = t; best = e; }
                     }
-                    this.lockedTarget = nearest;
-                    if (this.sharedTargetRef) this.sharedTargetRef.target = nearest;
+                    this.lockedTarget = best;
+                    if (this.sharedTargetRef) this.sharedTargetRef.target = best;
                 }
             }
             if (this.lockedTarget && this.lockedTarget.active) {

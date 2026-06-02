@@ -1618,6 +1618,16 @@ function loop(timestamp) {
             }
         }
 
+        // Closing-rate threat score: higher = target approaching player faster
+        function calcThreat(tx, ty, tvx, tvy) {
+            let pvx = (player.targetX - player.x) * 0.3;
+            let pvy = (player.targetY - player.y) * 0.3;
+            let dx = tx - player.x, dy = ty - player.y;
+            let dist = Math.sqrt(dx*dx + dy*dy) || 1;
+            let rvx = tvx - pvx, rvy = tvy - pvy;
+            return -(dx*rvx + dy*rvy) / dist;
+        }
+
         // === Wingman State Machine ===
         if (player && player.hp > 0 && endingState !== 'playerDead') {
             let wLv = (player.upgrades && player.upgrades.wingman) || 0;
@@ -1676,19 +1686,20 @@ function loop(timestamp) {
                             while (diff < -Math.PI) diff += Math.PI * 2;
                             return Math.abs(diff) <= ARC_LIMIT;
                         }
-                        let arcTarget = null, arcD2 = Infinity;
-                        let anyTarget = null, anyD2 = Infinity;
+                        let arcTarget = null, arcBest = -Infinity;
+                        let anyTarget = null, anyBest = -Infinity;
                         for (let eb of enemyBullets) {
                             if (!eb.active) continue;
-                            let d2 = (eb.x-w.x)**2+(eb.y-w.y)**2;
-                            if (d2 < anyD2) { anyD2 = d2; anyTarget = eb; }
-                            if (inArc(eb.x, eb.y) && d2 < arcD2) { arcD2 = d2; arcTarget = eb; }
+                            let t = calcThreat(eb.x, eb.y, eb.vx, eb.vy);
+                            if (t > anyBest) { anyBest = t; anyTarget = eb; }
+                            if (inArc(eb.x, eb.y) && t > arcBest) { arcBest = t; arcTarget = eb; }
                         }
                         for (let e of enemies) {
                             if (!e.active || !e.isKamikaze) continue;
-                            let d2 = (e.x-w.x)**2+(e.y-w.y)**2;
-                            if (d2 < anyD2) { anyD2 = d2; anyTarget = e; }
-                            if (inArc(e.x, e.y) && d2 < arcD2) { arcD2 = d2; arcTarget = e; }
+                            let evx = e.x-(e._prevX||e.x), evy = e.y-(e._prevY||e.y);
+                            let t = calcThreat(e.x, e.y, evx, evy);
+                            if (t > anyBest) { anyBest = t; anyTarget = e; }
+                            if (inArc(e.x, e.y) && t > arcBest) { arcBest = t; arcTarget = e; }
                         }
                         let chosen = arcTarget || anyTarget;
                         if (chosen) interceptorBullets.push(new InterceptorBullet(w.x, w.y, chosen));
@@ -1784,9 +1795,20 @@ function loop(timestamp) {
 
             // === Sub-weapon Update Loop ===
             if (player.subweaponLoadout && player.subweaponLoadout.length > 0) {
+                // RF-A uses threat-sorted targets; AS-1 keeps distance-sorted groupTargets
+                let rfaThreatSorted = enemies.filter(e => e.active).sort((a, b) => {
+                    let ta = calcThreat(a.x, a.y, a.x-(a._prevX||a.x), a.y-(a._prevY||a.y));
+                    let tb = calcThreat(b.x, b.y, b.x-(b._prevX||b.x), b.y-(b._prevY||b.y));
+                    return tb - ta;
+                });
+                let rfaThreatTargets = [];
+                let numSwGroups = (player.subweaponGroups || []).length;
+                for (let g = 0; g < numSwGroups; g++) {
+                    rfaThreatTargets[g] = rfaThreatSorted[Math.min(g, rfaThreatSorted.length-1)] || null;
+                }
                 let slotIdx = 0;
                 (player.subweaponGroups || []).forEach((groupSize, groupId) => {
-                    let subTgt = groupTargets[Math.min(groupId, groupTargets.length-1)] || null;
+                    let subTgt = rfaThreatTargets[Math.min(groupId, rfaThreatTargets.length-1)] || null;
                     for (let s = 0; s < groupSize; s++) {
                         let swType = player.subweaponLoadout[slotIdx] || 'rfa';
                         player.subweaponTimers[slotIdx] = (player.subweaponTimers[slotIdx] || 0) - 1;
