@@ -2,15 +2,20 @@
 // 游戏实体库：包含玩家、敌人、子弹、道具与特效
 
 class Player {
-    constructor(shipType = 'default') {
-        let shipCfg = SHIPS[shipType] || SHIPS.default;
+    constructor(shipType = 'rt1') {
+        let shipCfg = SHIPS[shipType] || SHIPS.rt1;
         this.shipType       = shipType;
         this.sprite         = sprites[shipCfg.sprite];
         this.w = this.sprite.width;
         this.h = this.sprite.height;
-        this.shootSlots     = shipCfg.shootSlots;
-        this.wingmanSlots   = shipCfg.wingmanSlots;
-        this.subweaponSlots = shipCfg.subweaponSlots;
+        this.shootSlots      = shipCfg.shootSlots;
+        this.wingmanGroups   = shipCfg.wingmanGroups;
+        this.subweaponGroups = shipCfg.subweaponGroups;
+        this.wingmanSlots    = this.wingmanGroups.reduce((a,b) => a+b, 0);
+        this.subweaponSlots  = this.subweaponGroups.reduce((a,b) => a+b, 0);
+        this.wingmanLoadout  = [];
+        this.subweaponLoadout = [];
+        this.subweaponTimers = [];
         this.x = width / 2;
         this.y = height - 120;
         this.targetX = this.x;
@@ -363,7 +368,6 @@ class Player {
 
         let currentMaxHp = this.getStat('maxHp');
         let actualAmount = isPercent ? Math.max(40, Math.floor(currentMaxHp * amount)) : amount;
-        if (!isPercent && currentDifficulty === 3) actualAmount *= 1.25;
 
         if (this.techTree && this.techTree.def_red > 0)
             actualAmount = Math.max(1, Math.round(actualAmount * (1 - this.techTree.def_red * 0.05)));
@@ -676,9 +680,8 @@ class BaseEnemy {
 
     takeDamage(amount, showText = true, isCrit = false, damageType = 'normal') {
         if (this.damageReduction > 0) amount = Math.max(1, Math.round(amount * (1 - this.damageReduction)));
-        amount = Math.floor(amount);
         this.hp -= amount;
-        
+
         if (particles.length < 150) {
             let pCount = this.isElite || this.isBoss ? 4 : 2;
             let pCol = this.isBoss ? '#555555' : (this.isBattery ? '#00e5ff' : this.particleColor);
@@ -689,7 +692,8 @@ class BaseEnemy {
 
         if (showText && config.dmgText) {
             let color = isCrit ? '#ffea00' : (damageType === 'laser' ? '#00e5ff' : (damageType === 'burn' ? '#ab47bc' : '#ffffff'));
-            pushFloatingText(this.x + (Math.random() - 0.5) * 15, this.y - this.h / 2 * this.scale, amount, color, false, isCrit);
+            let fSize = (damageType === 'rfa') ? 5 : 10;
+            pushFloatingText(this.x + (Math.random() - 0.5) * 15, this.y - this.h / 2 * this.scale, amount, color, false, isCrit, '', fSize);
         }
         
         if (this.hp <= 0 && endingState === 'none') {
@@ -1542,7 +1546,7 @@ class DamageText {
         
         let disp = amtStr;
         if (typeof amtStr === 'number') {
-            disp = Math.floor(amtStr);
+            disp = (amtStr > 0 && amtStr < 1) ? amtStr.toFixed(1) : Math.floor(amtStr);
         }
         
         this.text = (isP ? "-" : pre) + disp + (isC && typeof amtStr === 'number' ? "!" : "");
@@ -1686,6 +1690,109 @@ function createExplosion(x, y, col, count) {
         const angle = Math.random() * Math.PI * 2;
         const speed = 1 + Math.random() * 5;
         particles.push(new Particle(x, y, col, Math.cos(angle) * speed, Math.sin(angle) * speed, 20 + Math.random() * 25));
+    }
+}
+
+class InterceptorBullet {
+    constructor(x, y, targetBullet) {
+        this.x = x; this.y = y;
+        this.target = targetBullet;
+        let spd = 16 * 1.2;
+        let ang = Math.atan2(targetBullet.y - y, targetBullet.x - x);
+        this.vx = Math.cos(ang) * spd;
+        this.vy = Math.sin(ang) * spd;
+        this.active = true;
+        this.size = 4;
+    }
+
+    update() {
+        if (this.target && this.target.active) {
+            let dx = this.target.x - this.x, dy = this.target.y - this.y;
+            let d = Math.sqrt(dx*dx+dy*dy) || 1;
+            let spd = 16 * 1.2;
+            this.vx = (dx/d)*spd; this.vy = (dy/d)*spd;
+        }
+        this.x += this.vx; this.y += this.vy;
+        let hitR = 16;
+        for (let i = enemyBullets.length-1; i >= 0; i--) {
+            let eb = enemyBullets[i];
+            if (!eb.active) continue;
+            if (Math.sqrt((eb.x-this.x)**2+(eb.y-this.y)**2) < hitR) {
+                eb.active = false;
+                for (let eb2 of enemyBullets) {
+                    if (eb2.active && Math.sqrt((eb2.x-this.x)**2+(eb2.y-this.y)**2) < 20) eb2.active = false;
+                }
+                createExplosion(this.x, this.y, '#00b0ff', 8);
+                this.active = false;
+                return;
+            }
+        }
+        if (this.y < -20 || this.y > height+20 || this.x < -20 || this.x > width+20) this.active = false;
+    }
+
+    draw(ctx) {
+        ctx.fillStyle = '#00b0ff';
+        ctx.fillRect(this.x-2, this.y-2, 4, 4);
+    }
+}
+
+class AvengerMissile {
+    constructor(x, y) {
+        this.x = x; this.y = y;
+        this.vx = 0; this.vy = -2;
+        this.speed = 2;
+        this.maxSpeed = 16 * 0.8;
+        this.accelFrames = 108;
+        this.timer = 0;
+        this.active = true;
+    }
+
+    update() {
+        this.timer++;
+        if (this.timer <= this.accelFrames) {
+            this.speed = 2 + (this.timer / this.accelFrames) * (this.maxSpeed - 2);
+        } else {
+            this.speed = this.maxSpeed;
+        }
+        let nearest = null, minD2 = Infinity;
+        for (let e of enemies) {
+            if (!e.active) continue;
+            let d2 = (e.x-this.x)**2 + (e.y-this.y)**2;
+            if (d2 < minD2) { minD2 = d2; nearest = e; }
+        }
+        if (nearest) {
+            let dx = nearest.x - this.x, dy = nearest.y - this.y;
+            let d = Math.sqrt(dx*dx+dy*dy) || 1;
+            this.vx = (dx/d)*this.speed; this.vy = (dy/d)*this.speed;
+        }
+        this.x += this.vx; this.y += this.vy;
+        if (nearest && Math.sqrt((nearest.x-this.x)**2+(nearest.y-this.y)**2) < 14) {
+            nearest.takeDamage(35, true, false, 'avenger');
+            for (let e of enemies) {
+                if (!e.active || e === nearest) continue;
+                let d = Math.sqrt((e.x-this.x)**2+(e.y-this.y)**2);
+                if (d < 50) e.takeDamage(25, true, false, 'avenger');
+            }
+            aoeEffects.push(new AOEEffect(this.x, this.y, 50, '#ab47bc'));
+            createExplosion(this.x, this.y, '#ab47bc', 20);
+            triggerShake(8, 15);
+            this.active = false;
+        }
+        if (this.y < -60 || this.y > height+60 || this.x < -60 || this.x > width+60) this.active = false;
+    }
+
+    draw(ctx) {
+        ctx.save();
+        let ang = Math.atan2(this.vy, this.vx);
+        ctx.translate(this.x, this.y);
+        ctx.rotate(ang + Math.PI/2);
+        ctx.fillStyle = '#ab47bc';
+        ctx.fillRect(-3, -6, 6, 12);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(-1, -8, 2, 4);
+        ctx.fillStyle = '#ff9800';
+        ctx.fillRect(-3, 6, 6, 4);
+        ctx.restore();
     }
 }
 

@@ -99,7 +99,8 @@ const screens = {
     loadout: document.getElementById('loadout-menu'),
     gameOver: document.getElementById('game-over-screen'),
     workshop: document.getElementById('workshop-menu'),
-    'ship-select': document.getElementById('ship-select-screen')
+    'ship-select': document.getElementById('ship-select-screen'),
+    'loadout-select': document.getElementById('loadout-select-screen')
 };
 
 const ui = {
@@ -133,7 +134,7 @@ const ui = {
 // --- [5] 游戏状态数据 ---
 let gameState = 'START';
 let player;
-let selectedShipType = 'default';
+let selectedShipType = 'rt1';
 // [L2 蓝轨超频阶梯配置]
 const BLUE_TECH_TIERS = {
     fireRate: { values: [0.05, 0.08, 0.13, 0.20], costs: [0.8, 1.5, 2.5, 3.8] },
@@ -153,6 +154,10 @@ const ITEM_ICONS = {
 function getItemIcon(id) { return ITEM_ICONS[id] || (id ? '◆' : '◆'); }
 let bullets = [], enemyBullets = [], enemies = [], particles = [], items = [], floatingTexts = [], stars = [], aoeEffects = [], burnEffects = [];
 let wingmanEntities = [];
+let interceptorBullets = [];
+let avengerMissiles = [];
+let avengerSlotCds = [];
+let pendingLoadoutData = { wingman: [], subweapon: [] };
 let isDebugMode = false;
 let score = 0, frameCount = 0, gameTimeSeconds = 0;
 let shakeQueue = [];
@@ -637,7 +642,7 @@ function showScreen(screenId) {
     
     const inGameUIElements = [ui.topLeftCont, ui.sideBtns];
     
-    if (screenId === 'start' || screenId === 'gameOver' || screenId === 'workshop' || screenId === 'ship-select') {
+    if (screenId === 'start' || screenId === 'gameOver' || screenId === 'workshop' || screenId === 'ship-select' || screenId === 'loadout-select') {
         inGameUIElements.forEach(el => { if (el) el.classList.add('hud-hidden'); }); 
         if (ui.bossHpCont) ui.bossHpCont.style.opacity = 0; 
         ui.waveToast.style.opacity = 0; 
@@ -1031,22 +1036,36 @@ function updatePixelButtons() {
 
     drawPixelButton('skill-btn-cvs', sprites.i_skill, skProg, skColor, skIsActive, skCdProg);
     drawPixelButton('pause-btn-cvs', sprites.i_pause, 0, '#fff');
-    // [修改] 渲染终极统一入口 Terminal
     drawPixelButton('terminal-btn-cvs', '+', 0, '#00e5ff');
+    if (sprites.i_avenger && player.subweaponLoadout) {
+        let avengerCount = player.subweaponLoadout.filter(t => t === 'avenger').length;
+        for (let i = 0; i < 2; i++) {
+            let el = document.getElementById('avenger-btn-' + i + '-cvs');
+            if (!el) continue;
+            if (i < avengerCount) {
+                el.style.display = 'block';
+                let cdProg = Math.min(1, (avengerSlotCds[i] || 0) / 360);
+                drawPixelButton('avenger-btn-' + i + '-cvs', sprites.i_avenger, 1, '#ab47bc', false, cdProg);
+            } else {
+                el.style.display = 'none';
+            }
+        }
+    }
 }
 
 const setupMultiTouchButtons = () => {
-    const btnMap = { 
-        'pause-btn-cvs': togglePause, 
-        'skill-btn-cvs': activateSkill, 
-        // [修改] 接入 Terminal 呼出逻辑
-        'terminal-btn-cvs': toggleTerminal 
+    const btnMap = {
+        'pause-btn-cvs': togglePause,
+        'skill-btn-cvs': activateSkill,
+        'terminal-btn-cvs': toggleTerminal,
+        'avenger-btn-0-cvs': () => fireAvenger(0),
+        'avenger-btn-1-cvs': () => fireAvenger(1)
     };
-    for (let id in btnMap) { 
-        let el = document.getElementById(id); 
-        if (el) { 
-            el.onpointerdown = (e) => { e.preventDefault(); e.stopPropagation(); btnMap[id](); }; 
-        } 
+    for (let id in btnMap) {
+        let el = document.getElementById(id);
+        if (el) {
+            el.onpointerdown = (e) => { e.preventDefault(); e.stopPropagation(); btnMap[id](); };
+        }
     }
 };
 
@@ -1070,8 +1089,9 @@ function getShopCost(opt) {
 function getWeightedRandomItem(excludeIds) { 
     let cassette = WORKSHOP.cassettes[currentLevel] || WORKSHOP.cassettes['debug']; 
     let shopItems = cassette.shopItems || 'ALL'; 
-    let availableItems = upgradePool.filter(item => { 
+    let availableItems = upgradePool.filter(item => {
         if (excludeIds.includes(item.id)) return false;
+        if (item.shopHidden) return false;
         if (item.id === 'repair' || item.id === 'emergency_repair' || item.id === 'heal') return false;
         if (item.id === 'temp_armor' && player.armor >= 150) return false;
         if (shopItems !== 'ALL' && !shopItems.includes(item.id)) return false; 
@@ -1554,7 +1574,8 @@ function loop(timestamp) {
                     let isCrit = Math.random() < b.critRate;
                     let curDmg = b.damage * Math.pow(b.pierceRetain, b.hitEnemies.size);
                     let finalDmg = isCrit ? curDmg * b.critDamage : curDmg;
-                    e.takeDamage(finalDmg, true, isCrit, 'bullet');
+                    let dmgType = b.isRFA ? 'rfa' : 'bullet';
+                    e.takeDamage(finalDmg, true, isCrit, dmgType);
                     b.hitEnemies.add(e);
                     if (player.equipment && player.equipment.aoe && player.equipment.aoe.equipped) triggerAOE(e.x, e.y);
                     // afterburn：命中后有概率留下持续燃烧区域
@@ -1575,108 +1596,195 @@ function loop(timestamp) {
             });
         });
 
+        // === Shared Targeting (Wingman + Sub-weapon) ===
+        let groupTargets = [];
+        if (player && player.hp > 0 && endingState !== 'playerDead' && enemies.length > 0) {
+            let sortedEnemies = enemies.filter(e => e.active)
+                .sort((a, b) => ((a.x-player.x)**2+(a.y-player.y)**2) - ((b.x-player.x)**2+(b.y-player.y)**2));
+            let maxGroups = Math.max(
+                (player.wingmanGroups || []).length,
+                (player.subweaponGroups || []).length
+            );
+            for (let g = 0; g < maxGroups; g++) {
+                groupTargets[g] = sortedEnemies[Math.min(g, sortedEnemies.length-1)] || null;
+            }
+        }
+
         // === Wingman State Machine ===
         if (player && player.hp > 0 && endingState !== 'playerDead') {
             let wLv = (player.upgrades && player.upgrades.wingman) || 0;
             let count = player.wingmanSlots || 0;
-            let swoopCD    = [720, 680, 640, 600][wLv];
+            let swoopCD   = [720, 680, 640, 600][wLv];
+            let directDmg = [50,  65,  85,  110][wLv];
+            let splashDmg = [25,  35,  48,   65][wLv];
+            let arcFrames = [60,  52,  44,   36][wLv];
+            let splashR   = 50;
 
             while (wingmanEntities.length < count) {
                 let idx = wingmanEntities.length;
-                wingmanEntities.push({ state: 'orbit', orbitAngle: idx * Math.PI * 2 / Math.max(1, count),
-                    x: player.x, y: player.y, swoopCooldown: swoopCD, respawnTimer: 0 });
+                let wType = (player.wingmanLoadout && player.wingmanLoadout[idx]) || 'as1';
+                let gId = 0, acc = 0;
+                for (let g = 0; g < (player.wingmanGroups || [1]).length; g++) {
+                    acc += player.wingmanGroups[g];
+                    if (idx < acc) { gId = g; break; }
+                }
+                wingmanEntities.push({
+                    state: wType === 'ds1' ? 'follow' : 'orbit',
+                    orbitAngle: idx * Math.PI * 2 / Math.max(1, count),
+                    x: player.x, y: player.y, vx: 0, vy: 0,
+                    swoopCooldown: swoopCD, respawnTimer: 0,
+                    type: wType, groupId: gId, slotId: idx,
+                    shootTimer: 180
+                });
             }
             while (wingmanEntities.length > count) wingmanEntities.pop();
 
-            let directDmg  = [50, 65, 85, 110][wLv];
-            let splashDmg  = [25, 35, 48,  65][wLv];
-            let arcFrames  = [60, 52, 44,  36][wLv];
-            let splashR    = 50;
-
             for (let w of wingmanEntities) {
-                if (w.state === 'orbit') {
-                    w.orbitAngle += 0.04;
-                    w.x = player.x + Math.cos(w.orbitAngle) * 35;
-                    w.y = player.y + Math.sin(w.orbitAngle) * 35;
-                    w.swoopCooldown--;
-                    if (w.swoopCooldown <= 0 && enemies.length > 0) {
-                        let nearest = null, nearDist = Infinity;
-                        for (let e of enemies) {
-                            if (!e.active) continue;
-                            let d2 = (e.x - w.x) ** 2 + (e.y - w.y) ** 2;
-                            if (d2 < nearDist) { nearDist = d2; nearest = e; }
+                if (w.type === 'ds1') {
+                    // DS-1: Follow player, intercept enemy bullets
+                    const DS1_OFFSETS = [
+                        {x:-30, y:12}, {x:30, y:12}, {x:0, y:22},
+                        {x:-20, y:24}, {x:20, y:24}
+                    ];
+                    let home = DS1_OFFSETS[w.slotId % DS1_OFFSETS.length];
+                    let homeX = player.x + home.x, homeY = player.y + home.y;
+                    let dx = homeX - w.x, dy = homeY - w.y;
+                    let dist = Math.sqrt(dx*dx+dy*dy) || 1;
+                    if (dist > 5) {
+                        let spd = Math.min(6, dist * 0.12);
+                        w.vx = (dx/dist)*spd; w.vy = (dy/dist)*spd;
+                    } else { w.vx *= 0.8; w.vy *= 0.8; }
+                    w.x += w.vx; w.y += w.vy;
+
+                    w.shootTimer = (w.shootTimer || 180) - 1;
+                    let isFast = (w.vx*w.vx + w.vy*w.vy) > 9;
+                    if (w.shootTimer <= 0 && !isFast && enemyBullets.length > 0) {
+                        let nearBul = null, nearD2 = Infinity;
+                        for (let eb of enemyBullets) {
+                            if (!eb.active) continue;
+                            let d2 = (eb.x-w.x)**2+(eb.y-w.y)**2;
+                            if (d2 < nearD2) { nearD2 = d2; nearBul = eb; }
                         }
-                        if (nearest) {
-                            // predict target position using last-frame velocity
-                            let vx = nearest.x - (nearest._prevX || nearest.x);
-                            let vy = nearest.y - (nearest._prevY || nearest.y);
-                            let predictX = nearest.x + vx * arcFrames;
-                            let predictY = nearest.y + vy * arcFrames;
+                        if (nearBul) interceptorBullets.push(new InterceptorBullet(w.x, w.y, nearBul));
+                        w.shootTimer = 180;
+                    }
+                    ctx.save();
+                    ctx.fillStyle = '#00b0ff'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(w.x, w.y-5); ctx.lineTo(w.x+5, w.y);
+                    ctx.lineTo(w.x, w.y+5); ctx.lineTo(w.x-5, w.y);
+                    ctx.closePath(); ctx.fill(); ctx.stroke();
+                    ctx.restore();
+                } else {
+                    // AS-1: Arc swoop with group targeting
+                    let tgt = groupTargets[w.groupId] || null;
+                    if (w.state === 'orbit') {
+                        w.orbitAngle += 0.04;
+                        w.x = player.x + Math.cos(w.orbitAngle) * 35;
+                        w.y = player.y + Math.sin(w.orbitAngle) * 35;
+                        w.swoopCooldown--;
+                        if (w.swoopCooldown <= 0 && tgt) {
+                            let vx = tgt.x - (tgt._prevX || tgt.x);
+                            let vy = tgt.y - (tgt._prevY || tgt.y);
+                            let predictX = tgt.x + vx * arcFrames;
+                            let predictY = tgt.y + vy * arcFrames;
                             w._arcStart = { x: w.x, y: w.y };
                             let ctrlX = (w.x + predictX) / 2 + (Math.random() - 0.5) * 80;
                             let ctrlY = Math.min(w.y, predictY) - 60 - Math.random() * 40;
                             w._arcCtrl = { x: ctrlX, y: ctrlY };
                             w._arcEnd = { x: predictX, y: predictY };
                             w._arcProgress = 0;
-                            w._target = nearest;
+                            w._target = tgt;
                             w.state = 'arc';
-                        } else {
+                        } else if (w.swoopCooldown <= 0) {
+                            w.swoopCooldown = swoopCD;
+                        }
+                        ctx.save();
+                        ctx.fillStyle = '#ffea00';
+                        ctx.beginPath();
+                        ctx.moveTo(w.x, w.y - 4); ctx.lineTo(w.x + 3, w.y);
+                        ctx.lineTo(w.x, w.y + 4); ctx.lineTo(w.x - 3, w.y);
+                        ctx.closePath(); ctx.fill();
+                        ctx.restore();
+                    } else if (w.state === 'arc') {
+                        let arcTgt = w._target;
+                        if (arcTgt && arcTgt.active) {
+                            let vx = arcTgt.x - (arcTgt._prevX || arcTgt.x);
+                            let vy = arcTgt.y - (arcTgt._prevY || arcTgt.y);
+                            w._arcEnd = { x: arcTgt.x + vx * (arcFrames - w._arcProgress), y: arcTgt.y + vy * (arcFrames - w._arcProgress) };
+                        }
+                        w._arcProgress = (w._arcProgress || 0) + 1;
+                        let arcT = Math.min(1, Math.pow(w._arcProgress / arcFrames, 1.5));
+                        let t = arcT;
+                        let bx = (1-t)*(1-t)*w._arcStart.x + 2*(1-t)*t*w._arcCtrl.x + t*t*w._arcEnd.x;
+                        let by = (1-t)*(1-t)*w._arcStart.y + 2*(1-t)*t*w._arcCtrl.y + t*t*w._arcEnd.y;
+                        let hit = arcTgt && arcTgt.active && (bx - arcTgt.x) ** 2 + (by - arcTgt.y) ** 2 < 100;
+                        w.x = bx; w.y = by;
+                        if (hit || arcT >= 1) {
+                            if (arcTgt && arcTgt.active) arcTgt.takeDamage(directDmg, true, false, 'wingman');
+                            aoeEffects.push(new AOEEffect(w.x, w.y, splashR, '#ffea00'));
+                            createExplosion(w.x, w.y, '#ffea00', 10);
+                            enemies.forEach(e => {
+                                if (e.active && e !== arcTgt) {
+                                    let ddx = e.x - w.x, ddy = e.y - w.y;
+                                    if (ddx*ddx + ddy*ddy < splashR * splashR) e.takeDamage(splashDmg, true, false, 'wingman');
+                                }
+                            });
+                            w.state = 'dead'; w.respawnTimer = Math.round(swoopCD * 0.3);
+                        }
+                        ctx.save();
+                        ctx.translate(w.x, w.y);
+                        let prevT = Math.max(0, arcT - 0.02);
+                        let pbx = (1-prevT)*(1-prevT)*w._arcStart.x + 2*(1-prevT)*prevT*w._arcCtrl.x + prevT*prevT*w._arcEnd.x;
+                        let pby = (1-prevT)*(1-prevT)*w._arcStart.y + 2*(1-prevT)*prevT*w._arcCtrl.y + prevT*prevT*w._arcEnd.y;
+                        let ang = Math.atan2(w.y - pby, w.x - pbx);
+                        ctx.rotate(ang + Math.PI / 4);
+                        ctx.fillStyle = '#ffea00';
+                        ctx.beginPath();
+                        ctx.moveTo(0, -4); ctx.lineTo(3, 0);
+                        ctx.lineTo(0, 4); ctx.lineTo(-3, 0);
+                        ctx.closePath(); ctx.fill();
+                        ctx.restore();
+                    } else if (w.state === 'dead') {
+                        w.respawnTimer--;
+                        if (w.respawnTimer <= 0) {
+                            w.state = 'orbit';
+                            w.orbitAngle = Math.random() * Math.PI * 2;
                             w.swoopCooldown = swoopCD;
                         }
                     }
-                    ctx.save();
-                    ctx.fillStyle = '#ffea00';
-                    ctx.beginPath();
-                    ctx.moveTo(w.x, w.y - 4); ctx.lineTo(w.x + 3, w.y);
-                    ctx.lineTo(w.x, w.y + 4); ctx.lineTo(w.x - 3, w.y);
-                    ctx.closePath(); ctx.fill();
-                    ctx.restore();
-                } else if (w.state === 'arc') {
-                    let tgt = w._target;
-                    if (tgt && tgt.active) {
-                        let vx = tgt.x - (tgt._prevX || tgt.x);
-                        let vy = tgt.y - (tgt._prevY || tgt.y);
-                        w._arcEnd = { x: tgt.x + vx * (arcFrames - w._arcProgress), y: tgt.y + vy * (arcFrames - w._arcProgress) };
+                }
+            }
+
+            // === Sub-weapon Update Loop ===
+            if (player.subweaponLoadout && player.subweaponLoadout.length > 0) {
+                let slotIdx = 0;
+                (player.subweaponGroups || []).forEach((groupSize, groupId) => {
+                    let subTgt = groupTargets[Math.min(groupId, groupTargets.length-1)] || null;
+                    for (let s = 0; s < groupSize; s++) {
+                        let swType = player.subweaponLoadout[slotIdx] || 'rfa';
+                        player.subweaponTimers[slotIdx] = (player.subweaponTimers[slotIdx] || 0) - 1;
+                        if (swType === 'rfa' && player.subweaponTimers[slotIdx] <= 0 && subTgt) {
+                            let totalSlots = player.subweaponSlots || 1;
+                            let xOff = (slotIdx - (totalSlots - 1) / 2) * 8;
+                            let sdx = subTgt.x - (player.x + xOff), sdy = subTgt.y - player.y;
+                            let sd = Math.sqrt(sdx*sdx+sdy*sdy) || 1;
+                            let spd = 16 * 1.5;
+                            let rfaBullet = new Bullet(
+                                player.x + xOff, player.y - player.h/2,
+                                (sdx/sd)*spd, (sdy/sd)*spd,
+                                2, 4, 0.5, 0, 1.0, 0, 1.0, '#ff9800'
+                            );
+                            rfaBullet.isRFA = true;
+                            bullets.push(rfaBullet);
+                            player.subweaponTimers[slotIdx] = 24;
+                        }
+                        slotIdx++;
                     }
-                    w._arcProgress = (w._arcProgress || 0) + 1;
-                    let arcT = Math.min(1, Math.pow(w._arcProgress / arcFrames, 1.5));
-                    let t = arcT;
-                    let bx = (1-t)*(1-t)*w._arcStart.x + 2*(1-t)*t*w._arcCtrl.x + t*t*w._arcEnd.x;
-                    let by = (1-t)*(1-t)*w._arcStart.y + 2*(1-t)*t*w._arcCtrl.y + t*t*w._arcEnd.y;
-                    let hit = tgt && tgt.active && (bx - tgt.x) ** 2 + (by - tgt.y) ** 2 < 10 * 10;
-                    w.x = bx; w.y = by;
-                    if (hit || arcT >= 1) {
-                        if (tgt && tgt.active) tgt.takeDamage(directDmg, true, false, 'wingman');
-                        aoeEffects.push(new AOEEffect(w.x, w.y, splashR, '#ffea00'));
-                        createExplosion(w.x, w.y, '#ffea00', 10);
-                        enemies.forEach(e => {
-                            if (e.active && e !== tgt) {
-                                let dx = e.x - w.x, dy = e.y - w.y;
-                                if (dx*dx + dy*dy < splashR * splashR) e.takeDamage(splashDmg, true, false, 'wingman');
-                            }
-                        });
-                        w.state = 'dead'; w.respawnTimer = Math.round(swoopCD * 0.3);
-                    }
-                    ctx.save();
-                    ctx.translate(w.x, w.y);
-                    let prevT = Math.max(0, arcT - 0.02);
-                    let pbx = (1-prevT)*(1-prevT)*w._arcStart.x + 2*(1-prevT)*prevT*w._arcCtrl.x + prevT*prevT*w._arcEnd.x;
-                    let pby = (1-prevT)*(1-prevT)*w._arcStart.y + 2*(1-prevT)*prevT*w._arcCtrl.y + prevT*prevT*w._arcEnd.y;
-                    let ang = Math.atan2(w.y - pby, w.x - pbx);
-                    ctx.rotate(ang + Math.PI / 4);
-                    ctx.fillStyle = '#ffea00';
-                    ctx.beginPath();
-                    ctx.moveTo(0, -4); ctx.lineTo(3, 0);
-                    ctx.lineTo(0, 4); ctx.lineTo(-3, 0);
-                    ctx.closePath(); ctx.fill();
-                    ctx.restore();
-                } else if (w.state === 'dead') {
-                    w.respawnTimer--;
-                    if (w.respawnTimer <= 0) {
-                        w.state = 'orbit';
-                        w.orbitAngle = Math.random() * Math.PI * 2;
-                        w.swoopCooldown = swoopCD;
-                    }
+                });
+                // Decrement avenger CDs
+                for (let i = 0; i < avengerSlotCds.length; i++) {
+                    if (avengerSlotCds[i] > 0) avengerSlotCds[i]--;
                 }
             }
         }
@@ -1685,7 +1793,7 @@ function loop(timestamp) {
     if (player && player.hp > 0 && endingState !== 'playerDead') player.draw(ctx);
     ctx.globalAlpha = 1.0; 
     
-    processGroup(aoeEffects, isPlaying); processGroup(burnEffects, isPlaying); processGroup(items, isPlaying); processGroup(bullets, isPlaying); processGroup(enemyBullets, isPlaying); processGroup(enemies, isPlaying); processGroup(particles, isPlaying); processGroup(floatingTexts, isPlaying);
+    processGroup(aoeEffects, isPlaying); processGroup(burnEffects, isPlaying); processGroup(items, isPlaying); processGroup(bullets, isPlaying); processGroup(enemyBullets, isPlaying); processGroup(interceptorBullets, isPlaying); processGroup(avengerMissiles, isPlaying); processGroup(enemies, isPlaying); processGroup(particles, isPlaying); processGroup(floatingTexts, isPlaying);
 
     // === [生死结算状态机：之前被遗漏覆盖的区域] ===
     if (isPlaying && endingState !== 'none') {
@@ -1814,6 +1922,7 @@ function switchTerminalTab(tabId) {
         }
         if (isDebugMode) {
             currentShopItems = upgradePool.filter(item => {
+                if (item.shopHidden) return false;
                 if (item.type === 'equip') {
                     let eq = player.equipment[item.id];
                     return !eq || !eq.owned || eq.level < (item.max || 3);
@@ -2032,7 +2141,11 @@ function saveCheckpoint() {
     if (!cas || !cas.state) return;
     let data = {
         level: currentLevel, difficulty: currentDifficulty,
-        shipType: player.shipType || 'default',
+        shipType: player.shipType || 'rt1',
+        loadout: {
+            wingman: player.wingmanLoadout || [],
+            subweapon: player.subweaponLoadout || []
+        },
         waveIndex: cas.state.currentWave,
         score, gameTimeSeconds, shopInflation,
         player: {
@@ -2078,6 +2191,11 @@ function restoreFromCheckpoint(data) {
     gameTimeSeconds = data.gameTimeSeconds;
     shopInflation = data.shopInflation;
     player.armor = 0;
+    if (data.loadout) {
+        player.wingmanLoadout   = data.loadout.wingman || [];
+        player.subweaponLoadout = data.loadout.subweapon || [];
+        player.subweaponTimers  = Array(player.subweaponSlots).fill(0);
+    }
     let cas = WORKSHOP.cassettes[currentLevel];
     if (cas && cas.state) { cas.state.currentWave = data.waveIndex; cas.state.waveTimer = 0; cas.state.waveEnemiesSpawned = 0; }
 }
@@ -2122,15 +2240,15 @@ function toggleDebugMode() {
 window.openShipSelect = function(levelId, useCheckpoint) {
     if (useCheckpoint) {
         let ckpt = (() => { try { return JSON.parse(localStorage.getItem('pxROG_ckpt_' + levelId)); } catch(e) { return null; } })();
-        startGame(levelId, true, (ckpt && ckpt.shipType) || 'default');
+        startGame(levelId, true, (ckpt && ckpt.shipType) || 'rt1');
         return;
     }
     resize(); initSprites();
-    selectedShipType = 'default';
+    selectedShipType = 'rt1';
     let screen = document.getElementById('ship-select-screen');
     screen.dataset.levelId = levelId;
     document.querySelectorAll('.ship-card').forEach(c => c.classList.remove('selected'));
-    let defCard = document.getElementById('ship-card-default');
+    let defCard = document.getElementById('ship-card-rt1');
     if (defCard) defCard.classList.add('selected');
     renderShipPreviews();
     showScreen('ship-select');
@@ -2145,7 +2263,7 @@ window.selectShip = function(shipType) {
 
 window.confirmShipSelect = function() {
     let levelId = document.getElementById('ship-select-screen').dataset.levelId;
-    startGame(levelId, false, selectedShipType);
+    openLoadoutSelect(levelId, selectedShipType);
 };
 
 function renderShipPreviews() {
@@ -2162,19 +2280,124 @@ function renderShipPreviews() {
     });
 }
 
-function startGame(levelId, useCheckpoint = false, shipType = 'default') {
+function fireAvenger(idx) {
+    if (!player || gameState !== 'PLAYING') return;
+    if ((avengerSlotCds[idx] || 0) > 0) return;
+    avengerMissiles.push(new AvengerMissile(player.x, player.y - player.h / 2));
+    avengerSlotCds[idx] = 360;
+}
+
+window.openLoadoutSelect = function(levelId, shipType) {
+    let cfg = SHIPS[shipType];
+    if (!cfg) { startGame(levelId, false, shipType); return; }
+    let wTotal = cfg.wingmanGroups.reduce((a,b) => a+b, 0);
+    let sTotal = cfg.subweaponGroups.reduce((a,b) => a+b, 0);
+    pendingLoadoutData = {
+        wingman: Array(wTotal).fill('as1'),
+        subweapon: Array(sTotal).fill('rfa')
+    };
+    let screen = document.getElementById('loadout-select-screen');
+    if (!screen) { startGame(levelId, false, shipType); return; }
+    screen.dataset.levelId = levelId;
+    screen.dataset.shipType = shipType;
+    buildLoadoutUI(shipType);
+    showScreen('loadout-select');
+};
+
+function buildLoadoutUI(shipType) {
+    let cfg = SHIPS[shipType];
+    if (!cfg) return;
+    let container = document.getElementById('ls-sections');
+    if (!container) return;
+    container.innerHTML = '';
+
+    function makeSection(title, groups, loadoutArr, typeMap, field) {
+        let sec = document.createElement('div');
+        sec.className = 'ls-section';
+        sec.innerHTML = '<div class="ls-section-title">' + title + '</div>';
+        let row = document.createElement('div');
+        row.className = 'ls-slots-row';
+        let si = 0;
+        groups.forEach((groupSize, gIdx) => {
+            if (gIdx > 0) {
+                let sep = document.createElement('div');
+                sep.className = 'ls-group-sep';
+                row.appendChild(sep);
+            }
+            for (let s = 0; s < groupSize; s++) {
+                let i = si;
+                let card = document.createElement('div');
+                card.className = 'ls-slot-card';
+                let type = loadoutArr[i] || Object.keys(typeMap)[0];
+                let def = typeMap[type] || typeMap[Object.keys(typeMap)[0]];
+                card.innerHTML = '<div class="ls-slot-name">' + def.name + '</div><div class="ls-slot-type" style="color:' + def.color + '">' + def.desc.split('。')[0] + '</div>';
+                card.onclick = (function(idx, f) {
+                    return function() {
+                        let keys = Object.keys(typeMap);
+                        let cur = pendingLoadoutData[f][idx] || keys[0];
+                        pendingLoadoutData[f][idx] = keys[(keys.indexOf(cur) + 1) % keys.length];
+                        buildLoadoutUI(document.getElementById('loadout-select-screen').dataset.shipType);
+                    };
+                })(i, field);
+                row.appendChild(card);
+                si++;
+            }
+        });
+        sec.appendChild(row);
+        container.appendChild(sec);
+    }
+
+    makeSection('◈ 僚机位', cfg.wingmanGroups, pendingLoadoutData.wingman, WINGMAN_TYPES, 'wingman');
+    makeSection('✦ 副武器位', cfg.subweaponGroups, pendingLoadoutData.subweapon, SUBWEAPON_TYPES, 'subweapon');
+
+    let shSec = document.createElement('div');
+    shSec.className = 'ls-section';
+    shSec.innerHTML = '<div class="ls-section-title">◆ 射击位</div>';
+    let shRow = document.createElement('div');
+    shRow.className = 'ls-slots-row';
+    for (let s = 0; s < cfg.shootSlots; s++) {
+        let card = document.createElement('div');
+        card.className = 'ls-slot-card locked-slot';
+        card.innerHTML = '<div class="ls-slot-name">原型弹药</div><div class="ls-slot-type" style="color:#888">基础子弹</div>';
+        shRow.appendChild(card);
+    }
+    shSec.appendChild(shRow);
+    container.appendChild(shSec);
+}
+
+window.confirmLoadout = function() {
+    let screen = document.getElementById('loadout-select-screen');
+    if (!screen) return;
+    startGame(screen.dataset.levelId, false, screen.dataset.shipType, pendingLoadoutData);
+};
+
+function startGame(levelId, useCheckpoint = false, shipType = 'rt1', loadoutData = null) {
     let ckptData = useCheckpoint ? (() => { try { return JSON.parse(localStorage.getItem('pxROG_ckpt_' + levelId)); } catch(e) { return null; } })() : null;
     if (ckptData) currentDifficulty = ckptData.difficulty;
     currentLevel = levelId || 'debug';
     resize(); initSprites(); initStars();
 
     player = new Player(shipType);
+    if (loadoutData) {
+        player.wingmanLoadout   = loadoutData.wingman || [];
+        player.subweaponLoadout = loadoutData.subweapon || [];
+        player.subweaponTimers  = Array(player.subweaponSlots).fill(0);
+    } else if (useCheckpoint && ckptData && ckptData.loadout) {
+        player.wingmanLoadout   = ckptData.loadout.wingman || [];
+        player.subweaponLoadout = ckptData.loadout.subweapon || [];
+        player.subweaponTimers  = Array(player.subweaponSlots).fill(0);
+    } else {
+        player.wingmanLoadout   = Array(player.wingmanSlots).fill('as1');
+        player.subweaponLoadout = Array(player.subweaponSlots).fill('rfa');
+        player.subweaponTimers  = Array(player.subweaponSlots).fill(0);
+    }
     if (!useCheckpoint) {
         player.pt = 0;
         player.techTree = {};
         player.techLevels = { fireRate: 0, damage: 0, maxHp: 0 };
     }
     enemies = []; bullets = []; enemyBullets = []; items = []; particles = []; floatingTexts = []; aoeEffects = []; burnEffects = []; wingmanEntities = [];
+    interceptorBullets = []; avengerMissiles = []; avengerSlotCds = [];
     score = 0; frameCount = 0; gameTimeSeconds = 0;
     shakeQueue = []; shakeTimer = 0; hitStopFrames = 0; pendingPostHitstopEffect = null; flashScreenTimer = 0; damageVignetteTimer = 0; lowHpShakeCooldown = 0; bossEnterPhase = 0;
     comboCount = 0; comboTimer = 0; endingState = 'none'; endingTimer = 0;

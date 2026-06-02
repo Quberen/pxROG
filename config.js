@@ -10,25 +10,40 @@ const DIFF_CONFIG = [
     { name: "简单", desc: "简单：新手引导。初盘保护 45 秒。", hpMod: 0.8, dmgMod: 1.0, spawnMod: 0.8, ptMod: 1.2, p_hp: 100, p_dmg: 12, maxEnemies: 20, protectionTime: 45 },
     { name: "普通", desc: "普通：标准战斗。初盘保护 30 秒。", hpMod: 1.0, dmgMod: 1.0, spawnMod: 1.0, ptMod: 1.0, p_hp: 100, p_dmg: 12, maxEnemies: 35, protectionTime: 30 },
     { name: "困难", desc: "困难：高压集群。初盘保护 20 秒。", hpMod: 1.5, dmgMod: 1.0, spawnMod: 1.5, ptMod: 1.0, p_hp: 100, p_dmg: 12, maxEnemies: 50, protectionTime: 20 },
-    { name: "深渊", desc: "深渊：残血高物价。初盘保护 15 秒。", hpMod: 1.5, dmgMod: 1.25, spawnMod: 1.5, ptMod: 0.8, p_hp: 80,  p_dmg: 8, maxEnemies: 70, protectionTime: 15 }
+    { name: "深渊", desc: "深渊：残血高密度。初盘保护 15 秒。", hpMod: 1.5, dmgMod: 1.0, spawnMod: 1.5, ptMod: 1.0, p_hp: 80,  p_dmg: 8, maxEnemies: 70, protectionTime: 15 }
 ];
 
 const RARITY = { C: { name: '普通', color: '#fff', weight: 80 }, R: { name: '稀有', color: '#00b0ff', weight: 15 }, E: { name: '史诗', color: '#ab47bc', weight: 5 }, L: { name: '传说', color: '#ffea00', weight: 5 } };
 const TYPE_TAGS = { 'equip': { label: '装' }, 'stat': { label: '属' }, 'utility': { label: '辅' } };
 
 const SHIPS = {
-    default: {
-        name: '默认战机', nameEn: 'SENTINEL',
-        desc: '全能型战机。三联僚机提供稳定的战场覆盖。',
-        shootSlots: 1, wingmanSlots: 3, subweaponSlots: 3, initSlots: 5,
+    rt1: {
+        name: '拯救者', nameEn: 'RT-1 RESCUER',
+        desc: '均衡型战机。三联分体僚机独立索敌，双翼副武器覆盖广。',
+        shootSlots: 1,
+        wingmanGroups: [1, 1, 1],
+        subweaponGroups: [2, 2],
+        initSlots: 5,
         sprite: 'player'
     },
-    experimental: {
-        name: '实验性战机', nameEn: 'X-DUAL',
-        desc: '双炮设计。并行射击输出更高，僚机和副武器搭载受限。',
-        shootSlots: 2, wingmanSlots: 2, subweaponSlots: 1, initSlots: 4,
+    rtg2: {
+        name: 'RTG-II', nameEn: 'RTG-II',
+        desc: '双炮战机。双槽僚机始终锁定同一目标，副武器搭载受限。',
+        shootSlots: 2,
+        wingmanGroups: [2],
+        subweaponGroups: [1],
+        initSlots: 4,
         sprite: 'player_exp'
     }
+};
+
+const WINGMAN_TYPES = {
+    as1: { id: 'as1', name: 'AS-1',  desc: '自爆机。弧线突袭敌人，接触引爆。',               color: '#ffea00' },
+    ds1: { id: 'ds1', name: 'DS-1',  desc: '拦截者。护卫机体，每3秒拦截最近敌人子弹。',     color: '#00b0ff' }
+};
+const SUBWEAPON_TYPES = {
+    rfa:     { id: 'rfa',     name: 'RF-A',        desc: '自动机枪。每0.4秒攻击最近敌人，伤害0.5。', color: '#ff9800' },
+    avenger: { id: 'avenger', name: "AS'AVENGER'", desc: '制导导弹。手动发射，35伤害+25溅射，装填6秒。', color: '#ab47bc' }
 };
 
 // 【动态拼装】：从工坊读取数值，拼装为引擎可用的敌人数组
@@ -49,7 +64,7 @@ const baseUpgradePool = [
     { id: 'crit_rate',  type: 'stat',    name: '精准校准', rarity: 'C', unlockPT: 1.0,  unlockTime: 0,   prices: [2,4,6,8,10],  desc: '暴击概率+5%/级。' },
     { id: 'crit_dmg',   type: 'stat',    name: '弱点分析', rarity: 'C', unlockPT: 2.0,  unlockTime: 0,   prices: [2,5,7,9,12],  desc: '暴击伤害+25%/级。' },
     { id: 'aoe',        type: 'equip',   name: '高爆弹头', slotCost: 2, rarity: 'E', initialCost: 3.0, unlockPT: 8.0,  unlockTime: 60,  desc: '部分攻击引发大范围爆炸。' },
-    { id: 'wingman',    type: 'stat',    name: '战斗僚机', rarity: 'E', unlockPT: 12.0, unlockTime: 90, prices: [9,16,24], desc: '强化战斗僚机系统，提升伤害与冷却效率。' },
+    { id: 'wingman',    type: 'stat',    name: '战斗僚机', shopHidden: true, rarity: 'E', unlockPT: 12.0, unlockTime: 90, prices: [9,16,24], desc: '强化战斗僚机系统，提升伤害与冷却效率。' },
     { id: 'slot',       type: 'utility', name: '系统插槽', rarity: 'R', unlockPT: 2.0,  unlockTime: 0,   desc: '背包容量扩充，+1 装备插槽。' },
 
     { id: 'homing',   type: 'equip', name: '追踪模块', rarity: 'E', slotCost: 2, unlockPT: 5.0,  unlockTime: 60,  initialCost: 2.5, desc: '子弹弱追踪敌机。升级提升制导强度。' },
@@ -198,4 +213,13 @@ function initSprites() {
     sprites.i_shop = createPixelTexture([[1,1,1,0,0,0,0,0],[0,0,1,1,1,1,1,0],[0,0,1,2,2,2,1,1],[0,0,1,2,2,2,1,0],[0,0,1,1,1,1,1,0],[0,0,0,1,0,1,0,0],[0,0,1,1,0,1,1,0]], ['#fff', '#00b0ff'], 2);
     sprites.i_loadout = createPixelTexture([[0,0,1,1,1,1,0,0],[0,1,2,2,2,2,1,0],[1,2,3,3,3,3,2,1],[1,2,3,3,3,3,2,1],[1,2,2,2,2,2,2,1],[0,1,1,1,1,1,1,0]], ['#fff', '#aaa', '#00e676'], 2);
     sprites.i_skill = createPixelTexture([[0,0,0,1,1,0,0],[0,0,1,1,0,0,0],[0,1,1,0,0,0,0],[0,1,1,1,1,0,0],[0,0,0,1,1,0,0],[0,0,1,1,0,0,0],[0,1,1,0,0,0,0]], ['#fff'], 2);
+    sprites.i_avenger = createPixelTexture([
+        [0,0,1,1,0,0],
+        [0,1,2,2,1,0],
+        [0,1,2,2,1,0],
+        [1,1,2,2,1,1],
+        [0,1,2,2,1,0],
+        [0,0,1,1,0,0],
+        [0,0,1,1,0,0]
+    ], ['#aaaaaa', '#ab47bc'], 4);
 }

@@ -190,6 +190,21 @@
         .slot-val.slot-dim { color: #666; }
         .ship-desc { font-size: 8px; color: #777; text-align: center; line-height: 1.6; border-top: 1px solid #1e1e30; padding-top: 6px; }
 
+        /* ═══ 装备配置 ═══ */
+        .ls-section { margin-bottom: 12px; }
+        .ls-section-title { font-family:'Press Start 2P',monospace; font-size:7px; color:#00b0ff; margin-bottom:6px; }
+        .ls-slots-row { display:flex; gap:6px; flex-wrap:wrap; align-items:stretch; }
+        .ls-group-sep { width:2px; background:#2a2a40; align-self:stretch; margin:0 2px; }
+        .ls-slot-card {
+            background:#0d0d1f; border:3px solid #333; border-radius:6px;
+            padding:8px 6px; min-width:70px; text-align:center; cursor:pointer;
+            transition:border-color 0.12s; user-select:none;
+        }
+        .ls-slot-card:hover { border-color:#00b0ff; }
+        .ls-slot-card .ls-slot-name { font-size:8px; color:#eee; font-family:'Press Start 2P',monospace; }
+        .ls-slot-card .ls-slot-type { font-size:7px; color:#aaa; margin-top:3px; }
+        .ls-slot-card.locked-slot { border-color:#555; cursor:default; opacity:0.6; }
+
         /* ═══ 战术终端 ═══ */
         #tactical-terminal { position: fixed; top: 4%; left: 3%; width: 94%; height: 92%; background: rgba(3,3,12,0.97); border: 2px solid #00e5ff; box-shadow: inset 0 0 30px rgba(0,229,255,0.06), 0 0 40px rgba(0,229,255,0.12); z-index: 10000; display: flex; flex-direction: column; font-family: 'Press Start 2P','DotGothic16',monospace; color: #fff; }
         #terminal-tab-bar { display: flex; border-bottom: 2px solid #00e5ff; background: rgba(0,229,255,0.04); flex-shrink: 0; }
@@ -228,6 +243,8 @@
         <canvas id="pause-btn-cvs"    class="pixel-btn-cvs" width="48" height="48"></canvas>
         <canvas id="skill-btn-cvs"    class="pixel-btn-cvs" width="48" height="48"></canvas>
         <canvas id="terminal-btn-cvs" class="pixel-btn-cvs" width="48" height="48"></canvas>
+        <canvas id="avenger-btn-0-cvs" class="pixel-btn-cvs" width="48" height="48" style="display:none"></canvas>
+        <canvas id="avenger-btn-1-cvs" class="pixel-btn-cvs" width="48" height="48" style="display:none"></canvas>
     </div>
 
     <!-- ══════════════════════════════════════
@@ -396,34 +413,46 @@
     <div id="ship-select-screen" class="overlay" data-level-id="">
         <h1>战机选择</h1>
         <div class="ship-cards-row">
-            <div class="ship-card selected" id="ship-card-default" onclick="selectShip('default')">
-                <canvas class="ship-preview" id="preview-default" width="66" height="48"></canvas>
-                <div class="ship-name">SENTINEL</div>
-                <div class="ship-name-zh">默认战机</div>
+            <div class="ship-card selected" id="ship-card-rt1" onclick="selectShip('rt1')">
+                <canvas class="ship-preview" id="preview-rt1" width="66" height="48"></canvas>
+                <div class="ship-name">RT-1 RESCUER</div>
+                <div class="ship-name-zh">拯救者</div>
                 <div class="ship-slots-table">
                     <div class="slot-row"><span>射击位</span><span class="slot-val">×1</span></div>
                     <div class="slot-row"><span>僚机位</span><span class="slot-val">×3</span></div>
-                    <div class="slot-row"><span>副武器</span><span class="slot-val">×3</span></div>
+                    <div class="slot-row"><span>副武器</span><span class="slot-val slot-hl">×4</span></div>
                     <div class="slot-row"><span>初始槽</span><span class="slot-val">5</span></div>
                 </div>
-                <div class="ship-desc">全能型战机。三联僚机提供稳定的战场覆盖。</div>
+                <div class="ship-desc">均衡型战机。三联分体僚机独立索敌，双翼副武器覆盖广。</div>
             </div>
-            <div class="ship-card" id="ship-card-experimental" onclick="selectShip('experimental')">
-                <canvas class="ship-preview" id="preview-experimental" width="66" height="48"></canvas>
-                <div class="ship-name">X-DUAL</div>
-                <div class="ship-name-zh">实验性战机</div>
+            <div class="ship-card" id="ship-card-rtg2" onclick="selectShip('rtg2')">
+                <canvas class="ship-preview" id="preview-rtg2" width="66" height="48"></canvas>
+                <div class="ship-name">RTG-II</div>
+                <div class="ship-name-zh">RTG-II</div>
                 <div class="ship-slots-table">
                     <div class="slot-row"><span>射击位</span><span class="slot-val slot-hl">×2</span></div>
                     <div class="slot-row"><span>僚机位</span><span class="slot-val">×2</span></div>
                     <div class="slot-row"><span>副武器</span><span class="slot-val slot-dim">×1</span></div>
                     <div class="slot-row"><span>初始槽</span><span class="slot-val slot-dim">4</span></div>
                 </div>
-                <div class="ship-desc">双炮并行射击，输出更高。副武器搭载受限。</div>
+                <div class="ship-desc">双炮战机。双槽僚机始终锁定同一目标，副武器搭载受限。</div>
             </div>
         </div>
         <div class="btn-group" style="margin-top:12px">
-            <button class="btn btn-green" onclick="confirmShipSelect()">确认出发</button>
+            <button class="btn btn-green" onclick="confirmShipSelect()">下一步 →</button>
             <button class="btn btn-dark" onclick="showScreen('start')">返回</button>
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════════════
+         装备配置
+    ══════════════════════════════════════ -->
+    <div id="loadout-select-screen" class="overlay" data-level-id="" data-ship-type="">
+        <h2>装备配置</h2>
+        <div id="ls-sections" style="width:95%;max-width:340px;overflow-y:auto;max-height:58%;"></div>
+        <div class="btn-group" style="margin-top:10px">
+            <button class="btn btn-green" onclick="confirmLoadout()">确认出发</button>
+            <button class="btn btn-dark" onclick="showScreen('ship-select')">← 返回战机选择</button>
         </div>
     </div>
 
