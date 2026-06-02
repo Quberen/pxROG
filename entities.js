@@ -103,7 +103,6 @@ class Player {
         
         if (statName === 'damage') {
             if (this.equipment.homing && this.equipment.homing.equipped) inc += (-0.4 + (this.equipment.homing.level - 1) * 0.15);
-            if (this.equipment.spread && this.equipment.spread.equipped) inc -= 0.20 * this.equipment.spread.level;
 
             let dmgCore = this.equipment.damage || this.equipment.high_explosive;
             if (dmgCore && dmgCore.equipped) {
@@ -203,11 +202,11 @@ class Player {
             pRet = eq.pierce.level >= 2 ? 0.8 : 0.5;
         }
         
-        let spawnBullet = (vx, vy) => {
+        let spawnBullet = (vx, vy, damageMult = 1.0) => {
             // [技能视觉反馈：弹道变黄]
             let bulletColor = this.skillActiveTimer > 0 ? '#ffeb3b' : '#ffffff';
             let skillMult = (this.skillActiveTimer > 0 && this.skillDamageMult) ? this.skillDamageMult : 1.0;
-            let b = new Bullet(this.x, this.y - this.h / 2, vx, vy, cw, ch, currentDamage * skillMult, pCnt, pRet, actCritRate, actCritDmg, bulletColor);
+            let b = new Bullet(this.x, this.y - this.h / 2, vx, vy, cw, ch, currentDamage * skillMult * damageMult, pCnt, pRet, actCritRate, actCritDmg, bulletColor);
             b.isHoming = eq.homing && eq.homing.equipped;
             b.homingTurn = homingTurn;
             bullets.push(b);
@@ -220,7 +219,8 @@ class Player {
                 let techSpread = (this.techTree && this.techTree.fp_scatter) || 0;
                 let count = Math.min(7, spreadBase + techSpread);
                 let startVx = -1.5 * (count - 1) / 2;
-                for (let i = 0; i < count; i++) spawnBullet(startVx + 1.5 * i, -16);
+                let pelletMult = 1 - 0.20 * eq.spread.level;
+                for (let i = 0; i < count; i++) spawnBullet(startVx + 1.5 * i, -16, pelletMult);
             } else if (this.techTree && this.techTree.fp_scatter > 0) {
                 let count = Math.min(3, 1 + this.techTree.fp_scatter);
                 let startVx = -1.5 * (count - 1) / 2;
@@ -341,8 +341,10 @@ class Player {
         if (this.invincible > 0 || endingState !== 'none') return;
         if (typeof bossEnterPhase !== 'undefined' && bossEnterPhase > 0) return;
 
-        // phase_dodge：受伤时有概率完全免疫（每级+2/2/2/4%减免，满级共-10%）
-        let dodgeChance = (this.upgrades.phase_dodge || 0) * 0.02 + ((this.techTree && this.techTree.def_dodge) || 0) * 0.10;
+        // phase_dodge：受伤时有概率完全免疫（+2/2/2/4%，满级共10%）
+        const PHASE_DODGE_VALS = [0, 0.02, 0.04, 0.06, 0.10];
+        let dodgeChance = PHASE_DODGE_VALS[Math.min(this.upgrades.phase_dodge || 0, 4)]
+                        + ((this.techTree && this.techTree.def_dodge) || 0) * 0.10;
         if (dodgeChance > 0 && Math.random() < dodgeChance) {
             if (typeof pushFloatingText !== 'undefined') pushFloatingText(this.x, this.y - 25, 'DODGE', '#00e5ff', true, false, '');
             this.invincible = 12;
@@ -356,7 +358,7 @@ class Player {
         if (this.techTree && this.techTree.def_red > 0)
             actualAmount = Math.max(1, Math.round(actualAmount * (1 - this.techTree.def_red * 0.05)));
 
-        actualAmount = Math.ceil(actualAmount);
+        actualAmount = Math.floor(actualAmount);
 
         // 临时装甲吸收
         let hpDamage = actualAmount;
@@ -505,8 +507,8 @@ class EnemyBullet {
             let dy = player.y - this.y;
             let dist = Math.sqrt(dx * dx + dy * dy) || 1;
             
-            this.vx += (dx / dist) * 0.25;
-            this.vy += (dy / dist) * 0.25;
+            this.vx += (dx / dist) * 0.12;
+            this.vy += (dy / dist) * 0.12;
             
             let speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
             if (speed > 4.0) {
@@ -663,7 +665,7 @@ class BaseEnemy {
 
     takeDamage(amount, showText = true, isCrit = false, damageType = 'normal') {
         if (this.damageReduction > 0) amount = Math.max(1, Math.round(amount * (1 - this.damageReduction)));
-        amount = Math.ceil(amount);
+        amount = Math.floor(amount);
         this.hp -= amount;
         
         if (particles.length < 150) {
@@ -817,7 +819,7 @@ class Kamikaze extends BaseEnemy {
         this.vx = 0;
         this.vy = 2;
         this.warnTime = vType === 'special' ? 75 : (vType === 'swarm' ? 59 : 45);
-        this.dashSpeed = vType === 'special' ? 16 : (8 + Math.random() * 3);
+        this.dashSpeed = vType === 'special' ? 16 : (8 + Math.random() * 3) * 1.5;
 
         this.isKamikaze = true;
         this.isSpecial = vType === 'special';
@@ -847,7 +849,7 @@ class Kamikaze extends BaseEnemy {
         } else if (this.state === 'WARN') {
             this.timer--;
             if (this.vType === 'swarm') {
-                this.x += (player.x - this.x) * 0.012;
+                this.x += (player.x - this.x) * 0.025;
             }
             this.x += (Math.random() - 0.5) * (this.vType === 'special' ? 3 : 2);
             if (this.timer <= 0) {

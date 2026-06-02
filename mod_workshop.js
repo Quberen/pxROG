@@ -510,6 +510,7 @@ window.WORKSHOP = {
 
                 const NON_EARLY_EXIT = ['p0_rest', 's2_starfall', 's2_supply', 'p8_boss'];
                 if (!NON_EARLY_EXIT.includes(wave.type) && st.waveTimer >= 2
+                        && (st.waveEnemiesSpawned || 0) > 0
                         && typeof enemies !== 'undefined' && enemies.length === 0) {
                     let nextWave = this.timeline[st.currentWave + 1];
                     if (nextWave && nextWave.type === 'p0_rest' && player && player.upgrades && player.upgrades.shield_gen > 0) {
@@ -519,6 +520,7 @@ window.WORKSHOP = {
                     }
                     st.currentWave++;
                     st.waveTimer = 0;
+                    st.waveEnemiesSpawned = 0;
                     return;
                 }
 
@@ -554,6 +556,7 @@ window.WORKSHOP = {
                         }
                         st.currentWave++;
                         st.waveTimer = 0;
+                        st.waveEnemiesSpawned = 0;
                     }
                 }
             }
@@ -565,7 +568,8 @@ window.WORKSHOP = {
             name: "区域 1: 废星边缘",
             shopItems: ['high_explosive', 'spread', 'skill_duration', 'burst_core',
                         'rapid_charge', 'phase_dodge', 'afterburn', 'shield_gen', 'skill_cd',
-                        'pierce', 'homing', 'crit_rate', 'heal_up', 'slot'],
+                        'pierce', 'homing', 'crit_rate', 'heal_up', 'slot',
+                        'temp_armor', 'crit_dmg'],
             allowed_enemies: ['Locator', 'LocatorSwarm', 'WandererLow', 'WandererHigh', 'WandererSwarm',
                               'Kamikaze', 'KamikazeSwarm', 'Turret', 'TurretSwarm', 'ArcFlyer', 'Tank'],
             allowed_formations: ['V_Strike', 'Turret_Wall', 'Ambush'],
@@ -619,6 +623,7 @@ window.WORKSHOP = {
 
                 const NON_EARLY_EXIT = ['p0_rest', 'p0_starfall', 'p5_supply', 'p8_boss'];
                 if (!NON_EARLY_EXIT.includes(wave.type) && st.waveTimer >= 2
+                        && (st.waveEnemiesSpawned || 0) > 0
                         && typeof enemies !== 'undefined' && enemies.length === 0) {
                     let nextWave = this.timeline[st.currentWave + 1];
                     if (nextWave && nextWave.type === 'p0_rest' && player && player.upgrades && player.upgrades.shield_gen > 0) {
@@ -628,6 +633,7 @@ window.WORKSHOP = {
                     }
                     st.currentWave++;
                     st.waveTimer = 0;
+                    st.waveEnemiesSpawned = 0;
                     return;
                 }
 
@@ -667,6 +673,7 @@ window.WORKSHOP = {
                         }
                         st.currentWave++;
                         st.waveTimer = 0;
+                        st.waveEnemiesSpawned = 0;
                     }
                 }
             }
@@ -839,7 +846,11 @@ window.WORKSHOP = {
     }
 };
 
-function spawn(type, x, opt) { window.spawnEnemyByType(type, x, opt); }
+function spawn(type, x, opt) {
+    window.spawnEnemyByType(type, x, opt);
+    let _cs = (typeof WORKSHOP !== 'undefined') && WORKSHOP.cassettes && (typeof currentLevel !== 'undefined') && WORKSHOP.cassettes[currentLevel];
+    if (_cs && _cs.state) _cs.state.waveEnemiesSpawned = (_cs.state.waveEnemiesSpawned || 0) + 1;
+}
 
 // 第二关别名：复用第一关已有波次函数
 WORKSHOP.patterns.s2_iron_barrel = WORKSHOP.patterns.p3_gather;

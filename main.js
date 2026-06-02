@@ -981,7 +981,7 @@ function updateHUD() {
     else if (hpPercent > 0.2) hpColor = '#ff9800';
 
     ui.hpVal.style.color = hpColor;
-    ui.hpVal.innerText = `${Math.floor(player.hp)}%` + (player.armor > 0 ? `+${player.armor}` : '');
+    ui.hpVal.innerText = `${Math.ceil(player.hp)}%` + (player.armor > 0 ? `+${player.armor}` : '');
 
     let indColor = '#00e676';
     let cassette = WORKSHOP.cassettes[currentLevel];
@@ -1577,11 +1577,12 @@ function loop(timestamp) {
         if (player && player.hp > 0 && endingState !== 'playerDead') {
             let wLv = (player.upgrades && player.upgrades.wingman) || 0;
             let count = wLv >= 3 ? 3 : (wLv >= 1 ? 2 : 0);
+            let swoopCD    = [720, 660, 600][wLv - 1] || 720;
 
             while (wingmanEntities.length < count) {
                 let idx = wingmanEntities.length;
                 wingmanEntities.push({ state: 'orbit', orbitAngle: idx * Math.PI * 2 / Math.max(1, count),
-                    x: player.x, y: player.y, swoopCooldown: 60, respawnTimer: 0 });
+                    x: player.x, y: player.y, swoopCooldown: swoopCD, respawnTimer: 0 });
             }
             while (wingmanEntities.length > count) wingmanEntities.pop();
 
@@ -1589,7 +1590,6 @@ function loop(timestamp) {
 
             let directDmg  = [50, 75, 125][wLv - 1] || 50;
             let splashDmg  = [20, 30,  50][wLv - 1] || 20;
-            let swoopCD    = [720, 660, 600][wLv - 1] || 720;
             let arcFrames  = [60, 48, 36][wLv - 1] || 60;
             let splashR    = 50;
 
@@ -2076,8 +2076,9 @@ function restoreFromCheckpoint(data) {
     score = data.score;
     gameTimeSeconds = data.gameTimeSeconds;
     shopInflation = data.shopInflation;
+    player.armor = 0;
     let cas = WORKSHOP.cassettes[currentLevel];
-    if (cas && cas.state) { cas.state.currentWave = data.waveIndex; cas.state.waveTimer = 0; }
+    if (cas && cas.state) { cas.state.currentWave = data.waveIndex; cas.state.waveTimer = 0; cas.state.waveEnemiesSpawned = 0; }
 }
 
 function trySelectLevel(levelId) {
