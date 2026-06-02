@@ -1061,9 +1061,8 @@ function getShopCost(opt) {
         baseCst = (opt.type === 'equip' && !player.equipment[opt.id].owned) ? opt.initialCost
                 : (opt.type === 'equip' ? opt.cost + player.equipment[opt.id].level * opt.costStep : opt.cost);
     }
-    let diffMult = currentDifficulty === 3 ? 1.2 : 1.0;
     let inflationMult = 1.0 + (shopInflation / 100.0);
-    return parseFloat((baseCst * diffMult * inflationMult).toFixed(1));
+    return parseFloat((baseCst * inflationMult).toFixed(1));
 }
 
 function getWeightedRandomItem(excludeIds) { 
@@ -1073,10 +1072,7 @@ function getWeightedRandomItem(excludeIds) {
         if (excludeIds.includes(item.id)) return false;
         if (item.id === 'repair' || item.id === 'emergency_repair' || item.id === 'heal') return false;
         if (item.id === 'temp_armor' && player.armor >= 150) return false;
-        if (shopItems !== 'ALL' && !shopItems.includes(item.id)) return false;
-        if (shopItems === 'ALL') { 
-            if (player.totalUpgradePoints < item.unlockPT || gameTimeSeconds < item.unlockTime) return false; 
-        } 
+        if (shopItems !== 'ALL' && !shopItems.includes(item.id)) return false; 
         if (item.type === 'equip') { 
             if (!player.equipment[item.id] || !player.equipment[item.id].owned) return true; 
             return player.equipment[item.id].level < item.max; 

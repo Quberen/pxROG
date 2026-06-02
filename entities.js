@@ -103,6 +103,7 @@ class Player {
         
         if (statName === 'damage') {
             if (this.equipment.homing && this.equipment.homing.equipped) inc += (-0.4 + (this.equipment.homing.level - 1) * 0.15);
+            if (this.equipment.spread && this.equipment.spread.equipped) inc -= 0.20 * this.equipment.spread.level;
 
             let dmgCore = this.equipment.damage || this.equipment.high_explosive;
             if (dmgCore && dmgCore.equipped) {
@@ -354,6 +355,8 @@ class Player {
 
         if (this.techTree && this.techTree.def_red > 0)
             actualAmount = Math.max(1, Math.round(actualAmount * (1 - this.techTree.def_red * 0.05)));
+
+        actualAmount = Math.ceil(actualAmount);
 
         // 临时装甲吸收
         let hpDamage = actualAmount;
@@ -660,6 +663,7 @@ class BaseEnemy {
 
     takeDamage(amount, showText = true, isCrit = false, damageType = 'normal') {
         if (this.damageReduction > 0) amount = Math.max(1, Math.round(amount * (1 - this.damageReduction)));
+        amount = Math.ceil(amount);
         this.hp -= amount;
         
         if (particles.length < 150) {
@@ -854,7 +858,7 @@ class Kamikaze extends BaseEnemy {
                 this.dashDirX = dx / dist;
                 this.dashDirY = dy / dist;
                 this.dashElapsed = 0;
-                this.dashRamp = this.isAbyss ? 36 : 60;
+                this.dashRamp = this.isAbyss ? 24 : 48;
             }
         } else if (this.state === 'DASH') {
             this.dashElapsed = (this.dashElapsed || 0) + 1;
