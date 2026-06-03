@@ -2051,7 +2051,9 @@ function loop(timestamp) {
 
     // 核爆BW效果：CSS compositor层灰度滤镜（GPU加速，不影响canvas绘制管线）
     if (nuclearBWTimer > 0) {
-        canvas.style.filter = 'grayscale(1) brightness(1.15)';
+        let grayLevel = Math.min(1, nuclearBWTimer / 20);
+        let bright = 1 + 0.15 * grayLevel;
+        canvas.style.filter = `grayscale(${grayLevel.toFixed(2)}) brightness(${bright.toFixed(2)})`;
         if (isPlaying) { nuclearBWTimer--; if (nuclearBWTimer === 0) canvas.style.filter = ''; }
     }
 

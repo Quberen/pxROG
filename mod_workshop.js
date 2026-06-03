@@ -144,7 +144,8 @@ window.WORKSHOP = {
             if (sec >= 15 && frame % 200 === 0) spawn('ArcFlyer', Math.random() * (w - 120) + 60, { speedOverride: 1.1 });
         },
         p3_gather: function(sec, frame, diff, w) {
-            let colW = w / 7; let c = [colW * 0.5, colW * 1.5, colW * 2.5, colW * 3.5, colW * 4.5, colW * 5.5, colW * 6.5];
+            let _gw = w - (typeof RIGHT_UI_WIDTH !== 'undefined' ? RIGHT_UI_WIDTH : 0);
+            let colW = _gw / 7; let c = [colW * 0.5, colW * 1.5, colW * 2.5, colW * 3.5, colW * 4.5, colW * 5.5, colW * 6.5];
             let eType = diff >= 2 ? 'LocatorSwarm' : 'Locator';
             if (sec < 25 && frame % 40 === 0) { spawn(eType, c[0], { speedOverride: 1.5 }); spawn(eType, c[6], { speedOverride: 1.5 }); }
             if (sec >= 5 && sec < 25 && frame % 40 === 0) { spawn(eType, c[1], { speedOverride: 1.5 }); spawn(eType, c[5], { speedOverride: 1.5 }); }

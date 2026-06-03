@@ -1105,7 +1105,7 @@ class BossScrapDominator extends BaseEnemy {
         this.phase = 1;
         this.state = 'ENTER';
         this.timer = 120;
-        this.targetX = width / 2;
+        this.targetX = (width - (typeof RIGHT_UI_WIDTH !== 'undefined' ? RIGHT_UI_WIDTH : 0)) / 2;
 
         this.isSpecial = true;
         this.isBoss = true;
@@ -1140,6 +1140,7 @@ class BossScrapDominator extends BaseEnemy {
 
     update() {
         if (endingState === 'bossDead') return;
+        let _gw = width - (typeof RIGHT_UI_WIDTH !== 'undefined' ? RIGHT_UI_WIDTH : 0);
 
         let hpPct = Math.max(0, this.hp / this.maxHp);
         ui.bossHpFill.style.width = `${hpPct * 100}%`;
@@ -1201,10 +1202,10 @@ class BossScrapDominator extends BaseEnemy {
                 triggerShake(25, 60);
                 flashScreenTimer = 20; flashScreenColor = '100,0,171';
                 for (let i = 0; i < 3; i++) {
-                    window.spawnEnemyByType('WandererHigh', Math.random() * (width - 100) + 50);
+                    window.spawnEnemyByType('WandererHigh', Math.random() * (_gw - 100) + 50);
                 }
                 // 从多个位置发射深渊追踪紫色子弹
-                let positions = [width * 0.2, width * 0.4, width * 0.6, width * 0.8];
+                let positions = [_gw * 0.2, _gw * 0.4, _gw * 0.6, _gw * 0.8];
                 positions.forEach(px => {
                     for (let k = 0; k < 3; k++) {
                         let bul = new EnemyBullet(px + (Math.random()-0.5)*40, -20 + k*30, (Math.random()-0.5)*1.5, 2 + Math.random(), 'homing', 0.05);
@@ -1241,7 +1242,7 @@ class BossScrapDominator extends BaseEnemy {
                 }
                 // Phase 4：每次进入HOVER有30%概率额外召唤Kamikaze
                 if (this.phase >= 4 && Math.random() < 0.3) {
-                    window.spawnEnemyByType('Kamikaze', Math.random() * (width - 80) + 40, { speedOverride: 2.5 });
+                    window.spawnEnemyByType('Kamikaze', Math.random() * (_gw - 80) + 40, { speedOverride: 2.5 });
                 }
                 let roll = Math.random();
                 let nextState = 'HOVER';
@@ -1293,7 +1294,7 @@ class BossScrapDominator extends BaseEnemy {
             }
             
             if (Math.abs(this.targetX - this.x) < 10 && Math.random() < 0.02) {
-                this.targetX = Math.random() * (width - 100) + 50;
+                this.targetX = Math.random() * (_gw - 100) + 50;
             }
         } else if (this.state === 'ATTACK_SPAWN') {
             this.timer--;
@@ -1301,7 +1302,7 @@ class BossScrapDominator extends BaseEnemy {
             
             if (this.timer === 0) {
                 if (currentDifficulty >= 2) {
-                    let colW = width / 5;
+                    let colW = _gw / 5;
                     for (let i = 1; i <= 4; i++) {
                         let e = new Locator(colW * i, this.y + 40, true, false, 2.0);
                         e.weight *= 1.5;
@@ -1349,10 +1350,10 @@ class BossScrapDominator extends BaseEnemy {
 
             if (this.timer <= 0) { this._enterHoverAfter('ATTACK_SPIRAL'); }
         } else if (this.state === 'ATTACK_RUSH') {
-            if (!this.rushDir) this.rushDir = this.x < width / 2 ? 8 : -8;
+            if (!this.rushDir) this.rushDir = this.x < _gw / 2 ? 8 : -8;
             this.x += this.rushDir;
 
-            if (this.x > width - 50 || this.x < 50) {
+            if (this.x > _gw - 50 || this.x < 50) {
                 this.rushDir *= -1;
                 this.rushCount = (this.rushCount || 0) + 1;
             }
@@ -1372,7 +1373,7 @@ class BossScrapDominator extends BaseEnemy {
             this.timer--;
             if (this.timer === 0) {
                 window.spawnEnemyByType('TurretSwarm', 40, { y: 60, isDumbFire: true, fireInterval: 30 });
-                window.spawnEnemyByType('TurretSwarm', width - 40, { y: 60, isDumbFire: true, fireInterval: 30 });
+                window.spawnEnemyByType('TurretSwarm', _gw - 40, { y: 60, isDumbFire: true, fireInterval: 30 });
                 this._enterHoverAfter('ATTACK_TURRETS');
             }
         } else if (this.state === 'ATTACK_LASER') {
@@ -1387,7 +1388,7 @@ class BossScrapDominator extends BaseEnemy {
                     this.x += moveX;
                     this.laserApproachMoved += Math.abs(moveX);
                 }
-                this.x = Math.max(40, Math.min(width - 40, this.x));
+                this.x = Math.max(40, Math.min(_gw - 40, this.x));
                 let laserHitInterval = currentDifficulty <= 1 ? 20 : 16;
                 if (this.laserFireTimer % laserHitInterval === 0 && Math.abs(player.x - this.x) < 30 && player.y > this.y) {
                     let diffDmg = currentDifficulty <= 1 ? 16 : 24;
@@ -1396,14 +1397,14 @@ class BossScrapDominator extends BaseEnemy {
                 triggerShake(3, 2);
             } else {
                 this.laserApproachMoved = 0;
-                this.targetX = Math.random() * (width - 100) + 50;
+                this.targetX = Math.random() * (_gw - 100) + 50;
                 this._enterHoverAfter('ATTACK_LASER');
             }
         } else if (this.state === 'ATTACK_CHARGE') {
             this.timer--;
             if (this.chargePhase === 'WARN') {
                 this.x += (Math.random() - 0.5) * 12;
-                this.x = Math.max(60, Math.min(width - 60, this.x));
+                this.x = Math.max(60, Math.min(_gw - 60, this.x));
                 if (this.timer <= 0) {
                     let dx = player.x - this.x, dy = player.y - this.y;
                     let dist = Math.sqrt(dx*dx + dy*dy) || 1;
@@ -2071,9 +2072,12 @@ class PNAMDrone {
             else if (d2 < r2*r2) e.takeDamage(100, true, false, 'pnam_shock');
             e.takeDamage(20, true, false, 'pnam_rad');
         });
-        // 扩散环
+        // 扩散环（6层，由内到外）
+        aoeEffects.push(new AOEEffect(this.x, this.y, r1 * 0.45, '#ffffff'));
         aoeEffects.push(new AOEEffect(this.x, this.y, r1, '#b9f6ca'));
+        aoeEffects.push(new AOEEffect(this.x, this.y, r1 * 1.6, '#ccff90'));
         aoeEffects.push(new AOEEffect(this.x, this.y, r2, '#ccff90'));
+        aoeEffects.push(new AOEEffect(this.x, this.y, r2 * 1.2, '#b9f6ca'));
         aoeEffects.push(new AOEEffect(this.x, this.y, r2 * 1.4, '#ffffff'));
         // 中心爆炸粒子
         createExplosion(this.x, this.y, '#ffffff', 40);
@@ -2104,8 +2108,9 @@ class PNAMDrone {
                 Math.random()<0.5 ? '#78909c' : '#b0bec5',
                 Math.cos(ang)*spd, Math.sin(ang)*spd, 45+Math.random()*25));
         }
-        if (typeof nuclearBWTimer !== 'undefined') nuclearBWTimer = 40;
+        if (typeof nuclearBWTimer !== 'undefined') nuclearBWTimer = 60;
         triggerShake(20, 35);
+        if (typeof AudioSystem !== 'undefined') AudioSystem.triggerDamageFilter();
     }
 
     _smallExplosion() {
