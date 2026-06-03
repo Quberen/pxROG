@@ -1001,20 +1001,15 @@ class MutantTurret extends BaseEnemy {
         } else {
             this.shootTimer--;
             if (this.shootTimer <= 0) {
-                // Fire toward player; bullet spirals perpendicular to this direction
-                let dx = player.x - this.x;
-                let dy = player.y - this.y;
-                let dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                // Fire straight down; bullet weaves horizontally in a sine wave
                 let spd = 3.5;
-                let bvx = (dx / dist) * spd;
-                let bvy = (dy / dist) * spd;
                 let b = new EnemyBullet(
-                    this.x, this.y + this.h * this.scale / 2, bvx, bvy, 'spiral'
+                    this.x, this.y + this.h * this.scale / 2, 0, spd, 'spiral'
                 );
-                b.baseVx = bvx; b.baseVy = bvy;
-                b.perpVx = -dy / dist; b.perpVy = dx / dist; // perpendicular unit vector
-                b.spiralPhase = this.spiralAngle;             // stagger phase across shots
-                this.spiralAngle += 1.05;                     // ~60° offset per shot for variety
+                b.baseVx = 0; b.baseVy = spd;
+                b.perpVx = 1; b.perpVy = 0; // horizontal sway
+                b.spiralPhase = this.spiralAngle;
+                this.spiralAngle += 1.05;
                 enemyBullets.push(b);
                 this.shootTimer = this.fireInterval;
             }
