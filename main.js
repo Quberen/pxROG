@@ -803,18 +803,25 @@ function drawPixelButton(id, icon, progress, color, isActive = false, cdProgress
         ctx.fillRect(22, 16, 4, 16);
         ctx.fillRect(16, 22, 16, 4);
     } else if (icon) {
-        ctx.drawImage(icon, 24 - icon.width / 2, 24 - icon.height / 2);
+        ctx.drawImage(icon, Math.round(24 - icon.width / 2), Math.round(24 - icon.height / 2));
+    }
+    // PT不足遮罩：覆盖图标区域，使按钮视觉变暗
+    let ptInsufficient = ptCost > 0 && typeof player !== 'undefined' && player !== null && ((player.pt || 0) < ptCost);
+    if (ptInsufficient) {
+        ctx.fillStyle = '#1a1a1a';
+        ctx.globalAlpha = 0.55;
+        ctx.fillRect(4, 4, 40, 40);
+        ctx.globalAlpha = 1.0;
     }
     if (id && id.includes('pnam')) {
         _drawNuclearSymbol(ctx, 38, 38, 8);
     }
-    // PT 费用：右上角罗马数字
+    // PT 费用：右上角罗马数字（始终白色加粗）
     if (ptCost > 0) {
         let roman = toRoman(ptCost);
-        let canAfford = !player || (player.pt || 0) >= ptCost;
-        ctx.font = 'bold 8px monospace';
+        ctx.font = 'bold 10px monospace';
         ctx.textAlign = 'right';
-        ctx.fillStyle = canAfford ? '#ffeb3b' : '#e57373';
+        ctx.fillStyle = '#ffffff';
         ctx.fillText(roman, 44, 13);
         ctx.textAlign = 'left';
     }
@@ -1578,12 +1585,16 @@ function loop(timestamp) {
 
     const isPlaying = (gameState === 'PLAYING');
     ctx.fillStyle = '#050510'; ctx.fillRect(0, 0, width, height); updateAndDrawStars(ctx, isPlaying);
+    ctx.imageSmoothingEnabled = false;
 
     ctx.save();
     shakeQueue = shakeQueue.filter(s => s.endAt > frameCount);
     if (shakeQueue.length > 0) {
         let s = shakeQueue[0];
-        ctx.translate((Math.random() - 0.5) * s.intensity, (Math.random() - 0.5) * s.intensity);
+        ctx.translate(
+            Math.round((Math.random() - 0.5) * s.intensity),
+            Math.round((Math.random() - 0.5) * s.intensity)
+        );
     }
 
     if (isPlaying && hitStopFrames > 0) {
@@ -2500,7 +2511,8 @@ function renderShipPreviews() {
 
 function fireAvenger(btnIdx) {
     if (!player || gameState !== 'PLAYING') return;
-    if ((avengerSlotCds[btnIdx] || 0) > 0) return;
+    if ((avengerSlotCds[btnIdx] || 0) > 0) { triggerShake(4, 4); return; }
+    if ((player.pt || 0) < 1) { triggerShake(4, 4); return; }  // PT不足
     let avengerCount = -1, targetGroupIdx = -1;
     let slotOffset = 0;
     for (let g = 0; g < (player.subweaponGroups || []).length; g++) {
@@ -2511,7 +2523,6 @@ function fireAvenger(btnIdx) {
         slotOffset += player.subweaponGroups[g];
     }
     if (targetGroupIdx < 0) return;
-    if ((player.pt || 0) < 1) return;  // PT不足
     let groupSize = player.subweaponGroups[targetGroupIdx];
     let sharedTargetRef = { target: null };
     for (let s = 0; s < groupSize; s++) {
@@ -2523,8 +2534,8 @@ function fireAvenger(btnIdx) {
 
 function fireASR(btnIdx) {
     if (!player || gameState !== 'PLAYING') return;
-    if ((asrSlotCds[btnIdx] || 0) > 0) return;
-    if ((player.pt || 0) < 2) return;  // PT不足
+    if ((asrSlotCds[btnIdx] || 0) > 0) { triggerShake(4, 4); return; }
+    if ((player.pt || 0) < 2) { triggerShake(4, 4); return; }  // PT不足
     let asrCount = -1, targetGroupIdx = -1, slotOffset = 0;
     for (let g = 0; g < (player.subweaponGroups || []).length; g++) {
         if (player.subweaponLoadout[slotOffset] === 'asr') {
@@ -2544,8 +2555,8 @@ function fireASR(btnIdx) {
 
 function firePNAM(btnIdx) {
     if (!player || gameState !== 'PLAYING') return;
-    if ((pnamSlotCds[btnIdx] || 0) > 0) return;
-    if ((player.pt || 0) < 6) return;  // PT不足
+    if ((pnamSlotCds[btnIdx] || 0) > 0) { triggerShake(4, 4); return; }
+    if ((player.pt || 0) < 6) { triggerShake(4, 4); return; }  // PT不足
     pnamFireQueues.push({ timer: 0 });
     player.pt -= 6;
     pnamSlotCds[btnIdx] = 1140;  // 19秒

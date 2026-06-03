@@ -347,7 +347,7 @@ class Player {
                 drawX += (Math.random() - 0.5) * 4;
                 drawY += (Math.random() - 0.5) * 4;
             }
-            ctx.drawImage(this.sprite, drawX, drawY);
+            ctx.drawImage(this.sprite, Math.round(drawX), Math.round(drawY));
         }
     }
 
@@ -681,7 +681,7 @@ class BaseEnemy {
 
     draw(ctx) {
         ctx.save();
-        ctx.translate(this.x, this.y);
+        ctx.translate(Math.round(this.x), Math.round(this.y));
         if (this.isElite) {
             ctx.shadowBlur = 15;
             ctx.shadowColor = '#ff1744';
