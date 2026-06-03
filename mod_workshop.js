@@ -527,11 +527,14 @@ window.WORKSHOP = {
                 // Advance when all enemies clear (two paths):
                 // 1. Early exit: killed ahead of schedule; 3s grace prevents mid-spawn-gap false trigger.
                 // 2. Timer done: pattern has stopped; wait for screen to be empty.
+                // supply波次额外fallback：生成后2秒内清场即允许提前退出
+                let supplyFallback = wave.type.includes('supply') && st.waveTimer >= 2
+                        && typeof enemies !== 'undefined' && enemies.length === 0;
                 let earlyExit = REQUIRE_CLEAR
-                        && (st.waveEnemiesSpawned || 0) > 0
-                        && typeof enemies !== 'undefined' && enemies.length === 0
-                        && typeof frameCount !== 'undefined'
-                        && frameCount - (st.waveLastSpawnFrame || 0) > 180;
+                        && (   ((st.waveEnemiesSpawned || 0) > 0 && typeof frameCount !== 'undefined' && frameCount - (st.waveLastSpawnFrame || 0) > 180)
+                            || supplyFallback
+                           )
+                        && typeof enemies !== 'undefined' && enemies.length === 0;
                 let timerDoneExit = !!st.waveTimerDone
                         && typeof enemies !== 'undefined' && enemies.length === 0;
                 if (earlyExit || timerDoneExit) {
@@ -576,7 +579,8 @@ window.WORKSHOP = {
                         if (st.waveTimer >= (wave.duration || 999)) shouldExit = true;
                     }
                     if (shouldExit) {
-                        if (REQUIRE_CLEAR && typeof enemies !== 'undefined' && enemies.length > 0) {
+                        // 统一等待清场：无论波次类型，有敌人时冻结等待（纯队列编排）
+                        if (typeof enemies !== 'undefined' && enemies.length > 0) {
                             st.waveTimerDone = true; // Freeze spawning; frame-level check waits for clear
                         } else {
                             let nextWave = this.timeline[st.currentWave + 1];
@@ -659,11 +663,13 @@ window.WORKSHOP = {
                 // Advance when all enemies clear:
                 // 1. Early exit: killed ahead of schedule; 3s grace prevents mid-spawn-gap false trigger.
                 // 2. Timer done: pattern has stopped; wait for screen to be empty.
+                let supplyFallback2 = wave.type.includes('supply') && st.waveTimer >= 2
+                        && typeof enemies !== 'undefined' && enemies.length === 0;
                 let earlyExit = REQUIRE_CLEAR
-                        && (st.waveEnemiesSpawned || 0) > 0
-                        && typeof enemies !== 'undefined' && enemies.length === 0
-                        && typeof frameCount !== 'undefined'
-                        && frameCount - (st.waveLastSpawnFrame || 0) > 180;
+                        && (   ((st.waveEnemiesSpawned || 0) > 0 && typeof frameCount !== 'undefined' && frameCount - (st.waveLastSpawnFrame || 0) > 180)
+                            || supplyFallback2
+                           )
+                        && typeof enemies !== 'undefined' && enemies.length === 0;
                 let timerDoneExit = !!st.waveTimerDone
                         && typeof enemies !== 'undefined' && enemies.length === 0;
                 if (earlyExit || timerDoneExit) {
@@ -711,7 +717,8 @@ window.WORKSHOP = {
                     }
 
                     if (shouldExit) {
-                        if (REQUIRE_CLEAR && typeof enemies !== 'undefined' && enemies.length > 0) {
+                        // 统一等待清场
+                        if (typeof enemies !== 'undefined' && enemies.length > 0) {
                             st.waveTimerDone = true; // Freeze spawning; frame-level check waits for clear
                         } else {
                             let nextWave = this.timeline[st.currentWave + 1];

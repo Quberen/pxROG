@@ -55,6 +55,7 @@ const AssetManager = {
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d', { alpha: false });
 let width, height;
+const RIGHT_UI_WIDTH = 68;  // 右侧UI面板保留宽度（px）
 
 let overlayHistory = 'START';
 let hitStopFrames = 0;
@@ -165,6 +166,7 @@ let pnamSlotCds = [];
 let asrFireQueues = [];
 let pnamFireQueues = [];
 let pendingLoadoutData = { wingman: [], subweapon: [] };
+let waveIndexLastSaved = -1;
 let isDebugMode = false;
 let score = 0, frameCount = 0, gameTimeSeconds = 0;
 let shakeQueue = [];
@@ -573,6 +575,7 @@ function applyWorkshopData() {
 }
 
 window.spawnEnemyByType = function(type, x, options = {}) {
+    x = Math.min(x, width - RIGHT_UI_WIDTH - 20);  // 不进入右侧UI区域
     let side = (x < width / 2) ? 'left' : 'right'; 
     let forceHeal = options.forceHeal || false; 
     let speedOver = options.speedOverride || null; 
@@ -745,14 +748,22 @@ function toRoman(n) {
 
 function _drawNuclearSymbol(ctx, cx, cy, r) {
     ctx.save();
-    ctx.globalAlpha = 0.9;
+    // 黑色圆底
+    ctx.fillStyle = '#000000';
+    ctx.globalAlpha = 0.88;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+    // 黄色图案
+    ctx.globalAlpha = 0.95;
     ctx.fillStyle = '#ffeb3b';
+    // 中心圆
     ctx.beginPath(); ctx.arc(cx, cy, r * 0.28, 0, Math.PI * 2); ctx.fill();
+    // 三个60°环形扇段（内径 r*0.42，外径 r）
     for (let i = 0; i < 3; i++) {
         let startAng = (i * Math.PI * 2 / 3) - Math.PI / 2;
+        let endAng = startAng + Math.PI / 3;
         ctx.beginPath();
-        ctx.moveTo(cx + Math.cos(startAng) * r * 0.32, cy + Math.sin(startAng) * r * 0.32);
-        ctx.arc(cx, cy, r, startAng + 0.28, startAng + Math.PI * 2 / 3 - 0.28);
+        ctx.arc(cx, cy, r, startAng + 0.22, endAng - 0.22);
+        ctx.arc(cx, cy, r * 0.42, endAng - 0.22, startAng + 0.22, true);
         ctx.closePath(); ctx.fill();
     }
     ctx.restore();
@@ -1586,6 +1597,11 @@ function loop(timestamp) {
     const isPlaying = (gameState === 'PLAYING');
     ctx.fillStyle = '#050510'; ctx.fillRect(0, 0, width, height); updateAndDrawStars(ctx, isPlaying);
     ctx.imageSmoothingEnabled = false;
+    // 右侧UI背景面板
+    ctx.fillStyle = '#07071a';
+    ctx.fillRect(width - RIGHT_UI_WIDTH, 0, RIGHT_UI_WIDTH, height);
+    ctx.fillStyle = '#1e1e3a';
+    ctx.fillRect(width - RIGHT_UI_WIDTH, 0, 1, height);
 
     ctx.save();
     shakeQueue = shakeQueue.filter(s => s.endAt > frameCount);
@@ -1643,6 +1659,11 @@ function loop(timestamp) {
             // 波次时间线脚本（sector1 等基于 timeline 的关卡）
             if (cassette && typeof cassette.script === 'function') {
                 cassette.script.call(cassette, sec, frameCount);
+            }
+            // 每次波次推进都存档
+            if (cassette && cassette.state && cassette.state.currentWave !== waveIndexLastSaved) {
+                waveIndexLastSaved = cassette.state.currentWave;
+                if (cassette.state.currentWave > 0) saveCheckpoint();
             }
             
             // 极简视觉律动引擎
@@ -1881,6 +1902,14 @@ function loop(timestamp) {
                         let by = (1-t)*(1-t)*w._arcStart.y + 2*(1-t)*t*w._arcCtrl.y + t*t*w._arcEnd.y;
                         let hit = arcTgt && arcTgt.active && (bx - arcTgt.x) ** 2 + (by - arcTgt.y) ** 2 < 100;
                         w.x = bx; w.y = by;
+                        // AS-1自爆碰到PNAM僚机：触发核爆（不受PNAM阶段限制）
+                        for (let drone of pnamDrones) {
+                            if (!drone.active) continue;
+                            if ((bx - drone.x) ** 2 + (by - drone.y) ** 2 < 400) {
+                                drone._nuclearExplosion(); drone.active = false;
+                                w.state = 'dead'; w.respawnTimer = Math.round(swoopCD * 0.3); break;
+                            }
+                        }
                         if (hit || arcT >= 1) {
                             if (arcTgt && arcTgt.active) arcTgt.takeDamage(directDmg, true, false, 'wingman');
                             aoeEffects.push(new AOEEffect(w.x, w.y, splashR, '#ffea00'));
@@ -1995,7 +2024,7 @@ function loop(timestamp) {
                 for (let i = pnamFireQueues.length-1; i >= 0; i--) {
                     let q = pnamFireQueues[i];
                     if (q.timer <= 0) {
-                        pnamDrones.push(new PNAMDrone(player.x, player.y + player.h * 0.6));
+                        pnamDrones.push(new PNAMDrone(player.x, player.y + player.h * 0.5));
                         pnamFireQueues.splice(i, 1);
                     } else { q.timer--; }
                 }
@@ -2376,6 +2405,7 @@ function saveCheckpoint() {
             subweapon: player.subweaponLoadout || []
         },
         waveIndex: cas.state.currentWave,
+        shopItemIds: currentShopItems.map(i => i.id),
         score, gameTimeSeconds, shopInflation,
         player: {
             hp: player.hp, pt: player.pt,
@@ -2427,6 +2457,11 @@ function restoreFromCheckpoint(data) {
     }
     let cas = WORKSHOP.cassettes[currentLevel];
     if (cas && cas.state) { cas.state.currentWave = data.waveIndex; cas.state.waveTimer = 0; cas.state.waveEnemiesSpawned = 0; }
+    // 恢复商店内容，防止退出重进刷新商店
+    if (data.shopItemIds && data.shopItemIds.length > 0) {
+        let restored = data.shopItemIds.map(id => upgradePool.find(u => u.id === id)).filter(Boolean);
+        if (restored.length > 0) currentShopItems = restored;
+    }
 }
 
 function trySelectLevel(levelId) {
@@ -2557,7 +2592,18 @@ function firePNAM(btnIdx) {
     if (!player || gameState !== 'PLAYING') return;
     if ((pnamSlotCds[btnIdx] || 0) > 0) { triggerShake(4, 4); return; }
     if ((player.pt || 0) < 6) { triggerShake(4, 4); return; }  // PT不足
-    pnamFireQueues.push({ timer: 0 });
+    // 找到该按钮对应的group及大小，多槽以48帧(0.8s)间隔弹射
+    let pnamCount = -1, groupSize = 1, slotOffset = 0;
+    for (let g = 0; g < (player.wingmanGroups || []).length; g++) {
+        if ((player.wingmanLoadout || [])[slotOffset] === 'pnam') {
+            pnamCount++;
+            if (pnamCount === btnIdx) { groupSize = player.wingmanGroups[g]; break; }
+        }
+        slotOffset += player.wingmanGroups[g];
+    }
+    for (let s = 0; s < groupSize; s++) {
+        pnamFireQueues.push({ timer: s * 48 });  // s=0立即，s=1等0.8s
+    }
     player.pt -= 6;
     pnamSlotCds[btnIdx] = 1140;  // 19秒
 }
@@ -2569,6 +2615,18 @@ window.openLoadoutSelect = function(levelId, shipType) {
         wingman: Array(cfg.wingmanGroups.length).fill('as1'),
         subweapon: Array(cfg.subweaponGroups.length).fill('rfa')
     };
+    // 读取上次选择
+    try {
+        let saved = JSON.parse(localStorage.getItem('pxROG_loadout_pref') || '{}');
+        if (saved[shipType]) {
+            let s = saved[shipType];
+            if (s.wingman && s.wingman.length === cfg.wingmanGroups.length)
+                pendingLoadoutData.wingman = s.wingman.map(t => WINGMAN_TYPES[t] ? t : 'as1');
+            if (s.subweapon && s.subweapon.length === cfg.subweaponGroups.length)
+                pendingLoadoutData.subweapon = s.subweapon.map(t => SUBWEAPON_TYPES[t] ? t : 'rfa');
+        }
+    } catch(e) {}
+
     let screen = document.getElementById('loadout-select-screen');
     if (!screen) { startGame(levelId, false, shipType); return; }
     screen.dataset.levelId = levelId;
@@ -2638,7 +2696,14 @@ function buildLoadoutUI(shipType) {
 window.confirmLoadout = function() {
     let screen = document.getElementById('loadout-select-screen');
     if (!screen) return;
-    startGame(screen.dataset.levelId, false, screen.dataset.shipType, pendingLoadoutData);
+    let shipType = screen.dataset.shipType;
+    // 保存本次选择
+    try {
+        let saved = JSON.parse(localStorage.getItem('pxROG_loadout_pref') || '{}');
+        saved[shipType] = { wingman: [...pendingLoadoutData.wingman], subweapon: [...pendingLoadoutData.subweapon] };
+        localStorage.setItem('pxROG_loadout_pref', JSON.stringify(saved));
+    } catch(e) {}
+    startGame(screen.dataset.levelId, false, shipType, pendingLoadoutData);
 };
 
 function startGame(levelId, useCheckpoint = false, shipType = 'rt1', loadoutData = null) {
@@ -2677,6 +2742,7 @@ function startGame(levelId, useCheckpoint = false, shipType = 'rt1', loadoutData
     enemies = []; bullets = []; enemyBullets = []; items = []; particles = []; floatingTexts = []; aoeEffects = []; burnEffects = []; wingmanEntities = [];
     interceptorBullets = []; avengerMissiles = []; avengerSlotCds = []; avengerFireQueues = [];
     asrProjectiles = []; pnamDrones = []; asrSlotCds = []; pnamSlotCds = []; asrFireQueues = []; pnamFireQueues = [];
+    waveIndexLastSaved = -1;
     score = 0; frameCount = 0; gameTimeSeconds = 0;
     shakeQueue = []; shakeTimer = 0; hitStopFrames = 0; pendingPostHitstopEffect = null; flashScreenTimer = 0; damageVignetteTimer = 0; lowHpShakeCooldown = 0; bossEnterPhase = 0;
     comboCount = 0; comboTimer = 0; endingState = 'none'; endingTimer = 0;

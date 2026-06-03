@@ -167,7 +167,8 @@ class Player {
         if (typeof bossEnterPhase !== 'undefined' && bossEnterPhase > 0) return;
         this.x += (this.targetX - this.x) * 0.3;
         this.y += (this.targetY - this.y) * 0.3;
-        this.x = Math.max(this.w / 2, Math.min(width - this.w / 2, this.x));
+        let _ruiW = typeof RIGHT_UI_WIDTH !== 'undefined' ? RIGHT_UI_WIDTH : 0;
+        this.x = Math.max(this.w / 2, Math.min(width - _ruiW - this.w / 2, this.x));
         this.y = Math.max(this.h / 2, Math.min(height - this.h / 2, this.y));
         
         this.processShooting();
@@ -692,6 +693,7 @@ class BaseEnemy {
     }
 
     takeDamage(amount, showText = true, isCrit = false, damageType = 'normal') {
+        if (this.damageReduction >= 1.0) return;  // 霸体：完全免伤
         if (this.damageReduction > 0) amount = Math.max(1, Math.round(amount * (1 - this.damageReduction)));
         this.hp -= amount;
 
@@ -1153,7 +1155,7 @@ class BossScrapDominator extends BaseEnemy {
                 !blockStates.includes(this.state)) {
                 this.phaseTransDone.add(tt.threshold);
                 this.phase = tt.nextPhase;
-                this.damageReduction = 0.95;
+                this.damageReduction = 1.0;  // 霸体：转阶段期间完全免伤
                 if (tt.special === 'HALF_EXIT') {
                     this.state = 'PHASE_HALF_EXIT';
                 } else {
@@ -1418,8 +1420,9 @@ class BossScrapDominator extends BaseEnemy {
                 }
                 if (currentDifficulty >= 2 && this.timer % 8 === 0) {
                     let bType = currentDifficulty >= 3 ? 'homing' : 'normal';
-                    enemyBullets.push(new EnemyBullet(this.x, this.y, -this.chargeDirY * 3, this.chargeDirX * 3, bType));
-                    enemyBullets.push(new EnemyBullet(this.x, this.y,  this.chargeDirY * 3, -this.chargeDirX * 3, bType));
+                    let gFactor = currentDifficulty >= 3 ? 0.04 : 0.12;  // 深渊模式降低制导能力
+                    enemyBullets.push(new EnemyBullet(this.x, this.y, -this.chargeDirY * 3, this.chargeDirX * 3, bType, gFactor));
+                    enemyBullets.push(new EnemyBullet(this.x, this.y,  this.chargeDirY * 3, -this.chargeDirX * 3, bType, gFactor));
                 }
                 let offScreen = this.y > height + 80 || this.y < -80 || this.x < -80 || this.x > width + 80;
                 if (offScreen || this.timer <= 0) {
@@ -2048,7 +2051,8 @@ class PNAMDrone {
             if (!e.active) continue;
             let dx = e.x-this.x, dy = e.y-this.y;
             if (dx*dx+dy*dy < (12+e.w/2*(e.scale||1))**2) {
-                this._nuclearExplosion(); this.active = false; return;
+                if (this.phase >= 1) { this._nuclearExplosion(); } else { this._smallExplosion(); }
+                this.active = false; return;
             }
         }
         if (this.y < -80 || this.y > height+80 || this.x < -80 || this.x > width+80)
