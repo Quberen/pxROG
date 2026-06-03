@@ -1803,21 +1803,21 @@ function loop(timestamp) {
 
             // === Sub-weapon Update Loop ===
             if (player.subweaponLoadout && player.subweaponLoadout.length > 0) {
-                // RF-A: per-slot threat-spread targeting (same logic as DS-1 but no kamikaze priority)
+                // RF-A: per-group threat targeting — all guns in the same slot group lock the same enemy
                 let rfaThreatSorted = enemies.filter(e => e.active).sort((a, b) => {
                     let ta = calcThreat(a.x, a.y, a.x-(a._prevX||a.x), a.y-(a._prevY||a.y));
                     let tb = calcThreat(b.x, b.y, b.x-(b._prevX||b.x), b.y-(b._prevY||b.y));
                     return tb - ta;
                 });
-                let rfaSlotTargets = [];
-                let _totalRfaSlots = player.subweaponSlots || 1;
-                for (let i = 0; i < _totalRfaSlots; i++) {
-                    rfaSlotTargets[i] = rfaThreatSorted[Math.min(i, rfaThreatSorted.length - 1)] || null;
+                let numSwGroups = (player.subweaponGroups || []).length;
+                let rfaGroupTargets = [];
+                for (let g = 0; g < numSwGroups; g++) {
+                    rfaGroupTargets[g] = rfaThreatSorted[Math.min(g, rfaThreatSorted.length - 1)] || null;
                 }
                 let slotIdx = 0;
                 (player.subweaponGroups || []).forEach((groupSize, groupId) => {
+                    let subTgt = rfaGroupTargets[Math.min(groupId, rfaGroupTargets.length - 1)] || null;
                     for (let s = 0; s < groupSize; s++) {
-                        let subTgt = rfaSlotTargets[slotIdx] || null;
                         let swType = player.subweaponLoadout[slotIdx] || 'rfa';
                         player.subweaponTimers[slotIdx] = (player.subweaponTimers[slotIdx] || 0) - 1;
                         if (swType === 'rfa' && player.subweaponTimers[slotIdx] <= 0 && subTgt) {

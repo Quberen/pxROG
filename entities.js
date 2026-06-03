@@ -544,7 +544,7 @@ class EnemyBullet {
 
         // Spiral: oscillate perpendicular to the base forward direction
         if (this.type === 'spiral') {
-            this.spiralPhase = (this.spiralPhase || 0) + 0.22;
+            this.spiralPhase = (this.spiralPhase || 0) + 0.055;
             let sway = Math.sin(this.spiralPhase) * 2.5;
             this.vx = (this.baseVx || 0) + (this.perpVx || 0) * sway;
             this.vy = (this.baseVy || 0) + (this.perpVy || 0) * sway;
@@ -994,12 +994,6 @@ class MutantTurret extends BaseEnemy {
             if (this.y < this.targetY) this.y += 1.5;
             this.checkBounds();
             return;
-        }
-
-        // Abyss: drift slowly toward player in X while positioned
-        if (this.isAbyss && this.y >= this.targetY) {
-            let dx = player.x - this.x;
-            if (Math.abs(dx) > 5) this.x += Math.sign(dx) * 0.4;
         }
 
         if (this.y < this.targetY) {
