@@ -2042,18 +2042,18 @@ function loop(timestamp) {
     ctx.rect(0, 0, width - RIGHT_UI_WIDTH, height);
     ctx.clip();
 
-    if (nuclearBWTimer > 0) ctx.filter = 'grayscale(1) brightness(1.3)';
     if (player && player.hp > 0 && endingState !== 'playerDead') player.draw(ctx);
     ctx.globalAlpha = 1.0;
 
     processGroup(aoeEffects, isPlaying); processGroup(burnEffects, isPlaying); processGroup(items, isPlaying); processGroup(bullets, isPlaying); processGroup(enemyBullets, isPlaying); processGroup(interceptorBullets, isPlaying); processGroup(avengerMissiles, isPlaying); processGroup(asrProjectiles, isPlaying); processGroup(pnamDrones, isPlaying); processGroup(enemies, isPlaying); processGroup(particles, isPlaying); processGroup(floatingTexts, isPlaying);
 
-    if (nuclearBWTimer > 0) {
-        ctx.filter = 'none';
-        if (isPlaying) nuclearBWTimer--;
-    }
-
     ctx.restore(); // 结束战斗画布裁剪
+
+    // 核爆BW效果：CSS compositor层灰度滤镜（GPU加速，不影响canvas绘制管线）
+    if (nuclearBWTimer > 0) {
+        canvas.style.filter = 'grayscale(1) brightness(1.15)';
+        if (isPlaying) { nuclearBWTimer--; if (nuclearBWTimer === 0) canvas.style.filter = ''; }
+    }
 
     // PNAM 被敌弹击中检测
     if (isPlaying && hitStopFrames <= 0) {
@@ -2763,7 +2763,7 @@ function startGame(levelId, useCheckpoint = false, shipType = 'rt1', loadoutData
     asrProjectiles = []; pnamDrones = []; asrSlotCds = []; pnamSlotCds = []; asrFireQueues = []; pnamFireQueues = [];
     waveIndexLastSaved = -1;
     score = 0; frameCount = 0; gameTimeSeconds = 0;
-    shakeQueue = []; shakeTimer = 0; hitStopFrames = 0; pendingPostHitstopEffect = null; flashScreenTimer = 0; nuclearBWTimer = 0; damageVignetteTimer = 0; lowHpShakeCooldown = 0; bossEnterPhase = 0;
+    shakeQueue = []; shakeTimer = 0; hitStopFrames = 0; pendingPostHitstopEffect = null; flashScreenTimer = 0; nuclearBWTimer = 0; canvas.style.filter = ''; damageVignetteTimer = 0; lowHpShakeCooldown = 0; bossEnterPhase = 0;
     comboCount = 0; comboTimer = 0; endingState = 'none'; endingTimer = 0;
     shopInflation = 0.0; wasSkillFull = false; wasInRestPhase = false; currentShopItems = [];
     directorPoints = 0; difficultyScore = 1.0;

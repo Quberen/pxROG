@@ -283,11 +283,29 @@ function initSprites() {
         [0,1,0,0,0,1,0]
     ], ['#ffffff'], 2);
 
-    // 核辐射图标像素化预渲染（低分辨率 → imageSmoothingEnabled=false 拉伸）
-    if (typeof _drawNuclearSymbol === 'function') {
-        let _nc = document.createElement('canvas');
-        _nc.width = 10; _nc.height = 10;
-        _drawNuclearSymbol(_nc.getContext('2d'), 5, 5, 4.5);
-        window._nuclearSymSprite = _nc;
-    }
+    // 核辐射图标：纯像素艺术，仅黑色+黄色，通过距离+角度计算每个像素
+    (function() {
+        let size = 12, c = size / 2;
+        let armAngles = [-Math.PI / 2, Math.PI / 6, 5 * Math.PI / 6];
+        let grid = [];
+        for (let row = 0; row < size; row++) {
+            let rowArr = [];
+            for (let col = 0; col < size; col++) {
+                let x = col - c + 0.5, y = row - c + 0.5;
+                let dist = Math.sqrt(x * x + y * y);
+                if (dist > 5.6) { rowArr.push(0); continue; }
+                if (dist < 1.8) { rowArr.push(2); continue; }
+                let ang = Math.atan2(y, x);
+                let inArm = armAngles.some(function(a) {
+                    let d = ang - a;
+                    while (d > Math.PI) d -= 2 * Math.PI;
+                    while (d < -Math.PI) d += 2 * Math.PI;
+                    return Math.abs(d) < Math.PI / 6 && dist >= 2.7 && dist <= 5.6;
+                });
+                rowArr.push(inArm ? 2 : 1);
+            }
+            grid.push(rowArr);
+        }
+        window._nuclearSymSprite = createPixelTexture(grid, ['#111111', '#ffeb3b'], 1);
+    })();
 }
