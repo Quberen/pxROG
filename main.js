@@ -1657,6 +1657,36 @@ function loop(timestamp) {
             }
             while (wingmanEntities.length > count) wingmanEntities.pop();
 
+            // Pre-compute DS-1 spread targets: kamikazes → all focus best kamikaze;
+            // otherwise each slot gets a different threat-ranked bullet.
+            let ds1Targets = [];
+            let ds1SlotRankMap = {};
+            {
+                let ds1Rank = 0;
+                for (let w of wingmanEntities) {
+                    if (w.type === 'ds1') ds1SlotRankMap[w.slotId] = ds1Rank++;
+                }
+                let ds1Count = ds1Rank;
+                if (ds1Count > 0) {
+                    let kamikazes = enemies.filter(e => e.active && e.isKamikaze);
+                    if (kamikazes.length > 0) {
+                        let bestK = null, bestKT = -Infinity;
+                        for (let e of kamikazes) {
+                            let t = calcThreat(e.x, e.y, e.x-(e._prevX||e.x), e.y-(e._prevY||e.y));
+                            if (t > bestKT) { bestKT = t; bestK = e; }
+                        }
+                        ds1Targets = Array(ds1Count).fill(bestK);
+                    } else {
+                        let sortedBullets = enemyBullets.filter(eb => eb.active).sort((a, b) =>
+                            calcThreat(b.x, b.y, b.vx, b.vy) - calcThreat(a.x, a.y, a.vx, a.vy)
+                        );
+                        for (let i = 0; i < ds1Count; i++) {
+                            ds1Targets[i] = sortedBullets[i] || sortedBullets[sortedBullets.length - 1] || null;
+                        }
+                    }
+                }
+            }
+
             for (let w of wingmanEntities) {
                 if (w.type === 'ds1') {
                     // DS-1: Follow player, intercept enemy bullets
@@ -1677,32 +1707,9 @@ function loop(timestamp) {
                     w.shootTimer = (w.shootTimer || 60) - 1;
                     let isFast = (w.vx*w.vx + w.vy*w.vy) > 9;
                     if (w.shootTimer <= 0 && !isFast) {
-                        // 150° forward arc (forward = straight up, ±75°)
-                        const ARC_LIMIT = Math.PI * 5 / 12; // 75 degrees
-                        function inArc(tx, ty) {
-                            let ang = Math.atan2(ty - w.y, tx - w.x);
-                            let diff = ang - (-Math.PI / 2);
-                            while (diff > Math.PI) diff -= Math.PI * 2;
-                            while (diff < -Math.PI) diff += Math.PI * 2;
-                            return Math.abs(diff) <= ARC_LIMIT;
-                        }
-                        let arcTarget = null, arcBest = -Infinity;
-                        let anyTarget = null, anyBest = -Infinity;
-                        for (let eb of enemyBullets) {
-                            if (!eb.active) continue;
-                            let t = calcThreat(eb.x, eb.y, eb.vx, eb.vy);
-                            if (t > anyBest) { anyBest = t; anyTarget = eb; }
-                            if (inArc(eb.x, eb.y) && t > arcBest) { arcBest = t; arcTarget = eb; }
-                        }
-                        for (let e of enemies) {
-                            if (!e.active || !e.isKamikaze) continue;
-                            let evx = e.x-(e._prevX||e.x), evy = e.y-(e._prevY||e.y);
-                            let t = calcThreat(e.x, e.y, evx, evy);
-                            if (t > anyBest) { anyBest = t; anyTarget = e; }
-                            if (inArc(e.x, e.y) && t > arcBest) { arcBest = t; arcTarget = e; }
-                        }
-                        let chosen = arcTarget || anyTarget;
-                        if (chosen) interceptorBullets.push(new InterceptorBullet(w.x, w.y, chosen));
+                        let ds1Rank = ds1SlotRankMap[w.slotId] !== undefined ? ds1SlotRankMap[w.slotId] : 0;
+                        let chosen = ds1Targets[ds1Rank] || null;
+                        if (chosen && chosen.active) interceptorBullets.push(new InterceptorBullet(w.x, w.y, chosen));
                         w.shootTimer = 60;
                     }
                     ctx.save();
