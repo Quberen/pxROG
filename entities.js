@@ -1028,7 +1028,8 @@ class ArcFlyer extends BaseEnemy {
         super(0, y, isAbyss ? sprites.arc_swarm : sprites.arc, def.hp, def.weight, isAbyss ? '#ab47bc' : '#37474f');
         
         this.isLeft = isLeft;
-        this.x = this.isLeft ? -30 : width + 30;
+        let _rUIW0 = typeof RIGHT_UI_WIDTH !== 'undefined' ? RIGHT_UI_WIDTH : 0;
+        this.x = this.isLeft ? -30 : (width - _rUIW0) + 30;
         this.startY = y + 80;
         this.progress = progressOffset;
         this.bombTimer = 0;
@@ -1041,11 +1042,13 @@ class ArcFlyer extends BaseEnemy {
         this.progress += 0.012;
         
         if (this.progress > 0) {
-            this.x = this.isLeft ? -30 + (width + 60) * this.progress : width + 30 - (width + 60) * this.progress;
+            let _rUIW = typeof RIGHT_UI_WIDTH !== 'undefined' ? RIGHT_UI_WIDTH : 0;
+            let _gameW = width - _rUIW;
+            this.x = this.isLeft ? -30 + (_gameW + 60) * this.progress : (_gameW + 30) - (_gameW + 60) * this.progress;
             this.y = this.startY + Math.sin(this.progress * Math.PI) * 150;
-            
+
             this.bombTimer--;
-            if (this.bombTimer <= 0 && this.x > 10 && this.x < width - 10) {
+            if (this.bombTimer <= 0 && this.x > 10 && this.x < _gameW - 10) {
                 enemyBullets.push(new EnemyBullet(this.x, this.y, 0, 4, 'normal'));
                 this.bombTimer = 35;
             }
@@ -2101,7 +2104,7 @@ class PNAMDrone {
                 Math.random()<0.5 ? '#78909c' : '#b0bec5',
                 Math.cos(ang)*spd, Math.sin(ang)*spd, 45+Math.random()*25));
         }
-        flashScreenTimer = 25; flashScreenColor = '255, 255, 255';
+        if (typeof nuclearBWTimer !== 'undefined') nuclearBWTimer = 50;
         triggerShake(20, 35);
     }
 

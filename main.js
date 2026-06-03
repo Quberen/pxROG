@@ -62,6 +62,7 @@ let hitStopFrames = 0;
 let pendingPostHitstopEffect = null;
 let flashScreenTimer = 0;
 let flashScreenColor = '255,0,0';
+let nuclearBWTimer = 0;
 let damageVignetteTimer = 0, damageVignetteColor = '220,0,50';
 let currentLevel = 'debug';
 
@@ -79,7 +80,7 @@ const waveToastEl = document.createElement('div');
 waveToastEl.id = 'wave-toast';
 waveToastEl.style.position = 'fixed';
 waveToastEl.style.top = '15%';
-waveToastEl.style.left = '50%';
+waveToastEl.style.left = 'calc(50% - 34px)';
 waveToastEl.style.transform = 'translate(-50%, -50%)';
 waveToastEl.style.color = '#fff';
 waveToastEl.style.fontFamily = '"Press Start 2P", "DotGothic16", monospace';
@@ -762,8 +763,8 @@ function _drawNuclearSymbol(ctx, cx, cy, r) {
         let startAng = (i * Math.PI * 2 / 3) - Math.PI / 2;
         let endAng = startAng + Math.PI / 3;
         ctx.beginPath();
-        ctx.arc(cx, cy, r, startAng + 0.22, endAng - 0.22);
-        ctx.arc(cx, cy, r * 0.42, endAng - 0.22, startAng + 0.22, true);
+        ctx.arc(cx, cy, r, startAng + 0.30, endAng - 0.30);
+        ctx.arc(cx, cy, r * 0.42, endAng - 0.30, startAng + 0.30, true);
         ctx.closePath(); ctx.fill();
     }
     ctx.restore();
@@ -2032,10 +2033,23 @@ function loop(timestamp) {
         }
     }
 
+    if (nuclearBWTimer > 0) ctx.filter = 'grayscale(1) brightness(1.3)';
     if (player && player.hp > 0 && endingState !== 'playerDead') player.draw(ctx);
     ctx.globalAlpha = 1.0;
 
     processGroup(aoeEffects, isPlaying); processGroup(burnEffects, isPlaying); processGroup(items, isPlaying); processGroup(bullets, isPlaying); processGroup(enemyBullets, isPlaying); processGroup(interceptorBullets, isPlaying); processGroup(avengerMissiles, isPlaying); processGroup(asrProjectiles, isPlaying); processGroup(pnamDrones, isPlaying); processGroup(enemies, isPlaying); processGroup(particles, isPlaying); processGroup(floatingTexts, isPlaying);
+
+    if (nuclearBWTimer > 0) {
+        ctx.filter = 'none';
+        let _gAlpha = Math.max(0.05, nuclearBWTimer / 50 * 0.38);
+        ctx.save();
+        ctx.globalAlpha = _gAlpha;
+        ctx.filter = 'grayscale(1) brightness(2.5)';
+        ctx.drawImage(canvas, 0, 0, width - RIGHT_UI_WIDTH, height, 4, 4, width - RIGHT_UI_WIDTH, height);
+        ctx.restore();
+        if (isPlaying) nuclearBWTimer--;
+    }
+
     // PNAM 被敌弹击中检测
     if (isPlaying && hitStopFrames <= 0) {
         for (let drone of pnamDrones) {
@@ -2744,7 +2758,7 @@ function startGame(levelId, useCheckpoint = false, shipType = 'rt1', loadoutData
     asrProjectiles = []; pnamDrones = []; asrSlotCds = []; pnamSlotCds = []; asrFireQueues = []; pnamFireQueues = [];
     waveIndexLastSaved = -1;
     score = 0; frameCount = 0; gameTimeSeconds = 0;
-    shakeQueue = []; shakeTimer = 0; hitStopFrames = 0; pendingPostHitstopEffect = null; flashScreenTimer = 0; damageVignetteTimer = 0; lowHpShakeCooldown = 0; bossEnterPhase = 0;
+    shakeQueue = []; shakeTimer = 0; hitStopFrames = 0; pendingPostHitstopEffect = null; flashScreenTimer = 0; nuclearBWTimer = 0; damageVignetteTimer = 0; lowHpShakeCooldown = 0; bossEnterPhase = 0;
     comboCount = 0; comboTimer = 0; endingState = 'none'; endingTimer = 0;
     shopInflation = 0.0; wasSkillFull = false; wasInRestPhase = false; currentShopItems = [];
     directorPoints = 0; difficultyScore = 1.0;

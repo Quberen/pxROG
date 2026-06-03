@@ -424,8 +424,9 @@ window.WORKSHOP = {
                 let mutantProb = [0.20, 0.60, 1.0, 1.0][diff];
                 let mutantCount = diff >= 2 ? 2 : 1;
                 if (Math.random() < mutantProb) {
+                    let _gameW = (typeof RIGHT_UI_WIDTH !== 'undefined') ? w - RIGHT_UI_WIDTH : w;
                     let leftX  = w * (0.08 + Math.random() * 0.10);  // left side
-                    let rightX = w * (0.82 + Math.random() * 0.10);  // right side
+                    let rightX = _gameW * (0.82 + Math.random() * 0.10);  // right side (game area)
                     if (mutantCount === 1) {
                         spawn('MutantTurret', Math.random() < 0.5 ? leftX : rightX, { isAbyss: diff >= 3 });
                     } else {
