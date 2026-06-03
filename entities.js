@@ -531,17 +531,25 @@ class EnemyBullet {
             let dx = player.x - this.x;
             let dy = player.y - this.y;
             let dist = Math.sqrt(dx * dx + dy * dy) || 1;
-            
+
             this.vx += (dx / dist) * this.guidanceFactor;
             this.vy += (dy / dist) * this.guidanceFactor;
-            
+
             let speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
             if (speed > 4.0) {
                 this.vx = (this.vx / speed) * 4.0;
                 this.vy = (this.vy / speed) * 4.0;
             }
         }
-        
+
+        // Spiral: oscillate perpendicular to the base forward direction
+        if (this.type === 'spiral') {
+            this.spiralPhase = (this.spiralPhase || 0) + 0.22;
+            let sway = Math.sin(this.spiralPhase) * 2.5;
+            this.vx = (this.baseVx || 0) + (this.perpVx || 0) * sway;
+            this.vy = (this.baseVy || 0) + (this.perpVy || 0) * sway;
+        }
+
         this.x += this.vx;
         this.y += this.vy;
         
@@ -999,12 +1007,21 @@ class MutantTurret extends BaseEnemy {
         } else {
             this.shootTimer--;
             if (this.shootTimer <= 0) {
-                let vx = Math.cos(this.spiralAngle) * 3.5;
-                let vy = Math.sin(this.spiralAngle) * 3.5;
-                enemyBullets.push(new EnemyBullet(
-                    this.x, this.y + this.h * this.scale / 2, vx, vy, 'normal'
-                ));
-                this.spiralAngle += 0.42; // ~24° per shot → full rotation in ~15 shots (4.5s)
+                // Fire toward player; bullet spirals perpendicular to this direction
+                let dx = player.x - this.x;
+                let dy = player.y - this.y;
+                let dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                let spd = 3.5;
+                let bvx = (dx / dist) * spd;
+                let bvy = (dy / dist) * spd;
+                let b = new EnemyBullet(
+                    this.x, this.y + this.h * this.scale / 2, bvx, bvy, 'spiral'
+                );
+                b.baseVx = bvx; b.baseVy = bvy;
+                b.perpVx = -dy / dist; b.perpVy = dx / dist; // perpendicular unit vector
+                b.spiralPhase = this.spiralAngle;             // stagger phase across shots
+                this.spiralAngle += 1.05;                     // ~60° offset per shot for variety
+                enemyBullets.push(b);
                 this.shootTimer = this.fireInterval;
             }
         }

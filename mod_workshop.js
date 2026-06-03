@@ -518,12 +518,19 @@ window.WORKSHOP = {
                 if (!wave) return;
 
                 const NON_EARLY_EXIT = ['p0_rest', 's2_starfall', 's2_supply', 'p8_boss'];
-                // Early exit: all enemies dead AND ≥3s since last spawn (prevents triggering mid-wave between spawn intervals)
-                if (!NON_EARLY_EXIT.includes(wave.type)
+                const REQUIRE_CLEAR = !NON_EARLY_EXIT.includes(wave.type);
+
+                // Advance when all enemies clear (two paths):
+                // 1. Early exit: killed ahead of schedule; 3s grace prevents mid-spawn-gap false trigger.
+                // 2. Timer done: pattern has stopped; wait for screen to be empty.
+                let earlyExit = REQUIRE_CLEAR
                         && (st.waveEnemiesSpawned || 0) > 0
                         && typeof enemies !== 'undefined' && enemies.length === 0
                         && typeof frameCount !== 'undefined'
-                        && frameCount - (st.waveLastSpawnFrame || 0) > 180) {
+                        && frameCount - (st.waveLastSpawnFrame || 0) > 180;
+                let timerDoneExit = !!st.waveTimerDone
+                        && typeof enemies !== 'undefined' && enemies.length === 0;
+                if (earlyExit || timerDoneExit) {
                     let nextWave = this.timeline[st.currentWave + 1];
                     if (nextWave && nextWave.type === 'p0_rest' && player && player.upgrades && player.upgrades.shield_gen > 0) {
                         let healAmt = player.getStat('maxHp') * 0.08 * player.upgrades.shield_gen;
@@ -534,12 +541,16 @@ window.WORKSHOP = {
                     st.waveTimer = 0;
                     st.waveEnemiesSpawned = 0;
                     st.waveLastSpawnFrame = 0;
+                    st.waveTimerDone = false;
                     return;
                 }
 
-                if (WORKSHOP.patterns[wave.type]) WORKSHOP.patterns[wave.type](st.waveTimer, frame, currentDifficulty, w);
+                // Stop spawning once the pattern's time has expired
+                if (!st.waveTimerDone && WORKSHOP.patterns[wave.type]) {
+                    WORKSHOP.patterns[wave.type](st.waveTimer, frame, currentDifficulty, w);
+                }
 
-                if (frame % 60 === 0) {
+                if (frame % 60 === 0 && !st.waveTimerDone) {
                     if (st.waveTimer === 0) {
                         let waveMeta = WORKSHOP.waveNames[wave.type] || { name: `未知波次: ${wave.type}`, color: "#ffffff" };
                         if (typeof EventBus !== 'undefined') EventBus.emit('WAVE_STARTED', waveMeta);
@@ -561,23 +572,26 @@ window.WORKSHOP = {
                         if (st.waveTimer >= (wave.duration || 999)) shouldExit = true;
                     }
                     if (shouldExit) {
-                        let nextWave = this.timeline[st.currentWave + 1];
-                        if (nextWave && nextWave.type === 'p0_rest' && player && player.upgrades && player.upgrades.shield_gen > 0) {
-                            let healAmt = player.getStat('maxHp') * 0.08 * player.upgrades.shield_gen;
-                            player.hp = Math.min(player.getStat('maxHp'), player.hp + healAmt);
-                            if (typeof showSystemMessage === 'function') showSystemMessage(`屏障再生 +${Math.round(healAmt)}`, '#00e676');
+                        if (REQUIRE_CLEAR && typeof enemies !== 'undefined' && enemies.length > 0) {
+                            st.waveTimerDone = true; // Freeze spawning; frame-level check waits for clear
+                        } else {
+                            let nextWave = this.timeline[st.currentWave + 1];
+                            if (nextWave && nextWave.type === 'p0_rest' && player && player.upgrades && player.upgrades.shield_gen > 0) {
+                                let healAmt = player.getStat('maxHp') * 0.08 * player.upgrades.shield_gen;
+                                player.hp = Math.min(player.getStat('maxHp'), player.hp + healAmt);
+                                if (typeof showSystemMessage === 'function') showSystemMessage(`屏障再生 +${Math.round(healAmt)}`, '#00e676');
+                            }
+                            st.currentWave++;
+                            st.waveTimer = 0;
+                            st.waveEnemiesSpawned = 0;
+                            st.waveLastSpawnFrame = 0;
+                            st.waveTimerDone = false;
                         }
-                        st.currentWave++;
-                        st.waveTimer = 0;
-                        st.waveEnemiesSpawned = 0;
-                        st.waveLastSpawnFrame = 0;
                     }
                 }
             }
         },
 
-
-        'sector1': {
 
             name: "区域 1: 废星边缘",
             shopItems: ['high_explosive', 'spread', 'skill_duration', 'burst_core',
@@ -636,12 +650,19 @@ window.WORKSHOP = {
                 if (!wave) return;
 
                 const NON_EARLY_EXIT = ['p0_rest', 'p0_starfall', 'p5_supply', 'p8_boss'];
-                // Early exit: all enemies dead AND ≥3s since last spawn
-                if (!NON_EARLY_EXIT.includes(wave.type)
+                const REQUIRE_CLEAR = !NON_EARLY_EXIT.includes(wave.type);
+
+                // Advance when all enemies clear:
+                // 1. Early exit: killed ahead of schedule; 3s grace prevents mid-spawn-gap false trigger.
+                // 2. Timer done: pattern has stopped; wait for screen to be empty.
+                let earlyExit = REQUIRE_CLEAR
                         && (st.waveEnemiesSpawned || 0) > 0
                         && typeof enemies !== 'undefined' && enemies.length === 0
                         && typeof frameCount !== 'undefined'
-                        && frameCount - (st.waveLastSpawnFrame || 0) > 180) {
+                        && frameCount - (st.waveLastSpawnFrame || 0) > 180;
+                let timerDoneExit = !!st.waveTimerDone
+                        && typeof enemies !== 'undefined' && enemies.length === 0;
+                if (earlyExit || timerDoneExit) {
                     let nextWave = this.timeline[st.currentWave + 1];
                     if (nextWave && nextWave.type === 'p0_rest' && player && player.upgrades && player.upgrades.shield_gen > 0) {
                         let healAmt = player.getStat('maxHp') * 0.08 * player.upgrades.shield_gen;
@@ -652,12 +673,16 @@ window.WORKSHOP = {
                     st.waveTimer = 0;
                     st.waveEnemiesSpawned = 0;
                     st.waveLastSpawnFrame = 0;
+                    st.waveTimerDone = false;
                     return;
                 }
 
-                if (WORKSHOP.patterns[wave.type]) WORKSHOP.patterns[wave.type](st.waveTimer, frame, currentDifficulty, w);
+                // Stop spawning once pattern's time has expired
+                if (!st.waveTimerDone && WORKSHOP.patterns[wave.type]) {
+                    WORKSHOP.patterns[wave.type](st.waveTimer, frame, currentDifficulty, w);
+                }
 
-                if (frame % 60 === 0) {
+                if (frame % 60 === 0 && !st.waveTimerDone) {
                     if (st.waveTimer === 0) {
                         let waveMeta = WORKSHOP.waveNames[wave.type] || { name: `未知波次: ${wave.type}`, color: "#ffffff" };
                         if (typeof EventBus !== 'undefined') EventBus.emit('WAVE_STARTED', waveMeta);
@@ -682,17 +707,21 @@ window.WORKSHOP = {
                     }
 
                     if (shouldExit) {
-                        // shield_gen 效果：进入休整波次时回复血量
-                        let nextWave = this.timeline[st.currentWave + 1];
-                        if (nextWave && nextWave.type === 'p0_rest' && player && player.upgrades && player.upgrades.shield_gen > 0) {
-                            let healAmt = player.getStat('maxHp') * 0.08 * player.upgrades.shield_gen;
-                            player.hp = Math.min(player.getStat('maxHp'), player.hp + healAmt);
-                            if (typeof showSystemMessage === 'function') showSystemMessage(`屏障再生 +${Math.round(healAmt)}`, '#00e676');
+                        if (REQUIRE_CLEAR && typeof enemies !== 'undefined' && enemies.length > 0) {
+                            st.waveTimerDone = true; // Freeze spawning; frame-level check waits for clear
+                        } else {
+                            let nextWave = this.timeline[st.currentWave + 1];
+                            if (nextWave && nextWave.type === 'p0_rest' && player && player.upgrades && player.upgrades.shield_gen > 0) {
+                                let healAmt = player.getStat('maxHp') * 0.08 * player.upgrades.shield_gen;
+                                player.hp = Math.min(player.getStat('maxHp'), player.hp + healAmt);
+                                if (typeof showSystemMessage === 'function') showSystemMessage(`屏障再生 +${Math.round(healAmt)}`, '#00e676');
+                            }
+                            st.currentWave++;
+                            st.waveTimer = 0;
+                            st.waveEnemiesSpawned = 0;
+                            st.waveLastSpawnFrame = 0;
+                            st.waveTimerDone = false;
                         }
-                        st.currentWave++;
-                        st.waveTimer = 0;
-                        st.waveEnemiesSpawned = 0;
-                        st.waveLastSpawnFrame = 0;
                     }
                 }
             }
