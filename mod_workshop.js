@@ -602,6 +602,7 @@ window.WORKSHOP = {
         },
 
 
+        'sector1': {
             name: "区域 1: 废星边缘",
             shopItems: ['high_explosive', 'spread', 'skill_duration', 'burst_core',
                         'rapid_charge', 'phase_dodge', 'afterburn', 'shield_gen', 'skill_cd',

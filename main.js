@@ -763,8 +763,8 @@ function _drawNuclearSymbol(ctx, cx, cy, r) {
         let startAng = (i * Math.PI * 2 / 3) - Math.PI / 2;
         let endAng = startAng + Math.PI / 3;
         ctx.beginPath();
-        ctx.arc(cx, cy, r, startAng + 0.30, endAng - 0.30);
-        ctx.arc(cx, cy, r * 0.42, endAng - 0.30, startAng + 0.30, true);
+        ctx.arc(cx, cy, r, startAng + 0.05, endAng - 0.05);
+        ctx.arc(cx, cy, r * 0.42, endAng - 0.05, startAng + 0.05, true);
         ctx.closePath(); ctx.fill();
     }
     ctx.restore();
@@ -1599,9 +1599,9 @@ function loop(timestamp) {
     ctx.fillStyle = '#050510'; ctx.fillRect(0, 0, width, height); updateAndDrawStars(ctx, isPlaying);
     ctx.imageSmoothingEnabled = false;
     // 右侧UI背景面板
-    ctx.fillStyle = '#07071a';
+    ctx.fillStyle = '#111128';
     ctx.fillRect(width - RIGHT_UI_WIDTH, 0, RIGHT_UI_WIDTH, height);
-    ctx.fillStyle = '#1e1e3a';
+    ctx.fillStyle = '#2a2a4e';
     ctx.fillRect(width - RIGHT_UI_WIDTH, 0, 1, height);
 
     ctx.save();
@@ -2033,6 +2033,12 @@ function loop(timestamp) {
         }
     }
 
+    // 战斗画布裁剪：实体不渲染到右侧UI面板
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, width - RIGHT_UI_WIDTH, height);
+    ctx.clip();
+
     if (nuclearBWTimer > 0) ctx.filter = 'grayscale(1) brightness(1.3)';
     if (player && player.hp > 0 && endingState !== 'playerDead') player.draw(ctx);
     ctx.globalAlpha = 1.0;
@@ -2041,14 +2047,10 @@ function loop(timestamp) {
 
     if (nuclearBWTimer > 0) {
         ctx.filter = 'none';
-        let _gAlpha = Math.max(0.05, nuclearBWTimer / 50 * 0.38);
-        ctx.save();
-        ctx.globalAlpha = _gAlpha;
-        ctx.filter = 'grayscale(1) brightness(2.5)';
-        ctx.drawImage(canvas, 0, 0, width - RIGHT_UI_WIDTH, height, 4, 4, width - RIGHT_UI_WIDTH, height);
-        ctx.restore();
         if (isPlaying) nuclearBWTimer--;
     }
+
+    ctx.restore(); // 结束战斗画布裁剪
 
     // PNAM 被敌弹击中检测
     if (isPlaying && hitStopFrames <= 0) {
