@@ -760,11 +760,11 @@ function _drawNuclearSymbol(ctx, cx, cy, r) {
     ctx.beginPath(); ctx.arc(cx, cy, r * 0.28, 0, Math.PI * 2); ctx.fill();
     // 三个60°环形扇段（内径 r*0.42，外径 r）
     for (let i = 0; i < 3; i++) {
-        let startAng = (i * Math.PI * 2 / 3) - Math.PI / 2;
+        let startAng = (i - 1) * Math.PI * 2 / 3;
         let endAng = startAng + Math.PI / 3;
         ctx.beginPath();
-        ctx.arc(cx, cy, r, startAng + 0.05, endAng - 0.05);
-        ctx.arc(cx, cy, r * 0.42, endAng - 0.05, startAng + 0.05, true);
+        ctx.arc(cx, cy, r * 0.84, startAng + 0.05, endAng - 0.05);
+        ctx.arc(cx, cy, r * 0.40, endAng - 0.05, startAng + 0.05, true);
         ctx.closePath(); ctx.fill();
     }
     ctx.restore();
@@ -825,8 +825,11 @@ function drawPixelButton(id, icon, progress, color, isActive = false, cdProgress
         ctx.fillRect(4, 4, 40, 40);
         ctx.globalAlpha = 1.0;
     }
-    if (id && id.includes('pnam')) {
-        _drawNuclearSymbol(ctx, 38, 38, 8);
+    if (id && id.includes('pnam') && window._nuclearSymSprite) {
+        ctx.save();
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(window._nuclearSymSprite, 30, 30, 12, 12);
+        ctx.restore();
     }
     // PT 费用：右上角罗马数字（始终白色加粗）
     if (ptCost > 0) {

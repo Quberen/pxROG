@@ -2076,10 +2076,10 @@ class PNAMDrone {
         aoeEffects.push(new AOEEffect(this.x, this.y, r2, '#ccff90'));
         aoeEffects.push(new AOEEffect(this.x, this.y, r2 * 1.4, '#ffffff'));
         // 中心爆炸粒子
-        createExplosion(this.x, this.y, '#ffffff', 40);
-        createExplosion(this.x, this.y, '#ccff90', 24);
+        createExplosion(this.x, this.y, '#ffffff', 18);
+        createExplosion(this.x, this.y, '#ccff90', 10);
         // 蘑菇云：向上喷射粒子（柱）
-        for (let i = 0; i < 32; i++) {
+        for (let i = 0; i < 14; i++) {
             let spread = (Math.random()-0.5) * 0.6;
             let spd = 4 + Math.random() * 7;
             particles.push(new Particle(this.x, this.y,
@@ -2088,8 +2088,8 @@ class PNAMDrone {
                 50 + Math.random() * 30));
         }
         // 蘑菇帽：中层向外辐射粒子
-        for (let i = 0; i < 24; i++) {
-            let ang = (i / 24) * Math.PI * 2;
+        for (let i = 0; i < 10; i++) {
+            let ang = (i / 10) * Math.PI * 2;
             let spd = 3 + Math.random() * 4;
             particles.push(new Particle(
                 this.x + Math.cos(ang)*22, this.y - 50,
@@ -2098,13 +2098,13 @@ class PNAMDrone {
                 35 + Math.random()*20));
         }
         // 烟雾向四周扩散
-        for (let i = 0; i < 24; i++) {
+        for (let i = 0; i < 10; i++) {
             let ang = Math.random()*Math.PI*2, spd = 2+Math.random()*5;
             particles.push(new Particle(this.x, this.y,
                 Math.random()<0.5 ? '#78909c' : '#b0bec5',
                 Math.cos(ang)*spd, Math.sin(ang)*spd, 45+Math.random()*25));
         }
-        if (typeof nuclearBWTimer !== 'undefined') nuclearBWTimer = 50;
+        if (typeof nuclearBWTimer !== 'undefined') nuclearBWTimer = 5;
         triggerShake(20, 35);
     }
 

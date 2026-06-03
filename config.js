@@ -282,4 +282,12 @@ function initSprites() {
         [1,1,1,1,1,1,1],
         [0,1,0,0,0,1,0]
     ], ['#ffffff'], 2);
+
+    // 核辐射图标像素化预渲染（低分辨率 → imageSmoothingEnabled=false 拉伸）
+    if (typeof _drawNuclearSymbol === 'function') {
+        let _nc = document.createElement('canvas');
+        _nc.width = 10; _nc.height = 10;
+        _drawNuclearSymbol(_nc.getContext('2d'), 5, 5, 4.5);
+        window._nuclearSymSprite = _nc;
+    }
 }
