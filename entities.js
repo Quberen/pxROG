@@ -1908,6 +1908,173 @@ class AvengerMissile {
     }
 }
 
+class ASRocketProjectile {
+    constructor(x, y, vx, vy) {
+        this.x = x; this.y = y;
+        this.vx = vx; this.vy = vy;
+        this.active = true;
+    }
+
+    update() {
+        this.x += this.vx; this.y += this.vy;
+        // 灰色烟雾拖尾
+        if (particles.length < 300) {
+            particles.push(new Particle(this.x, this.y, '#757575',
+                (Math.random()-0.5)*0.8, (Math.random()-0.5)*0.5 + 0.2, 8));
+        }
+        const AOE_R = 30;
+        const _explode = () => {
+            aoeEffects.push(new AOEEffect(this.x, this.y, AOE_R, '#ff5252'));
+            createExplosion(this.x, this.y, '#ff5722', 6);
+            enemies.forEach(e => {
+                if (!e.active) return;
+                let dx = e.x-this.x, dy = e.y-this.y;
+                if (dx*dx+dy*dy < AOE_R*AOE_R) e.takeDamage(5, true, false, 'asr_aoe');
+            });
+            enemyBullets.forEach(b => {
+                if (!b.active) return;
+                let dx = b.x-this.x, dy = b.y-this.y;
+                if (dx*dx+dy*dy < AOE_R*AOE_R) b.active = false;
+            });
+            this.active = false;
+        };
+        for (let e of enemies) {
+            if (!e.active) continue;
+            let dx = e.x-this.x, dy = e.y-this.y;
+            if (dx*dx+dy*dy < (8+e.w/2*(e.scale||1))**2) {
+                e.takeDamage(20, true, false, 'asr');
+                _explode(); return;
+            }
+        }
+        for (let eb of enemyBullets) {
+            if (!eb.active) continue;
+            let dx = eb.x-this.x, dy = eb.y-this.y;
+            if (dx*dx+dy*dy < 64) { eb.active = false; _explode(); return; }
+        }
+        if (this.y < -20 || this.y > height+20 || this.x < -20 || this.x > width+20)
+            this.active = false;
+    }
+
+    draw(ctx) {
+        ctx.save();
+        let ang = Math.atan2(this.vy, this.vx);
+        ctx.translate(this.x, this.y);
+        ctx.rotate(ang + Math.PI/2);
+        ctx.fillStyle = '#ef5350';
+        ctx.fillRect(-1.5, -3.5, 3, 7);
+        ctx.fillStyle = '#ffcdd2';
+        ctx.fillRect(-1, -5, 2, 2);
+        ctx.restore();
+    }
+}
+
+class PNAMDrone {
+    constructor(x, y) {
+        this.x = x; this.y = y;
+        this.vx = 0; this.vy = 0;
+        this.hp = 65; this.maxHp = 65;
+        this.phase = 0; this.phaseTimer = 0;
+        this.maxSpeed = 16 * 0.7;
+        this._brownTimer = 0;
+        this._brownTx = x; this._brownTy = y;
+        this._spawnX = x; this._spawnY = y;
+        this.active = true;
+    }
+
+    takeDamage(dmg) {
+        this.hp -= dmg;
+        if (this.hp <= 0) { this._smallExplosion(); this.active = false; }
+    }
+
+    update() {
+        this.phaseTimer++;
+        if (this.phase === 0) {
+            this._brownTimer--;
+            if (this._brownTimer <= 0) {
+                this._brownTimer = 8 + Math.floor(Math.random() * 8);
+                this._brownTx = this._spawnX + (Math.random()-0.5)*36;
+                this._brownTy = this._spawnY + (Math.random()-0.5)*16;
+            }
+            let dx = this._brownTx-this.x, dy = this._brownTy-this.y;
+            let d = Math.sqrt(dx*dx+dy*dy) || 1;
+            this.vx = (dx/d)*1.2; this.vy = (dy/d)*1.2;
+            if (this.phaseTimer >= 96) { this.phase = 1; this.phaseTimer = 0; }
+        } else if (this.phase === 1) {
+            let t = this.phaseTimer / 132;
+            this.vy = -this.maxSpeed * t;
+            this.vx *= 0.88;
+            if (this.phaseTimer >= 132) { this.phase = 2; this.phaseTimer = 0; }
+        } else {
+            this.vy = -this.maxSpeed; this.vx = 0;
+        }
+        this.x += this.vx; this.y += this.vy;
+        // 飞行拖尾（phase1+2）
+        if (this.phase >= 1 && particles.length < 300) {
+            particles.push(new Particle(
+                this.x + (Math.random()-0.5)*4, this.y + 7,
+                Math.random() < 0.5 ? '#546e7a' : '#90a4ae',
+                (Math.random()-0.5)*1, Math.random()*1.5, 18));
+        }
+        for (let e of enemies) {
+            if (!e.active) continue;
+            let dx = e.x-this.x, dy = e.y-this.y;
+            if (dx*dx+dy*dy < (12+e.w/2*(e.scale||1))**2) {
+                this._nuclearExplosion(); this.active = false; return;
+            }
+        }
+        if (this.y < -80 || this.y > height+80 || this.x < -80 || this.x > width+80)
+            this.active = false;
+    }
+
+    _nuclearExplosion() {
+        let r1 = 80, r2 = 200;
+        enemies.forEach(e => {
+            if (!e.active) return;
+            let dx = e.x-this.x, dy = e.y-this.y, d2 = dx*dx+dy*dy;
+            if (d2 < r1*r1) e.takeDamage(350, true, false, 'pnam');
+            else if (d2 < r2*r2) e.takeDamage(100, true, false, 'pnam_shock');
+            e.takeDamage(20, true, false, 'pnam_rad');
+        });
+        aoeEffects.push(new AOEEffect(this.x, this.y, r1, '#b9f6ca'));
+        aoeEffects.push(new AOEEffect(this.x, this.y, r2, '#ccff90'));
+        createExplosion(this.x, this.y, '#ffffff', 30);
+        createExplosion(this.x, this.y, '#e8f5e9', 20);
+        for (let i = 0; i < 24; i++) {
+            let ang = Math.random()*Math.PI*2, spd = 2+Math.random()*5;
+            particles.push(new Particle(this.x, this.y,
+                Math.random()<0.5 ? '#78909c' : '#b0bec5',
+                Math.cos(ang)*spd, Math.sin(ang)*spd, 40+Math.random()*20));
+        }
+        flashScreenTimer = 25; flashScreenColor = '255, 255, 255';
+        triggerShake(18, 30);
+    }
+
+    _smallExplosion() {
+        let aoeR = 40;
+        enemies.forEach(e => {
+            if (!e.active) return;
+            let dx = e.x-this.x, dy = e.y-this.y;
+            if (dx*dx+dy*dy < aoeR*aoeR) e.takeDamage(45, true, false, 'pnam_death');
+        });
+        aoeEffects.push(new AOEEffect(this.x, this.y, aoeR, '#ff9800'));
+        createExplosion(this.x, this.y, '#ff9800', 12);
+        triggerShake(5, 10);
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        let spr = sprites.pnam_drone;
+        if (spr) {
+            ctx.drawImage(spr, -spr.width/2, -spr.height/2);
+        } else {
+            ctx.fillStyle = '#37474f'; ctx.fillRect(-8,-5,16,10);
+            ctx.fillStyle = '#ff1744'; ctx.fillRect(-6,-2,3,3); ctx.fillRect(3,-2,3,3);
+        }
+        ctx.restore();
+    }
+}
+
 function triggerAOE(x, y, exDmg = null, exR = null, color = '#ab47bc') {
     let level = (player && player.equipment && player.equipment.aoe && player.equipment.aoe.equipped) ? player.equipment.aoe.level : 0;
     if (level === 0 && exDmg === null) return;

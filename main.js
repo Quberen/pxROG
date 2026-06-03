@@ -158,6 +158,12 @@ let interceptorBullets = [];
 let avengerMissiles = [];
 let avengerSlotCds = [];
 let avengerFireQueues = [];
+let asrProjectiles = [];
+let pnamDrones = [];
+let asrSlotCds = [];
+let pnamSlotCds = [];
+let asrFireQueues = [];
+let pnamFireQueues = [];
 let pendingLoadoutData = { wingman: [], subweapon: [] };
 let isDebugMode = false;
 let score = 0, frameCount = 0, gameTimeSeconds = 0;
@@ -729,7 +735,22 @@ function drawIndicator(color) {
     ic.shadowBlur = 0; ic.fillStyle = '#fff'; ic.fillRect(6, 5, 2, 2); 
 }
 
-function drawPixelButton(id, icon, progress, color, isActive = false, cdProgress = 0) {
+function _drawNuclearSymbol(ctx, cx, cy, r) {
+    ctx.save();
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = '#ffeb3b';
+    ctx.beginPath(); ctx.arc(cx, cy, r * 0.28, 0, Math.PI * 2); ctx.fill();
+    for (let i = 0; i < 3; i++) {
+        let startAng = (i * Math.PI * 2 / 3) - Math.PI / 2;
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(startAng) * r * 0.32, cy + Math.sin(startAng) * r * 0.32);
+        ctx.arc(cx, cy, r, startAng + 0.28, startAng + Math.PI * 2 / 3 - 0.28);
+        ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+}
+
+function drawPixelButton(id, icon, progress, color, isActive = false, cdProgress = 0, solidReady = false) {
     let cvs = document.getElementById(id);
     if (!cvs) return;
     let ctx = cvs.getContext('2d');
@@ -737,12 +758,12 @@ function drawPixelButton(id, icon, progress, color, isActive = false, cdProgress
     ctx.fillStyle = '#111'; ctx.fillRect(4, 4, 40, 40);
     if (progress > 0) {
         ctx.fillStyle = color;
-        ctx.globalAlpha = progress >= 1 ? 0.6 : 0.4;
+        // solidReady=true: 满格时实色背景表示可发射；充能中低亮度进度条
+        ctx.globalAlpha = (solidReady && progress >= 1) ? 0.82 : (progress >= 1 ? 0.6 : 0.35);
         let fillH = Math.floor(40 * Math.min(1, progress));
         ctx.fillRect(4, 44 - fillH, 40, fillH);
         ctx.globalAlpha = 1.0;
     }
-    // 冷却叠层：暗色蒙层 + 红色冷却条（充满→清空）
     if (cdProgress > 0) {
         ctx.globalAlpha = 0.45;
         ctx.fillStyle = '#000000';
@@ -753,7 +774,6 @@ function drawPixelButton(id, icon, progress, color, isActive = false, cdProgress
         ctx.fillRect(4, 44 - cdH, 40, cdH);
         ctx.globalAlpha = 1.0;
     }
-    // 技能激活时：进度条顶部蓝色火花粒子
     if (isActive && progress >= 1) {
         let sparkCount = 4;
         for (let s = 0; s < sparkCount; s++) {
@@ -770,13 +790,15 @@ function drawPixelButton(id, icon, progress, color, isActive = false, cdProgress
     }
     ctx.fillStyle = '#555'; ctx.fillRect(4, 0, 40, 4); ctx.fillRect(4, 44, 40, 4); ctx.fillRect(0, 4, 4, 40); ctx.fillRect(44, 4, 4, 40);
     ctx.fillRect(2, 2, 4, 4); ctx.fillRect(42, 2, 4, 4); ctx.fillRect(2, 42, 4, 4); ctx.fillRect(42, 42, 4, 4);
-    // 【L1 修复：白色的、尺寸与技能一致的原生像素加号】
     if (icon === '+') {
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(22, 16, 4, 16);
         ctx.fillRect(16, 22, 16, 4);
     } else if (icon) {
         ctx.drawImage(icon, 24 - icon.width / 2, 24 - icon.height / 2);
+    }
+    if (id && id.includes('pnam')) {
+        _drawNuclearSymbol(ctx, 38, 38, 8);
     }
 }
 
@@ -1050,13 +1072,58 @@ function updatePixelButtons() {
             let el = document.getElementById(btnId);
             if (el) {
                 el.style.display = 'block';
-                let cdProg = Math.min(1, (avengerSlotCds[avengerBtnIdx] || 0) / 360);
-                drawPixelButton(btnId, sprites.i_avenger, 1, '#ff9800', false, cdProg);
+                // 新样式：progress从0充到1，满格实色=可发射
+                let avProg = 1 - Math.min(1, (avengerSlotCds[avengerBtnIdx] || 0) / 360);
+                drawPixelButton(btnId, sprites.i_avenger, avProg, '#ff9800', false, 0, true);
             }
             avengerBtnIdx++;
         }
         for (let i = avengerBtnIdx; i < 2; i++) {
             let el = document.getElementById('avenger-btn-' + i + '-cvs');
+            if (el) el.style.display = 'none';
+        }
+    }
+    // ASR'寂星' 按钮
+    if (sprites.i_asr && player.subweaponLoadout) {
+        let asrBtnIdx = 0;
+        let slotOffset = 0;
+        for (let g = 0; g < (player.subweaponGroups || []).length; g++) {
+            let isAsr = player.subweaponLoadout[slotOffset] === 'asr';
+            slotOffset += player.subweaponGroups[g];
+            if (!isAsr) continue;
+            let btnId = 'asr-btn-' + asrBtnIdx + '-cvs';
+            let el = document.getElementById(btnId);
+            if (el) {
+                el.style.display = 'block';
+                let asrProg = 1 - Math.min(1, (asrSlotCds[asrBtnIdx] || 0) / 720);
+                drawPixelButton(btnId, sprites.i_asr, asrProg, '#66bb6a', false, 0, true);
+            }
+            asrBtnIdx++;
+        }
+        for (let i = asrBtnIdx; i < 2; i++) {
+            let el = document.getElementById('asr-btn-' + i + '-cvs');
+            if (el) el.style.display = 'none';
+        }
+    }
+    // PNAM-1 按钮
+    if (sprites.i_pnam && player.wingmanLoadout) {
+        let pnamBtnIdx = 0;
+        let slotOffset = 0;
+        for (let g = 0; g < (player.wingmanGroups || []).length; g++) {
+            let isPnam = player.wingmanLoadout[slotOffset] === 'pnam';
+            slotOffset += player.wingmanGroups[g];
+            if (!isPnam) continue;
+            let btnId = 'pnam-btn-' + pnamBtnIdx + '-cvs';
+            let el = document.getElementById(btnId);
+            if (el) {
+                el.style.display = 'block';
+                let pnamProg = 1 - Math.min(1, (pnamSlotCds[pnamBtnIdx] || 0) / 1260);
+                drawPixelButton(btnId, sprites.i_pnam, pnamProg, '#ef5350', false, 0, true);
+            }
+            pnamBtnIdx++;
+        }
+        for (let i = pnamBtnIdx; i < 3; i++) {
+            let el = document.getElementById('pnam-btn-' + i + '-cvs');
             if (el) el.style.display = 'none';
         }
     }
@@ -1068,7 +1135,12 @@ const setupMultiTouchButtons = () => {
         'skill-btn-cvs': activateSkill,
         'terminal-btn-cvs': toggleTerminal,
         'avenger-btn-0-cvs': () => fireAvenger(0),
-        'avenger-btn-1-cvs': () => fireAvenger(1)
+        'avenger-btn-1-cvs': () => fireAvenger(1),
+        'pnam-btn-0-cvs': () => firePNAM(0),
+        'pnam-btn-1-cvs': () => firePNAM(1),
+        'pnam-btn-2-cvs': () => firePNAM(2),
+        'asr-btn-0-cvs':  () => fireASR(0),
+        'asr-btn-1-cvs':  () => fireASR(1)
     };
     for (let id in btnMap) {
         let el = document.getElementById(id);
@@ -1637,7 +1709,7 @@ function loop(timestamp) {
             let directDmg = [50,  65,  85,  110][wLv];
             let splashDmg = [25,  35,  48,   65][wLv];
             let arcFrames = [60,  52,  44,   36][wLv];
-            let splashR   = 50;
+            let splashR   = 60;
 
             while (wingmanEntities.length < count) {
                 let idx = wingmanEntities.length;
@@ -1689,6 +1761,7 @@ function loop(timestamp) {
             }
 
             for (let w of wingmanEntities) {
+                if (w.type === 'pnam') continue;  // PNAM 由独立系统管理
                 if (w.type === 'ds1') {
                     // DS-1: Follow player, intercept enemy bullets
                     const DS1_OFFSETS = [
@@ -1853,14 +1926,60 @@ function loop(timestamp) {
                         q.timer--;
                     }
                 }
+                // Decrement ASR CDs
+                for (let i = 0; i < asrSlotCds.length; i++) {
+                    if (asrSlotCds[i] > 0) asrSlotCds[i]--;
+                }
+                // Process ASR fire queues: each entry spawns a 4-rocket salvo
+                for (let i = asrFireQueues.length-1; i >= 0; i--) {
+                    let q = asrFireQueues[i];
+                    if (q.timer <= 0) {
+                        let spd = 6.4;
+                        for (let ang of [-15, -5, 5, 15]) {
+                            let rad = ang * Math.PI / 180;
+                            asrProjectiles.push(new ASRocketProjectile(
+                                player.x, player.y - player.h / 2,
+                                Math.sin(rad) * spd, -Math.cos(rad) * spd));
+                        }
+                        asrFireQueues.splice(i, 1);
+                    } else { q.timer--; }
+                }
+                // Decrement PNAM CDs
+                for (let i = 0; i < pnamSlotCds.length; i++) {
+                    if (pnamSlotCds[i] > 0) pnamSlotCds[i]--;
+                }
+                // Process PNAM fire queues
+                for (let i = pnamFireQueues.length-1; i >= 0; i--) {
+                    let q = pnamFireQueues[i];
+                    if (q.timer <= 0) {
+                        pnamDrones.push(new PNAMDrone(player.x, player.y + player.h * 0.6));
+                        pnamFireQueues.splice(i, 1);
+                    } else { q.timer--; }
+                }
             }
         }
     }
 
     if (player && player.hp > 0 && endingState !== 'playerDead') player.draw(ctx);
-    ctx.globalAlpha = 1.0; 
-    
-    processGroup(aoeEffects, isPlaying); processGroup(burnEffects, isPlaying); processGroup(items, isPlaying); processGroup(bullets, isPlaying); processGroup(enemyBullets, isPlaying); processGroup(interceptorBullets, isPlaying); processGroup(avengerMissiles, isPlaying); processGroup(enemies, isPlaying); processGroup(particles, isPlaying); processGroup(floatingTexts, isPlaying);
+    ctx.globalAlpha = 1.0;
+
+    processGroup(aoeEffects, isPlaying); processGroup(burnEffects, isPlaying); processGroup(items, isPlaying); processGroup(bullets, isPlaying); processGroup(enemyBullets, isPlaying); processGroup(interceptorBullets, isPlaying); processGroup(avengerMissiles, isPlaying); processGroup(asrProjectiles, isPlaying); processGroup(pnamDrones, isPlaying); processGroup(enemies, isPlaying); processGroup(particles, isPlaying); processGroup(floatingTexts, isPlaying);
+    // PNAM 被敌弹击中检测
+    if (isPlaying && hitStopFrames <= 0) {
+        for (let drone of pnamDrones) {
+            if (!drone.active) continue;
+            for (let i = enemyBullets.length-1; i >= 0; i--) {
+                let eb = enemyBullets[i];
+                if (!eb.active) continue;
+                let dx = eb.x-drone.x, dy = eb.y-drone.y;
+                if (dx*dx+dy*dy < 100) {
+                    drone.takeDamage(eb.dmg || 8);
+                    eb.active = false;
+                    createExplosion(eb.x, eb.y, '#ffffff', 3);
+                }
+            }
+        }
+    }
 
     // === [生死结算状态机：之前被遗漏覆盖的区域] ===
     if (isPlaying && endingState !== 'none') {
@@ -2368,6 +2487,32 @@ function fireAvenger(btnIdx) {
     avengerSlotCds[btnIdx] = 360;
 }
 
+function fireASR(btnIdx) {
+    if (!player || gameState !== 'PLAYING') return;
+    if ((asrSlotCds[btnIdx] || 0) > 0) return;
+    let asrCount = -1, targetGroupIdx = -1, slotOffset = 0;
+    for (let g = 0; g < (player.subweaponGroups || []).length; g++) {
+        if (player.subweaponLoadout[slotOffset] === 'asr') {
+            asrCount++;
+            if (asrCount === btnIdx) { targetGroupIdx = g; break; }
+        }
+        slotOffset += player.subweaponGroups[g];
+    }
+    if (targetGroupIdx < 0) return;
+    let groupSize = player.subweaponGroups[targetGroupIdx];
+    for (let s = 0; s < groupSize; s++) {
+        asrFireQueues.push({ timer: s * 24 });  // 0.4秒间隔
+    }
+    asrSlotCds[btnIdx] = 720;  // 12秒
+}
+
+function firePNAM(btnIdx) {
+    if (!player || gameState !== 'PLAYING') return;
+    if ((pnamSlotCds[btnIdx] || 0) > 0) return;
+    pnamFireQueues.push({ timer: 0 });
+    pnamSlotCds[btnIdx] = 1260;  // 21秒
+}
+
 window.openLoadoutSelect = function(levelId, shipType) {
     let cfg = SHIPS[shipType];
     if (!cfg) { startGame(levelId, false, shipType); return; }
@@ -2482,6 +2627,7 @@ function startGame(levelId, useCheckpoint = false, shipType = 'rt1', loadoutData
     }
     enemies = []; bullets = []; enemyBullets = []; items = []; particles = []; floatingTexts = []; aoeEffects = []; burnEffects = []; wingmanEntities = [];
     interceptorBullets = []; avengerMissiles = []; avengerSlotCds = []; avengerFireQueues = [];
+    asrProjectiles = []; pnamDrones = []; asrSlotCds = []; pnamSlotCds = []; asrFireQueues = []; pnamFireQueues = [];
     score = 0; frameCount = 0; gameTimeSeconds = 0;
     shakeQueue = []; shakeTimer = 0; hitStopFrames = 0; pendingPostHitstopEffect = null; flashScreenTimer = 0; damageVignetteTimer = 0; lowHpShakeCooldown = 0; bossEnterPhase = 0;
     comboCount = 0; comboTimer = 0; endingState = 'none'; endingTimer = 0;

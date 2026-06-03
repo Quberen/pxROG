@@ -38,12 +38,14 @@ const SHIPS = {
 };
 
 const WINGMAN_TYPES = {
-    as1: { id: 'as1', name: 'AS-1',  desc: '自爆机。弧线突袭敌人，接触引爆。',               color: '#ffea00' },
-    ds1: { id: 'ds1', name: 'DS-1',  desc: '拦截者。护卫机体，每3秒拦截最近敌人子弹。',     color: '#00b0ff' }
+    as1:  { id: 'as1',  name: 'AS-1',   desc: '自爆机。弧线突袭敌人，接触引爆。',               color: '#ffea00' },
+    ds1:  { id: 'ds1',  name: 'DS-1',   desc: '拦截者。护卫机体，每3秒拦截最近敌人子弹。',     color: '#00b0ff' },
+    pnam: { id: 'pnam', name: 'PNAM-1', desc: '核战僚机。手动发射，接触敌人触发核爆。冷却21秒。', color: '#b0bec5' }
 };
 const SUBWEAPON_TYPES = {
-    rfa:     { id: 'rfa',     name: 'RF-A',        desc: '自动机枪。每0.4秒攻击最近敌人，伤害0.5。', color: '#ff9800' },
-    avenger: { id: 'avenger', name: "AS'AVENGER'", desc: '制导导弹。手动发射，35伤害+25溅射，装填6秒。', color: '#ab47bc' }
+    rfa:     { id: 'rfa',     name: 'RF-A',         desc: '自动机枪。每0.4秒攻击最近敌人，伤害0.5。',              color: '#ff9800' },
+    avenger: { id: 'avenger', name: "AS'AVENGER'",  desc: '制导导弹。手动发射，35伤害+25溅射，装填6秒。',         color: '#ab47bc' },
+    asr:     { id: 'asr',     name: "ASR'寂星'",    desc: '火箭弹。手动散射4枚，命中20+AOE5，摧毁敌弹，冷却12秒。', color: '#ef5350' }
 };
 
 // 【动态拼装】：从工坊读取数值，拼装为引擎可用的敌人数组
@@ -240,4 +242,33 @@ function initSprites() {
         [0,0,1,1,0,0],
         [0,0,1,1,0,0]
     ], ['#ff9800'], 2);
+
+    // PNAM-1 游戏内精灵：黑灰外壳+红色小灯，8×5，pSize=3（24×15px）
+    sprites.pnam_drone = createPixelTexture([
+        [0,0,1,2,2,2,1,0],
+        [0,1,2,1,1,1,2,1],
+        [1,2,1,3,2,3,1,2],
+        [0,1,2,1,1,1,2,1],
+        [0,0,0,1,1,1,0,0]
+    ], ['#37474f','#546e7a','#ff1744'], 3);
+
+    // PNAM-1 按钮图标：白色线条，同形，pSize=2
+    sprites.i_pnam = createPixelTexture([
+        [0,0,1,1,1,1,1,0],
+        [0,1,1,0,0,0,1,1],
+        [1,1,0,1,0,1,0,1],
+        [0,1,1,0,0,0,1,1],
+        [0,0,0,1,1,1,0,0]
+    ], ['#ffffff'], 2);
+
+    // ASR'寂星' 按钮图标：火箭发射巢，白色线条，pSize=2
+    sprites.i_asr = createPixelTexture([
+        [0,0,0,1,0,0,0],
+        [0,0,1,1,1,0,0],
+        [0,0,1,0,1,0,0],
+        [0,1,1,0,1,1,0],
+        [0,1,0,0,0,1,0],
+        [1,1,1,1,1,1,1],
+        [0,1,0,0,0,1,0]
+    ], ['#ffffff'], 2);
 }
