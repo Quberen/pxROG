@@ -1887,10 +1887,10 @@ class AvengerMissile {
     }
 
     _explode(nearest) {
-        nearest.takeDamage(35, true, false, 'avenger');
+        nearest.takeDamage(25, true, false, 'avenger');
         for (let e of enemies) {
             if (!e.active || e === nearest) continue;
-            if (Math.sqrt((e.x-this.x)**2+(e.y-this.y)**2) < 50) e.takeDamage(25, true, false, 'avenger');
+            if (Math.sqrt((e.x-this.x)**2+(e.y-this.y)**2) < 50) e.takeDamage(20, true, false, 'avenger');
         }
         aoeEffects.push(new AOEEffect(this.x, this.y, 50, '#ff9800'));
         createExplosion(this.x, this.y, '#ff9800', 20);
@@ -1917,10 +1917,13 @@ class ASRocketProjectile {
 
     update() {
         this.x += this.vx; this.y += this.vy;
-        // 灰色烟雾拖尾
+        // 灰色烟雾拖尾（延长寿命，增量粒子数）
         if (particles.length < 300) {
             particles.push(new Particle(this.x, this.y, '#757575',
-                (Math.random()-0.5)*0.8, (Math.random()-0.5)*0.5 + 0.2, 8));
+                (Math.random()-0.5)*1.0, (Math.random()-0.5)*0.6 + 0.3, 14));
+            if (Math.random() < 0.5)
+                particles.push(new Particle(this.x, this.y, '#9e9e9e',
+                    (Math.random()-0.5)*0.7, (Math.random()-0.5)*0.4 + 0.2, 10));
         }
         const AOE_R = 30;
         const _explode = () => {
@@ -1960,10 +1963,13 @@ class ASRocketProjectile {
         let ang = Math.atan2(this.vy, this.vx);
         ctx.translate(this.x, this.y);
         ctx.rotate(ang + Math.PI/2);
+        // 加粗弹体：3px宽→5px宽
+        ctx.fillStyle = '#c62828';
+        ctx.fillRect(-2.5, -4.5, 5, 9);
         ctx.fillStyle = '#ef5350';
-        ctx.fillRect(-1.5, -3.5, 3, 7);
+        ctx.fillRect(-1.5, -4.5, 3, 8);
         ctx.fillStyle = '#ffcdd2';
-        ctx.fillRect(-1, -5, 2, 2);
+        ctx.fillRect(-1.5, -5.5, 3, 2);
         ctx.restore();
     }
 }
@@ -1971,13 +1977,14 @@ class ASRocketProjectile {
 class PNAMDrone {
     constructor(x, y) {
         this.x = x; this.y = y;
-        this.vx = 0; this.vy = 0;
-        this.hp = 65; this.maxHp = 65;
+        this.vx = 0; this.vy = 2.5;  // 初始向后弹射速度
+        this.hp = 75; this.maxHp = 75;
         this.phase = 0; this.phaseTimer = 0;
         this.maxSpeed = 16 * 0.7;
         this._brownTimer = 0;
         this._brownTx = x; this._brownTy = y;
         this._spawnX = x; this._spawnY = y;
+        this._lightOn = false;
         this.active = true;
     }
 
@@ -1989,31 +1996,53 @@ class PNAMDrone {
     update() {
         this.phaseTimer++;
         if (this.phase === 0) {
-            this._brownTimer--;
-            if (this._brownTimer <= 0) {
-                this._brownTimer = 8 + Math.floor(Math.random() * 8);
-                this._brownTx = this._spawnX + (Math.random()-0.5)*36;
-                this._brownTy = this._spawnY + (Math.random()-0.5)*16;
+            if (this.phaseTimer <= 18) {
+                // 初始向后弹射，减速
+                this.vy = 2.5 * (1 - this.phaseTimer / 18);
+                this.vx *= 0.85;
+            } else {
+                // 布朗运动（频率降低：改为16-28帧一次方向变化）
+                this._brownTimer--;
+                if (this._brownTimer <= 0) {
+                    this._brownTimer = 16 + Math.floor(Math.random() * 12);
+                    this._brownTx = this._spawnX + (Math.random()-0.5)*36;
+                    this._brownTy = this._spawnY + (Math.random()-0.5)*16;
+                }
+                let dx = this._brownTx-this.x, dy = this._brownTy-this.y;
+                let d = Math.sqrt(dx*dx+dy*dy) || 1;
+                this.vx = (dx/d)*1.0; this.vy = (dy/d)*1.0;
             }
-            let dx = this._brownTx-this.x, dy = this._brownTy-this.y;
-            let d = Math.sqrt(dx*dx+dy*dy) || 1;
-            this.vx = (dx/d)*1.2; this.vy = (dy/d)*1.2;
+            // 红灯闪烁：前8帧灰色，之后开始闪烁并逐渐加快
+            if (this.phaseTimer < 8) {
+                this._lightOn = false;
+            } else {
+                let progress = (this.phaseTimer - 8) / (96 - 8);
+                let blinkPeriod = Math.max(3, Math.floor(22 * (1 - progress)));
+                this._lightOn = (this.phaseTimer % blinkPeriod) < Math.ceil(blinkPeriod / 2);
+            }
             if (this.phaseTimer >= 96) { this.phase = 1; this.phaseTimer = 0; }
         } else if (this.phase === 1) {
+            this._lightOn = true;
             let t = this.phaseTimer / 132;
             this.vy = -this.maxSpeed * t;
             this.vx *= 0.88;
             if (this.phaseTimer >= 132) { this.phase = 2; this.phaseTimer = 0; }
         } else {
+            this._lightOn = true;
             this.vy = -this.maxSpeed; this.vx = 0;
         }
         this.x += this.vx; this.y += this.vy;
-        // 飞行拖尾（phase1+2）
+        // 飞行拖尾（phase1+2）：加粗加长
         if (this.phase >= 1 && particles.length < 300) {
             particles.push(new Particle(
-                this.x + (Math.random()-0.5)*4, this.y + 7,
+                this.x + (Math.random()-0.5)*5, this.y + 8,
                 Math.random() < 0.5 ? '#546e7a' : '#90a4ae',
-                (Math.random()-0.5)*1, Math.random()*1.5, 18));
+                (Math.random()-0.5)*1.2, Math.random()*2, 28));
+            if (Math.random() < 0.6)
+                particles.push(new Particle(
+                    this.x + (Math.random()-0.5)*3, this.y + 6,
+                    Math.random() < 0.5 ? '#37474f' : '#b0bec5',
+                    (Math.random()-0.5)*0.8, Math.random()*1.5 + 0.5, 20));
         }
         for (let e of enemies) {
             if (!e.active) continue;
@@ -2031,22 +2060,45 @@ class PNAMDrone {
         enemies.forEach(e => {
             if (!e.active) return;
             let dx = e.x-this.x, dy = e.y-this.y, d2 = dx*dx+dy*dy;
-            if (d2 < r1*r1) e.takeDamage(350, true, false, 'pnam');
+            if (d2 < r1*r1) e.takeDamage(650, true, false, 'pnam');
             else if (d2 < r2*r2) e.takeDamage(100, true, false, 'pnam_shock');
             e.takeDamage(20, true, false, 'pnam_rad');
         });
+        // 扩散环
         aoeEffects.push(new AOEEffect(this.x, this.y, r1, '#b9f6ca'));
         aoeEffects.push(new AOEEffect(this.x, this.y, r2, '#ccff90'));
-        createExplosion(this.x, this.y, '#ffffff', 30);
-        createExplosion(this.x, this.y, '#e8f5e9', 20);
+        aoeEffects.push(new AOEEffect(this.x, this.y, r2 * 1.4, '#ffffff'));
+        // 中心爆炸粒子
+        createExplosion(this.x, this.y, '#ffffff', 40);
+        createExplosion(this.x, this.y, '#ccff90', 24);
+        // 蘑菇云：向上喷射粒子（柱）
+        for (let i = 0; i < 32; i++) {
+            let spread = (Math.random()-0.5) * 0.6;
+            let spd = 4 + Math.random() * 7;
+            particles.push(new Particle(this.x, this.y,
+                Math.random() < 0.6 ? '#ffffff' : '#ccff90',
+                Math.sin(spread)*spd, -Math.cos(spread)*spd - 1,
+                50 + Math.random() * 30));
+        }
+        // 蘑菇帽：中层向外辐射粒子
+        for (let i = 0; i < 24; i++) {
+            let ang = (i / 24) * Math.PI * 2;
+            let spd = 3 + Math.random() * 4;
+            particles.push(new Particle(
+                this.x + Math.cos(ang)*22, this.y - 50,
+                Math.random() < 0.5 ? '#e8f5e9' : '#b9f6ca',
+                Math.cos(ang)*spd, -0.3 + Math.random()*0.8,
+                35 + Math.random()*20));
+        }
+        // 烟雾向四周扩散
         for (let i = 0; i < 24; i++) {
             let ang = Math.random()*Math.PI*2, spd = 2+Math.random()*5;
             particles.push(new Particle(this.x, this.y,
                 Math.random()<0.5 ? '#78909c' : '#b0bec5',
-                Math.cos(ang)*spd, Math.sin(ang)*spd, 40+Math.random()*20));
+                Math.cos(ang)*spd, Math.sin(ang)*spd, 45+Math.random()*25));
         }
         flashScreenTimer = 25; flashScreenColor = '255, 255, 255';
-        triggerShake(18, 30);
+        triggerShake(20, 35);
     }
 
     _smallExplosion() {
@@ -2067,9 +2119,18 @@ class PNAMDrone {
         let spr = sprites.pnam_drone;
         if (spr) {
             ctx.drawImage(spr, -spr.width/2, -spr.height/2);
+            // 红色小灯（覆盖在精灵正中心，颜色随状态变化）
+            let lightColor = this._lightOn ? '#ff1744' : '#555555';
+            ctx.fillStyle = lightColor;
+            if (this._lightOn) {
+                ctx.shadowBlur = 4; ctx.shadowColor = '#ff1744';
+            }
+            ctx.fillRect(-1.5, -1.5, 3, 3);
+            ctx.shadowBlur = 0;
         } else {
-            ctx.fillStyle = '#37474f'; ctx.fillRect(-8,-5,16,10);
-            ctx.fillStyle = '#ff1744'; ctx.fillRect(-6,-2,3,3); ctx.fillRect(3,-2,3,3);
+            ctx.fillStyle = '#111111'; ctx.fillRect(-7,-10,14,20);
+            ctx.fillStyle = this._lightOn ? '#ff1744' : '#555555';
+            ctx.fillRect(-1,-1,2,2);
         }
         ctx.restore();
     }

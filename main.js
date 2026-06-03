@@ -735,6 +735,14 @@ function drawIndicator(color) {
     ic.shadowBlur = 0; ic.fillStyle = '#fff'; ic.fillRect(6, 5, 2, 2); 
 }
 
+function toRoman(n) {
+    if (!n || n <= 0) return '';
+    const vals = [[10,'X'],[9,'IX'],[5,'V'],[4,'IV'],[1,'I']];
+    let s = '';
+    for (let [v, sym] of vals) { while (n >= v) { s += sym; n -= v; } }
+    return s;
+}
+
 function _drawNuclearSymbol(ctx, cx, cy, r) {
     ctx.save();
     ctx.globalAlpha = 0.9;
@@ -750,7 +758,7 @@ function _drawNuclearSymbol(ctx, cx, cy, r) {
     ctx.restore();
 }
 
-function drawPixelButton(id, icon, progress, color, isActive = false, cdProgress = 0, solidReady = false) {
+function drawPixelButton(id, icon, progress, color, isActive = false, cdProgress = 0, solidReady = false, ptCost = 0) {
     let cvs = document.getElementById(id);
     if (!cvs) return;
     let ctx = cvs.getContext('2d');
@@ -799,6 +807,16 @@ function drawPixelButton(id, icon, progress, color, isActive = false, cdProgress
     }
     if (id && id.includes('pnam')) {
         _drawNuclearSymbol(ctx, 38, 38, 8);
+    }
+    // PT 费用：右上角罗马数字
+    if (ptCost > 0) {
+        let roman = toRoman(ptCost);
+        let canAfford = !player || (player.pt || 0) >= ptCost;
+        ctx.font = 'bold 8px monospace';
+        ctx.textAlign = 'right';
+        ctx.fillStyle = canAfford ? '#ffeb3b' : '#e57373';
+        ctx.fillText(roman, 44, 13);
+        ctx.textAlign = 'left';
     }
 }
 
@@ -1073,8 +1091,8 @@ function updatePixelButtons() {
             if (el) {
                 el.style.display = 'block';
                 // 新样式：progress从0充到1，满格实色=可发射
-                let avProg = 1 - Math.min(1, (avengerSlotCds[avengerBtnIdx] || 0) / 360);
-                drawPixelButton(btnId, sprites.i_avenger, avProg, '#ff9800', false, 0, true);
+                let avProg = 1 - Math.min(1, (avengerSlotCds[avengerBtnIdx] || 0) / 240);
+                drawPixelButton(btnId, sprites.i_avenger, avProg, '#ff9800', false, 0, true, 1);
             }
             avengerBtnIdx++;
         }
@@ -1095,8 +1113,8 @@ function updatePixelButtons() {
             let el = document.getElementById(btnId);
             if (el) {
                 el.style.display = 'block';
-                let asrProg = 1 - Math.min(1, (asrSlotCds[asrBtnIdx] || 0) / 720);
-                drawPixelButton(btnId, sprites.i_asr, asrProg, '#66bb6a', false, 0, true);
+                let asrProg = 1 - Math.min(1, (asrSlotCds[asrBtnIdx] || 0) / 540);
+                drawPixelButton(btnId, sprites.i_asr, asrProg, '#66bb6a', false, 0, true, 2);
             }
             asrBtnIdx++;
         }
@@ -1117,8 +1135,8 @@ function updatePixelButtons() {
             let el = document.getElementById(btnId);
             if (el) {
                 el.style.display = 'block';
-                let pnamProg = 1 - Math.min(1, (pnamSlotCds[pnamBtnIdx] || 0) / 1260);
-                drawPixelButton(btnId, sprites.i_pnam, pnamProg, '#ef5350', false, 0, true);
+                let pnamProg = 1 - Math.min(1, (pnamSlotCds[pnamBtnIdx] || 0) / 1140);
+                drawPixelButton(btnId, sprites.i_pnam, pnamProg, '#ef5350', false, 0, true, 6);
             }
             pnamBtnIdx++;
         }
@@ -1706,9 +1724,9 @@ function loop(timestamp) {
             let wLv = (player.upgrades && player.upgrades.wingman) || 0;
             let count = player.wingmanSlots || 0;
             let swoopCD   = [720, 680, 640, 600][wLv];
-            let directDmg = [50,  65,  85,  110][wLv];
-            let splashDmg = [25,  35,  48,   65][wLv];
-            let arcFrames = [60,  52,  44,   36][wLv];
+            let directDmg = [80, 100, 125, 155][wLv];
+            let splashDmg = [30,  42,  58,  78][wLv];
+            let arcFrames = [60,  52,  44,  36][wLv];
             let splashR   = 60;
 
             while (wingmanEntities.length < count) {
@@ -1760,6 +1778,20 @@ function loop(timestamp) {
                 }
             }
 
+            // AS-1 威胁排序索敌：按威胁从高到低分配，每槽位锁定不同敌人
+            let as1ThreatSorted = enemies.filter(e => e.active).sort((a, b) => {
+                let ta = calcThreat(a.x, a.y, a.x-(a._prevX||a.x), a.y-(a._prevY||a.y));
+                let tb = calcThreat(b.x, b.y, b.x-(b._prevX||b.x), b.y-(b._prevY||b.y));
+                return tb - ta;
+            });
+            let as1SlotTargets = {};
+            { let as1Rank = 0;
+              for (let w of wingmanEntities) {
+                  if (w.type === 'as1')
+                      as1SlotTargets[w.slotId] = as1ThreatSorted[Math.min(as1Rank++, as1ThreatSorted.length-1)] || null;
+              }
+            }
+
             for (let w of wingmanEntities) {
                 if (w.type === 'pnam') continue;  // PNAM 由独立系统管理
                 if (w.type === 'ds1') {
@@ -1794,8 +1826,8 @@ function loop(timestamp) {
                     ctx.closePath(); ctx.fill(); ctx.stroke();
                     ctx.restore();
                 } else {
-                    // AS-1: Arc swoop with group targeting
-                    let tgt = groupTargets[w.groupId] || null;
+                    // AS-1: Arc swoop — threat-based, per-slot lock, no re-lock on target loss
+                    let tgt = as1SlotTargets[w.slotId] || null;
                     if (w.state === 'orbit') {
                         w.orbitAngle += 0.04;
                         w.x = player.x + Math.cos(w.orbitAngle) * 35;
@@ -2479,17 +2511,20 @@ function fireAvenger(btnIdx) {
         slotOffset += player.subweaponGroups[g];
     }
     if (targetGroupIdx < 0) return;
+    if ((player.pt || 0) < 1) return;  // PT不足
     let groupSize = player.subweaponGroups[targetGroupIdx];
     let sharedTargetRef = { target: null };
     for (let s = 0; s < groupSize; s++) {
         avengerFireQueues.push({ timer: s * 12, sharedTargetRef });
     }
-    avengerSlotCds[btnIdx] = 360;
+    player.pt -= 1;
+    avengerSlotCds[btnIdx] = 240;  // 4秒
 }
 
 function fireASR(btnIdx) {
     if (!player || gameState !== 'PLAYING') return;
     if ((asrSlotCds[btnIdx] || 0) > 0) return;
+    if ((player.pt || 0) < 2) return;  // PT不足
     let asrCount = -1, targetGroupIdx = -1, slotOffset = 0;
     for (let g = 0; g < (player.subweaponGroups || []).length; g++) {
         if (player.subweaponLoadout[slotOffset] === 'asr') {
@@ -2501,16 +2536,19 @@ function fireASR(btnIdx) {
     if (targetGroupIdx < 0) return;
     let groupSize = player.subweaponGroups[targetGroupIdx];
     for (let s = 0; s < groupSize; s++) {
-        asrFireQueues.push({ timer: s * 24 });  // 0.4秒间隔
+        asrFireQueues.push({ timer: s * 24 });
     }
-    asrSlotCds[btnIdx] = 720;  // 12秒
+    player.pt -= 2;
+    asrSlotCds[btnIdx] = 540;  // 9秒
 }
 
 function firePNAM(btnIdx) {
     if (!player || gameState !== 'PLAYING') return;
     if ((pnamSlotCds[btnIdx] || 0) > 0) return;
+    if ((player.pt || 0) < 6) return;  // PT不足
     pnamFireQueues.push({ timer: 0 });
-    pnamSlotCds[btnIdx] = 1260;  // 21秒
+    player.pt -= 6;
+    pnamSlotCds[btnIdx] = 1140;  // 19秒
 }
 
 window.openLoadoutSelect = function(levelId, shipType) {
