@@ -902,7 +902,6 @@ window.WORKSHOP = {
                 { time: 102.0, action: "MESSAGE", text: ">> 信号中断。残存敌军清理中...", color: "#00e676" }
             ]
         }
-
     }
 };
 
