@@ -545,7 +545,7 @@ class EnemyBullet {
         // Spiral: oscillate perpendicular to the base forward direction
         if (this.type === 'spiral') {
             this.spiralPhase = (this.spiralPhase || 0) + 0.055;
-            let sway = Math.sin(this.spiralPhase) * 2.5;
+            let sway = Math.sin(this.spiralPhase) * 0.6;
             this.vx = (this.baseVx || 0) + (this.perpVx || 0) * sway;
             this.vy = (this.baseVy || 0) + (this.perpVy || 0) * sway;
         }

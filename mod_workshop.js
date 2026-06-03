@@ -420,13 +420,17 @@ window.WORKSHOP = {
                     let isAbyss = diff >= 3 ? true : (Math.random() < (diff >= 2 ? 0.5 : 0.2));
                     spawn(isAbyss ? 'TurretSwarm' : 'Turret', tx, { fireInterval: 60 });
                 }
-                // Mutant turrets: diff0=20%×1, diff1=60%×1, diff2=100%×2, diff3=100%×2(abyss)
+                // Mutant turrets spawn on the sides; diff0=20%×1, diff1=60%×1, diff2=100%×2, diff3=100%×2(abyss)
                 let mutantProb = [0.20, 0.60, 1.0, 1.0][diff];
                 let mutantCount = diff >= 2 ? 2 : 1;
                 if (Math.random() < mutantProb) {
-                    for (let m = 0; m < mutantCount; m++) {
-                        let mx = Math.random() * (w - 80) + 40;
-                        spawn('MutantTurret', mx, { isAbyss: diff >= 3 });
+                    let leftX  = w * (0.08 + Math.random() * 0.10);  // left side
+                    let rightX = w * (0.82 + Math.random() * 0.10);  // right side
+                    if (mutantCount === 1) {
+                        spawn('MutantTurret', Math.random() < 0.5 ? leftX : rightX, { isAbyss: diff >= 3 });
+                    } else {
+                        spawn('MutantTurret', leftX,  { isAbyss: diff >= 3 });
+                        spawn('MutantTurret', rightX, { isAbyss: diff >= 3 });
                     }
                 }
             }
