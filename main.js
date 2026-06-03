@@ -616,6 +616,7 @@ window.spawnEnemyByType = function(type, x, options = {}) {
         case 'Tank': e = new Tank(x, startY); break;
         case 'TankSwarm': e = new Tank(x, startY, false, true); break;
         case 'CrystalLocator': e = new CrystalLocator(x, startY, speedOver); break;
+        case 'MutantTurret': e = new MutantTurret(x, startY, options.isAbyss || false); break;
     }
     
     if (e) {
@@ -1802,21 +1803,21 @@ function loop(timestamp) {
 
             // === Sub-weapon Update Loop ===
             if (player.subweaponLoadout && player.subweaponLoadout.length > 0) {
-                // RF-A uses threat-sorted targets; AS-1 keeps distance-sorted groupTargets
+                // RF-A: per-slot threat-spread targeting (same logic as DS-1 but no kamikaze priority)
                 let rfaThreatSorted = enemies.filter(e => e.active).sort((a, b) => {
                     let ta = calcThreat(a.x, a.y, a.x-(a._prevX||a.x), a.y-(a._prevY||a.y));
                     let tb = calcThreat(b.x, b.y, b.x-(b._prevX||b.x), b.y-(b._prevY||b.y));
                     return tb - ta;
                 });
-                let rfaThreatTargets = [];
-                let numSwGroups = (player.subweaponGroups || []).length;
-                for (let g = 0; g < numSwGroups; g++) {
-                    rfaThreatTargets[g] = rfaThreatSorted[Math.min(g, rfaThreatSorted.length-1)] || null;
+                let rfaSlotTargets = [];
+                let _totalRfaSlots = player.subweaponSlots || 1;
+                for (let i = 0; i < _totalRfaSlots; i++) {
+                    rfaSlotTargets[i] = rfaThreatSorted[Math.min(i, rfaThreatSorted.length - 1)] || null;
                 }
                 let slotIdx = 0;
                 (player.subweaponGroups || []).forEach((groupSize, groupId) => {
-                    let subTgt = rfaThreatTargets[Math.min(groupId, rfaThreatTargets.length-1)] || null;
                     for (let s = 0; s < groupSize; s++) {
+                        let subTgt = rfaSlotTargets[slotIdx] || null;
                         let swType = player.subweaponLoadout[slotIdx] || 'rfa';
                         player.subweaponTimers[slotIdx] = (player.subweaponTimers[slotIdx] || 0) - 1;
                         if (swType === 'rfa' && player.subweaponTimers[slotIdx] <= 0 && subTgt) {

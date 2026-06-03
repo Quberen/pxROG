@@ -959,6 +959,88 @@ class Turret extends BaseEnemy {
         this.checkBounds();
         this.checkPlayerCollision();
     }
+
+    checkPlayerCollision() {
+        let r_w = this.w * this.scale, r_h = this.h * this.scale;
+        if (Math.abs(this.x - player.x) < (r_w/2 + player.w/2 - 8) &&
+            Math.abs(this.y - player.y) < (r_h/2 + player.h/2 - 8)) {
+            let baseDmg = this.isAbyss ? 24 : 16;
+            let actualDmg = baseDmg * DIFF_CONFIG[currentDifficulty].dmgMod;
+            if (this.isElite) actualDmg *= 2;
+            player.takeDamage(actualDmg, false, this.isAbyss ? 'abyss' : 'collision');
+            let colDmg = player ? player.getStat('damage') * 3 : 30;
+            this.takeDamage(colDmg, true, false, 'collision');
+        }
+    }
+}
+
+class MutantTurret extends BaseEnemy {
+    constructor(x, y, isAbyss = false) {
+        let hp = isAbyss ? 450 : 300;
+        super(x, y, sprites.turret_mutant, hp, isAbyss ? 25 : 18, isAbyss ? '#ab47bc' : '#78909c');
+        this.isAbyss = isAbyss;
+        this.targetY = 60 + Math.random() * 80;
+        this.fireInterval = 18;
+        this.shootTimer = this.fireInterval;
+        this.spiralAngle = Math.random() * Math.PI * 2;
+        this.dropPt = isAbyss ? 2.5 : 1.5;
+        this._initMods = true; // Fixed appearance — no healer/battery variants
+        let _cas0 = typeof WORKSHOP !== 'undefined' && WORKSHOP.cassettes && WORKSHOP.cassettes[currentLevel];
+        this.spawnWaveType = (_cas0 && _cas0.timeline && _cas0.state)
+            ? (_cas0.timeline[_cas0.state.currentWave] && _cas0.timeline[_cas0.state.currentWave].type)
+            : null;
+    }
+
+    checkPlayerCollision() {
+        let r_w = this.w * this.scale, r_h = this.h * this.scale;
+        if (Math.abs(this.x - player.x) < (r_w/2 + player.w/2 - 8) &&
+            Math.abs(this.y - player.y) < (r_h/2 + player.h/2 - 8)) {
+            let baseDmg = this.isAbyss ? 28 : 20;
+            let actualDmg = baseDmg * DIFF_CONFIG[currentDifficulty].dmgMod;
+            player.takeDamage(actualDmg, false, this.isAbyss ? 'abyss' : 'collision');
+            let colDmg = player ? player.getStat('damage') * 3 : 30;
+            this.takeDamage(colDmg, true, false, 'collision');
+        }
+    }
+
+    update() {
+        this.baseUpdate();
+
+        let _cas = typeof WORKSHOP !== 'undefined' && WORKSHOP.cassettes && WORKSHOP.cassettes[currentLevel];
+        let _wt = _cas && _cas.timeline && _cas.state && _cas.timeline[_cas.state.currentWave] && _cas.timeline[_cas.state.currentWave].type;
+
+        // Non-abyss: leave when wave changes (same as regular turret)
+        if (!this.isAbyss && _wt && _wt !== this.spawnWaveType) {
+            this.targetY = height + 100;
+            if (this.y < this.targetY) this.y += 1.5;
+            this.checkBounds();
+            return;
+        }
+
+        // Abyss: drift slowly toward player in X while positioned
+        if (this.isAbyss && this.y >= this.targetY) {
+            let dx = player.x - this.x;
+            if (Math.abs(dx) > 5) this.x += Math.sign(dx) * 0.4;
+        }
+
+        if (this.y < this.targetY) {
+            this.y += 1.5;
+        } else {
+            this.shootTimer--;
+            if (this.shootTimer <= 0) {
+                let vx = Math.cos(this.spiralAngle) * 3.5;
+                let vy = Math.sin(this.spiralAngle) * 3.5;
+                enemyBullets.push(new EnemyBullet(
+                    this.x, this.y + this.h * this.scale / 2, vx, vy, 'normal'
+                ));
+                this.spiralAngle += 0.42; // ~24° per shot → full rotation in ~15 shots (4.5s)
+                this.shootTimer = this.fireInterval;
+            }
+        }
+
+        this.checkBounds();
+        this.checkPlayerCollision();
+    }
 }
 
 class ArcFlyer extends BaseEnemy {

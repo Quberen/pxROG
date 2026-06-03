@@ -15,6 +15,7 @@ window.WORKSHOP = {
             "TurretSwarm":   { hp: 100, weight: 22, unlockTime: 70,  role: 'swarm' }, "KamikazeSpec":  { hp: 180, weight: 30, unlockTime: 60,  role: 'elite' },
             "Tank":          { hp: 240, weight: 30, unlockTime: 85,  role: 'tank' }, "TankSwarm":     { hp: 500, weight: 40, unlockTime: 100, role: 'tank' },
             "CrystalLocator": { hp: 120, weight: 5, unlockTime: 0, role: 'elite' },
+            "MutantTurret":   { hp: 300, weight: 18, unlockTime: 45, role: 'elite' },
             "Formation_V_Strike":    { weight: 12, unlockTime: 20, role: 'formation' }, "Formation_Turret_Wall": { weight: 25, unlockTime: 50, role: 'formation' }, "Formation_Ambush": { weight: 28, unlockTime: 65, role: 'formation' }
         },
         items: {
@@ -419,6 +420,15 @@ window.WORKSHOP = {
                     let isAbyss = diff >= 3 ? true : (Math.random() < (diff >= 2 ? 0.5 : 0.2));
                     spawn(isAbyss ? 'TurretSwarm' : 'Turret', tx, { fireInterval: 60 });
                 }
+                // Mutant turrets: diff0=20%×1, diff1=60%×1, diff2=100%×2, diff3=100%×2(abyss)
+                let mutantProb = [0.20, 0.60, 1.0, 1.0][diff];
+                let mutantCount = diff >= 2 ? 2 : 1;
+                if (Math.random() < mutantProb) {
+                    for (let m = 0; m < mutantCount; m++) {
+                        let mx = Math.random() * (w - 80) + 40;
+                        spawn('MutantTurret', mx, { isAbyss: diff >= 3 });
+                    }
+                }
             }
 
             let locInterval = Math.round(120 / dMult);
@@ -427,26 +437,25 @@ window.WORKSHOP = {
                 let isAbyssGroup = Math.random() < abyssChance;
                 let locType = isAbyssGroup ? 'LocatorSwarm' : 'Locator';
 
-                let r = Math.random() * 22.5;
-                if (r < 1) {
+                let r = Math.random() * 10;
+                if (r < 5) {
+                    // 50%: single locator
                     spawn(locType, Math.random() * (w - 80) + 40, { speedOverride: 1.5 });
-                } else if (r < 4.5) {
+                } else if (r < 8) {
+                    // 30%: small V (3-5)
                     let cnt = 3 + Math.floor(Math.random() * 2);
                     let cx = w / 2, spacing = 40;
                     for (let i = 0; i < cnt; i++)
                         spawn(locType, cx + (i - (cnt - 1) / 2) * spacing, { speedOverride: 1.3 });
-                } else if (r < 10.5) {
+                } else if (r < 9.5) {
+                    // 15%: medium spread (5-8)
                     let cnt = 5 + Math.floor(Math.random() * 3);
                     let cx = w / 2, spacing = Math.min(35, (w - 80) / cnt);
                     for (let i = 0; i < cnt; i++)
                         spawn(locType, cx + (i - (cnt - 1) / 2) * spacing, { speedOverride: 1.2 });
                 } else {
-                    let cx = w / 2;
-                    for (let gr = 0; gr < 3; gr++)
-                        for (let gc = 0; gc < 4; gc++)
-                            spawn(locType, cx + (gc - 1.5) * 40, {
-                                speedOverride: 1.1, y: -40 - gr * 30
-                            });
+                    // 5%: fortress enemy at random position
+                    spawn(diff >= 3 ? 'TankSwarm' : 'Tank', Math.random() * (w - 80) + 40, {});
                 }
             }
         },
@@ -509,9 +518,12 @@ window.WORKSHOP = {
                 if (!wave) return;
 
                 const NON_EARLY_EXIT = ['p0_rest', 's2_starfall', 's2_supply', 'p8_boss'];
-                if (!NON_EARLY_EXIT.includes(wave.type) && st.waveTimer >= 2
+                // Early exit: all enemies dead AND ≥3s since last spawn (prevents triggering mid-wave between spawn intervals)
+                if (!NON_EARLY_EXIT.includes(wave.type)
                         && (st.waveEnemiesSpawned || 0) > 0
-                        && typeof enemies !== 'undefined' && enemies.length === 0) {
+                        && typeof enemies !== 'undefined' && enemies.length === 0
+                        && typeof frameCount !== 'undefined'
+                        && frameCount - (st.waveLastSpawnFrame || 0) > 180) {
                     let nextWave = this.timeline[st.currentWave + 1];
                     if (nextWave && nextWave.type === 'p0_rest' && player && player.upgrades && player.upgrades.shield_gen > 0) {
                         let healAmt = player.getStat('maxHp') * 0.08 * player.upgrades.shield_gen;
@@ -521,6 +533,7 @@ window.WORKSHOP = {
                     st.currentWave++;
                     st.waveTimer = 0;
                     st.waveEnemiesSpawned = 0;
+                    st.waveLastSpawnFrame = 0;
                     return;
                 }
 
@@ -557,6 +570,7 @@ window.WORKSHOP = {
                         st.currentWave++;
                         st.waveTimer = 0;
                         st.waveEnemiesSpawned = 0;
+                        st.waveLastSpawnFrame = 0;
                     }
                 }
             }
@@ -622,9 +636,12 @@ window.WORKSHOP = {
                 if (!wave) return;
 
                 const NON_EARLY_EXIT = ['p0_rest', 'p0_starfall', 'p5_supply', 'p8_boss'];
-                if (!NON_EARLY_EXIT.includes(wave.type) && st.waveTimer >= 2
+                // Early exit: all enemies dead AND ≥3s since last spawn
+                if (!NON_EARLY_EXIT.includes(wave.type)
                         && (st.waveEnemiesSpawned || 0) > 0
-                        && typeof enemies !== 'undefined' && enemies.length === 0) {
+                        && typeof enemies !== 'undefined' && enemies.length === 0
+                        && typeof frameCount !== 'undefined'
+                        && frameCount - (st.waveLastSpawnFrame || 0) > 180) {
                     let nextWave = this.timeline[st.currentWave + 1];
                     if (nextWave && nextWave.type === 'p0_rest' && player && player.upgrades && player.upgrades.shield_gen > 0) {
                         let healAmt = player.getStat('maxHp') * 0.08 * player.upgrades.shield_gen;
@@ -634,6 +651,7 @@ window.WORKSHOP = {
                     st.currentWave++;
                     st.waveTimer = 0;
                     st.waveEnemiesSpawned = 0;
+                    st.waveLastSpawnFrame = 0;
                     return;
                 }
 
@@ -674,6 +692,7 @@ window.WORKSHOP = {
                         st.currentWave++;
                         st.waveTimer = 0;
                         st.waveEnemiesSpawned = 0;
+                        st.waveLastSpawnFrame = 0;
                     }
                 }
             }
@@ -849,7 +868,10 @@ window.WORKSHOP = {
 function spawn(type, x, opt) {
     window.spawnEnemyByType(type, x, opt);
     let _cs = (typeof WORKSHOP !== 'undefined') && WORKSHOP.cassettes && (typeof currentLevel !== 'undefined') && WORKSHOP.cassettes[currentLevel];
-    if (_cs && _cs.state) _cs.state.waveEnemiesSpawned = (_cs.state.waveEnemiesSpawned || 0) + 1;
+    if (_cs && _cs.state) {
+        _cs.state.waveEnemiesSpawned = (_cs.state.waveEnemiesSpawned || 0) + 1;
+        _cs.state.waveLastSpawnFrame = typeof frameCount !== 'undefined' ? frameCount : 0;
+    }
 }
 
 // 第二关别名：复用第一关已有波次函数

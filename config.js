@@ -148,6 +148,15 @@ function initSprites() {
     sprites.turret_swarm = createPixelTexture([[1,1,1,1,1,1],[1,2,2,2,2,1],[1,2,3,3,2,1],[1,2,2,2,2,1],[0,1,1,1,1,0]], ['#4a148c', '#ab47bc', '#00b0ff'], pSize);
     sprites.turret_healer = createPixelTexture([[1,1,1,1,1,1],[1,2,2,2,2,1],[1,2,3,3,2,1],[1,2,2,2,2,1],[0,1,1,1,1,0]], ['#1b5e20', '#4caf50', '#b2ff59'], pSize);
     sprites.turret_battery = createPixelTexture([[1,1,1,1,1,1],[1,2,2,2,2,1],[1,2,3,3,2,1],[1,2,2,2,2,1],[0,1,1,1,1,0]], ['#01579b', '#0288d1', '#00e5ff'], pSize);
+    // Mutant turret: 8×6 grid, richer detail, fixed colors (no healer/battery variants)
+    sprites.turret_mutant = createPixelTexture([
+        [0,1,1,0,0,1,1,0],
+        [1,2,1,2,2,1,2,1],
+        [1,2,3,3,3,3,2,1],
+        [1,2,3,4,4,3,2,1],
+        [1,2,2,2,2,2,2,1],
+        [0,0,1,1,1,1,0,0]
+    ], ['#3e2723', '#78909c', '#e53935', '#ff6f00'], pSize);
 
     sprites.kamikaze_idle = createPixelTexture([[0,0,1,0,0],[0,1,2,1,0],[1,1,2,1,1],[1,0,1,0,1]], ['#ffaa00', '#ffeb3b'], pSize);
     sprites.kamikaze_warn = createPixelTexture([[0,0,1,0,0],[0,1,2,1,0],[1,1,2,1,1],[1,0,1,0,1]], ['#ff1744', '#ffeb3b'], pSize); 
