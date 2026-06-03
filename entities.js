@@ -624,11 +624,6 @@ class BaseEnemy {
 
             let src = sourceOverride || (this.isBoss ? 'boss' : (this.isAbyss ? 'abyss' : 'collision'));
             player.takeDamage(actualDmg, isPercent, src);
-
-            if (!this.isBoss) {
-                if (this.isSpecial) specialKamikazeMisses = 0;
-                this.die(false);
-            }
         }
     }
 
@@ -960,18 +955,6 @@ class Turret extends BaseEnemy {
         this.checkPlayerCollision();
     }
 
-    checkPlayerCollision() {
-        let r_w = this.w * this.scale, r_h = this.h * this.scale;
-        if (Math.abs(this.x - player.x) < (r_w/2 + player.w/2 - 8) &&
-            Math.abs(this.y - player.y) < (r_h/2 + player.h/2 - 8)) {
-            let baseDmg = this.isAbyss ? 24 : 16;
-            let actualDmg = baseDmg * DIFF_CONFIG[currentDifficulty].dmgMod;
-            if (this.isElite) actualDmg *= 2;
-            player.takeDamage(actualDmg, false, this.isAbyss ? 'abyss' : 'collision');
-            let colDmg = player ? player.getStat('damage') * 3 : 30;
-            this.takeDamage(colDmg, true, false, 'collision');
-        }
-    }
 }
 
 class MutantTurret extends BaseEnemy {
@@ -989,18 +972,6 @@ class MutantTurret extends BaseEnemy {
         this.spawnWaveType = (_cas0 && _cas0.timeline && _cas0.state)
             ? (_cas0.timeline[_cas0.state.currentWave] && _cas0.timeline[_cas0.state.currentWave].type)
             : null;
-    }
-
-    checkPlayerCollision() {
-        let r_w = this.w * this.scale, r_h = this.h * this.scale;
-        if (Math.abs(this.x - player.x) < (r_w/2 + player.w/2 - 8) &&
-            Math.abs(this.y - player.y) < (r_h/2 + player.h/2 - 8)) {
-            let baseDmg = this.isAbyss ? 28 : 20;
-            let actualDmg = baseDmg * DIFF_CONFIG[currentDifficulty].dmgMod;
-            player.takeDamage(actualDmg, false, this.isAbyss ? 'abyss' : 'collision');
-            let colDmg = player ? player.getStat('damage') * 3 : 30;
-            this.takeDamage(colDmg, true, false, 'collision');
-        }
     }
 
     update() {
