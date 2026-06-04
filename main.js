@@ -102,7 +102,10 @@ const screens = {
     gameOver: document.getElementById('game-over-screen'),
     workshop: document.getElementById('workshop-menu'),
     'ship-select': document.getElementById('ship-select-screen'),
-    'loadout-select': document.getElementById('loadout-select-screen')
+    'loadout-select': document.getElementById('loadout-select-screen'),
+    'ship-carousel': document.getElementById('ship-carousel-screen'),
+    'new-loadout': document.getElementById('new-loadout-screen'),
+    'difficulty': document.getElementById('difficulty-screen')
 };
 
 const ui = {
@@ -674,14 +677,20 @@ function showScreen(screenId) {
     
     const inGameUIElements = [ui.topLeftCont, ui.sideBtns];
     
-    if (screenId === 'start' || screenId === 'gameOver' || screenId === 'workshop' || screenId === 'ship-select' || screenId === 'loadout-select') {
-        inGameUIElements.forEach(el => { if (el) el.classList.add('hud-hidden'); }); 
-        if (ui.bossHpCont) ui.bossHpCont.style.opacity = 0; 
-        ui.waveToast.style.opacity = 0; 
-    } else { 
-        inGameUIElements.forEach(el => { if (el) el.classList.remove('hud-hidden'); }); 
-        if (isBossSpawned && ui.bossHpCont) ui.bossHpCont.style.opacity = 1; 
+    const menuScreenIds = ['start','gameOver','workshop','ship-select','loadout-select','ship-carousel','new-loadout','difficulty'];
+    if (menuScreenIds.includes(screenId)) {
+        inGameUIElements.forEach(el => { if (el) el.classList.add('hud-hidden'); });
+        if (ui.bossHpCont) ui.bossHpCont.style.opacity = 0;
+        ui.waveToast.style.opacity = 0;
+    } else {
+        inGameUIElements.forEach(el => { if (el) el.classList.remove('hud-hidden'); });
+        if (isBossSpawned && ui.bossHpCont) ui.bossHpCont.style.opacity = 1;
     }
+
+    if (screenId === 'ship-carousel') { uiBgParallaxTarget = 30; buildCarousel(); }
+    else if (screenId === 'new-loadout') { uiBgParallaxTarget = 60; }
+    else if (screenId === 'difficulty') { uiBgParallaxTarget = 90; }
+    else if (screenId === 'start') { uiBgParallaxTarget = 0; }
 
     // 核心引擎层挂载：根据 UI 面板开闭自动派发音频滤波事件
     if (screenId && ['settings', 'pause', 'shop', 'loadout', 'workshop'].includes(screenId)) {
@@ -3020,6 +3029,7 @@ window.confirmLoadout = function() {
 };
 
 function startGame(levelId, useCheckpoint = false, shipType = 'rt1', loadoutData = null) {
+    stopUIBackground();
     let ckptData = useCheckpoint ? (() => { try { return JSON.parse(localStorage.getItem('pxROG_ckpt_' + levelId)); } catch(e) { return null; } })() : null;
     if (ckptData) currentDifficulty = ckptData.difficulty;
     currentLevel = levelId || 'debug';
@@ -3038,7 +3048,7 @@ function startGame(levelId, useCheckpoint = false, shipType = 'rt1', loadoutData
             for (let s = 0; s < size; s++) player.subweaponLoadout.push(loadoutData.subweapon[g] || 'rfa');
         });
         player.subweaponTimers = Array(player.subweaponSlots).fill(0);
-        if (loadoutData.primary) {
+        if (loadoutData.primary && loadoutData.primary !== 'none') {
             let pId = loadoutData.primary;
             let pDef = upgradePool && upgradePool.find(u => u.id === pId);
             if (pDef && player.equipment[pId]) {
@@ -3107,11 +3117,476 @@ function startGame(levelId, useCheckpoint = false, shipType = 'rt1', loadoutData
 }
 
 
-function initUI() { 
-    initDifficultyUI(); 
-    setControlMode(config.controlMode); 
-    setTouchMode(config.touchMode); 
-    setupMultiTouchButtons(); 
+// ═══ 背景星空动画 ═══
+let uiBgCanvas, uiBgCtx, uiBgStars = [], uiBgRAF = null;
+let uiBgParallaxTarget = 0, uiBgParallaxCurrent = 0;
+
+function initUIBackground() {
+    uiBgCanvas = document.getElementById('ui-bg-canvas');
+    if (!uiBgCanvas) return;
+    uiBgCanvas.style.display = 'block';
+    uiBgCanvas.width = window.innerWidth;
+    uiBgCanvas.height = window.innerHeight;
+    uiBgCtx = uiBgCanvas.getContext('2d');
+    uiBgStars = Array.from({length: 160}, () => ({
+        x: Math.random() * uiBgCanvas.width,
+        y: Math.random() * uiBgCanvas.height,
+        r: Math.random() * 1.5 + 0.3,
+        spd: Math.random() * 0.15 + 0.05,
+        blink: Math.random() * Math.PI * 2,
+        blinkSpd: Math.random() * 0.02 + 0.005
+    }));
+    cancelAnimationFrame(uiBgRAF);
+    (function loop() {
+        uiBgParallaxCurrent += (uiBgParallaxTarget - uiBgParallaxCurrent) * 0.04;
+        uiBgCtx.fillStyle = '#000005';
+        uiBgCtx.fillRect(0, 0, uiBgCanvas.width, uiBgCanvas.height);
+        uiBgStars.forEach(s => {
+            s.blink += s.blinkSpd;
+            s.x -= s.spd + uiBgParallaxCurrent * 0.003;
+            if (s.x < 0) s.x = uiBgCanvas.width;
+            let alpha = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(s.blink));
+            uiBgCtx.fillStyle = `rgba(255,255,255,${alpha.toFixed(2)})`;
+            uiBgCtx.fillRect(Math.round(s.x), Math.round(s.y), Math.ceil(s.r), Math.ceil(s.r));
+        });
+        uiBgRAF = requestAnimationFrame(loop);
+    })();
+}
+function stopUIBackground() {
+    cancelAnimationFrame(uiBgRAF);
+    uiBgRAF = null;
+    if (uiBgCanvas) uiBgCanvas.style.display = 'none';
+}
+
+// ═══ 战机轮盘 ═══
+const CAROUSEL_CARDS = [
+    { shipId: 'rt1',  label: 'RT-1 RESCUER',  unlocked: true  },
+    { shipId: 'rtg2', label: 'RTG-II',         unlocked: false },
+    { shipId: null,   label: 'COMING SOON',    unlocked: false },
+    { shipId: null,   label: 'COMING SOON',    unlocked: false },
+    { shipId: null,   label: 'COMING SOON',    unlocked: false }
+];
+const CARD_COUNT = CAROUSEL_CARDS.length;
+const CARD_SPACING = 170;
+const CARD_W = 148;
+let cPos = 0, cVel = 0, cDragging = false;
+let cDragX0 = 0, cDragPrevX = 0, cDragPrevT = 0;
+let cLastTapIdx = -1, cLastTapTime = 0;
+let cRafId = null;
+
+function buildCarousel() {
+    let wrap = document.getElementById('carousel-wrap');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    CAROUSEL_CARDS.forEach((data, i) => {
+        let div = document.createElement('div');
+        div.className = 'c-card';
+        div.dataset.idx = i;
+        let cvs = document.createElement('canvas');
+        cvs.width = 80; cvs.height = 60;
+        cvs.style.cssText = 'display:block;margin:0 auto;image-rendering:pixelated;';
+        div.appendChild(cvs);
+        let nm = document.createElement('div');
+        nm.className = 'c-card-name';
+        nm.textContent = data.label;
+        div.appendChild(nm);
+        let sub = document.createElement('div');
+        sub.className = 'c-card-sub ' + (data.unlocked ? 'c-card-tap' : 'c-card-locked');
+        sub.textContent = data.unlocked ? (i === 0 ? 'TAP AGAIN' : 'TAP AGAIN') : 'LOCKED';
+        div.appendChild(sub);
+        div.addEventListener('pointerdown', cOnDown);
+        wrap.appendChild(div);
+    });
+    cRenderPreviews();
+    cDrawCarousel();
+}
+
+function cRenderPreviews() {
+    let wrap = document.getElementById('carousel-wrap');
+    if (!wrap || !sprites) return;
+    CAROUSEL_CARDS.forEach((data, i) => {
+        if (!data.shipId) return;
+        let card = wrap.children[i];
+        if (!card) return;
+        let cvs = card.querySelector('canvas');
+        if (!cvs) return;
+        let cfg = SHIPS[data.shipId];
+        let spr = cfg && sprites[cfg.sprite];
+        if (!spr) return;
+        let ctx = cvs.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+        ctx.clearRect(0, 0, cvs.width, cvs.height);
+        let sw = spr.cssW || spr.width, sh = spr.cssH || spr.height;
+        let sc = Math.min(cvs.width / sw, cvs.height / sh) * 0.8;
+        ctx.drawImage(spr, (cvs.width - sw * sc) / 2, (cvs.height - sh * sc) / 2, sw * sc, sh * sc);
+    });
+}
+
+function cIdxWrap(i) { return ((i % CARD_COUNT) + CARD_COUNT) % CARD_COUNT; }
+
+function cDrawCarousel() {
+    let wrap = document.getElementById('carousel-wrap');
+    if (!wrap) return;
+    let cx = wrap.clientWidth / 2;
+    let cy = wrap.clientHeight / 2;
+    let centerIdx = cIdxWrap(Math.round(cPos));
+    Array.from(wrap.children).forEach((card, i) => {
+        let diff = i - cPos;
+        while (diff > CARD_COUNT / 2) diff -= CARD_COUNT;
+        while (diff < -CARD_COUNT / 2) diff += CARD_COUNT;
+        let x = cx + diff * CARD_SPACING - CARD_W / 2;
+        let absDiff = Math.abs(diff);
+        let scale = Math.max(0.5, 1 - absDiff * 0.18);
+        let alpha = Math.max(0.25, 1 - absDiff * 0.35);
+        let ty = cy - card.offsetHeight * scale / 2;
+        card.style.transform = `translate(${x}px, ${ty}px) scale(${scale})`;
+        card.style.opacity = alpha;
+        card.style.zIndex = Math.round(10 - absDiff * 2);
+        card.classList.toggle('c-center', i === centerIdx);
+    });
+}
+
+function cOnDown(e) {
+    e.preventDefault();
+    cDragging = true;
+    cDragX0 = e.clientX;
+    cDragPrevX = e.clientX;
+    cDragPrevT = performance.now();
+    cVel = 0;
+    document.addEventListener('pointermove', cOnMove, { passive: false });
+    document.addEventListener('pointerup', cOnUp);
+}
+function cOnMove(e) {
+    if (!cDragging) return;
+    let dx = e.clientX - cDragPrevX;
+    let dt = performance.now() - cDragPrevT;
+    if (dt > 0) cVel = -dx / CARD_SPACING / (dt / 16);
+    cPos += -dx / CARD_SPACING;
+    cDragPrevX = e.clientX;
+    cDragPrevT = performance.now();
+    cDrawCarousel();
+}
+function cOnUp(e) {
+    document.removeEventListener('pointermove', cOnMove);
+    document.removeEventListener('pointerup', cOnUp);
+    cDragging = false;
+    let totalDx = Math.abs(e.clientX - cDragX0);
+    if (totalDx < 8) {
+        let target = e.target.closest('.c-card');
+        if (target) {
+            let idx = parseInt(target.dataset.idx);
+            let centerIdx = cIdxWrap(Math.round(cPos));
+            if (centerIdx === idx) {
+                let now = Date.now();
+                if (cLastTapIdx === idx && now - cLastTapTime < 700) {
+                    cOnConfirm(idx);
+                } else {
+                    cLastTapIdx = idx;
+                    cLastTapTime = now;
+                }
+            } else {
+                let diff = idx - Math.round(cPos);
+                while (diff > CARD_COUNT / 2) diff -= CARD_COUNT;
+                while (diff < -CARD_COUNT / 2) diff += CARD_COUNT;
+                cVel = diff * 0.2;
+            }
+        }
+    }
+    cStartInertia();
+}
+function cStartInertia() {
+    cancelAnimationFrame(cRafId);
+    (function tick() {
+        if (cDragging) return;
+        cPos += cVel;
+        cVel *= 0.88;
+        if (Math.abs(cVel) < 0.008) {
+            cPos = Math.round(cPos);
+            cVel = 0;
+            cDrawCarousel();
+            return;
+        }
+        cDrawCarousel();
+        cRafId = requestAnimationFrame(tick);
+    })();
+}
+function cOnConfirm(idx) {
+    let data = CAROUSEL_CARDS[cIdxWrap(idx)];
+    if (!data.unlocked) { showFlash && showFlash('LOCKED'); return; }
+    newFlowShipId = data.shipId;
+    openNewLoadout(data.shipId);
+}
+
+// ═══ 新装备选择界面 ═══
+let newFlowShipId = 'rt1';
+let nlSelectedSlotIdx = null;
+let nlDetailEquipId = null;
+
+function openNewLoadout(shipId) {
+    newFlowShipId = shipId;
+    let cfg = SHIPS[shipId] || SHIPS.rt1;
+    pendingLoadoutData = {
+        wingman: Array(cfg.wingmanGroups.length).fill('as1'),
+        subweapon: Array(cfg.subweaponGroups.length).fill('rfa'),
+        primary: null
+    };
+    try {
+        let saved = JSON.parse(localStorage.getItem('pxROG_loadout_pref') || '{}');
+        if (saved[shipId]) {
+            let s = saved[shipId];
+            if (s.wingman && s.wingman.length === cfg.wingmanGroups.length)
+                pendingLoadoutData.wingman = s.wingman.map(t => WINGMAN_TYPES[t] ? t : 'as1');
+            if (s.subweapon && s.subweapon.length === cfg.subweaponGroups.length)
+                pendingLoadoutData.subweapon = s.subweapon.map(t => SUBWEAPON_TYPES[t] ? t : 'rfa');
+            if (s.primary && cfg.primaryOptions && cfg.primaryOptions.includes(s.primary))
+                pendingLoadoutData.primary = s.primary;
+        }
+    } catch(e) {}
+    if (!pendingLoadoutData.primary && cfg.primaryOptions && cfg.primaryOptions.length)
+        pendingLoadoutData.primary = cfg.primaryOptions[0];
+    nlBuildUI(cfg);
+    showScreen('new-loadout');
+}
+
+function nlBuildUI(cfg) {
+    let lsCvs = document.getElementById('nl-ship-canvas');
+    if (lsCvs && sprites) {
+        let ctx = lsCvs.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+        let spr = sprites[cfg.sprite];
+        if (spr) {
+            ctx.clearRect(0, 0, lsCvs.width, lsCvs.height);
+            let sw = spr.cssW || spr.width, sh = spr.cssH || spr.height;
+            let sc = Math.min(lsCvs.width / sw, lsCvs.height / sh) * 0.8;
+            ctx.drawImage(spr, (lsCvs.width - sw * sc) / 2, (lsCvs.height - sh * sc) / 2, sw * sc, sh * sc);
+        }
+    }
+    let lbl = document.getElementById('nl-ship-label');
+    if (lbl) lbl.textContent = cfg.nameEn || cfg.name || newFlowShipId.toUpperCase();
+
+    let groups = [];
+    groups.push({ slotType: 'primary', groupIdx: 0, groupSize: 1,
+        currentType: pendingLoadoutData.primary || (cfg.primaryOptions && cfg.primaryOptions[0]) || 'none' });
+    cfg.subweaponGroups.forEach((size, gi) =>
+        groups.push({ slotType: 'subweapon', groupIdx: gi, groupSize: size,
+            currentType: pendingLoadoutData.subweapon[gi] || 'rfa' }));
+    cfg.wingmanGroups.forEach((size, gi) =>
+        groups.push({ slotType: 'wingman', groupIdx: gi, groupSize: 1,
+            currentType: pendingLoadoutData.wingman[gi] || 'as1', displayMult: size }));
+
+    lsUIState.slots = groups;
+    nlSelectedSlotIdx = 0;
+
+    let col = document.getElementById('nl-slot-col');
+    if (!col) return;
+    col.innerHTML = '';
+    groups.forEach((slot, idx) => {
+        if (idx > 0 && ((slot.slotType === 'subweapon' && slot.groupIdx === 0) ||
+                        (slot.slotType === 'wingman' && slot.groupIdx === 0))) {
+            let div = document.createElement('div');
+            div.className = 'nl-divider';
+            col.appendChild(div);
+        }
+        let wrapper = document.createElement('div');
+        wrapper.style.cssText = 'position:relative;display:inline-block;';
+        let cvs = document.createElement('canvas');
+        cvs.width = 40; cvs.height = 40;
+        cvs.style.cssText = 'display:block;cursor:pointer;image-rendering:pixelated;';
+        nlDrawSlot(cvs, slot, idx === nlSelectedSlotIdx);
+        cvs.onclick = (e) => { e.stopPropagation(); nlClickSlot(idx); };
+        wrapper.appendChild(cvs);
+        let mult = slot.displayMult || slot.groupSize;
+        if (mult > 1 || slot.slotType !== 'primary') {
+            let lbl2 = document.createElement('span');
+            lbl2.textContent = '×' + mult;
+            lbl2.style.cssText = 'position:absolute;right:-1px;bottom:-1px;font-family:monospace;font-size:7px;color:#666;line-height:1;';
+            wrapper.appendChild(lbl2);
+        }
+        col.appendChild(wrapper);
+    });
+}
+
+function nlDrawSlot(cvs, slot, isSelected) {
+    cvs.width = 40; cvs.height = 40;
+    lsDrawSlotSquare(cvs, isSelected, slot.displayMult || slot.groupSize, slot.currentType, slot.slotType);
+}
+
+function nlClickSlot(idx) {
+    nlSelectedSlotIdx = idx;
+    nlDetailEquipId = null;
+    let col = document.getElementById('nl-slot-col');
+    col && col.querySelectorAll('canvas').forEach((cvs, i) => {
+        let s = lsUIState.slots[i];
+        if (s) nlDrawSlot(cvs, s, i === idx);
+    });
+    nlSetDetail(null);
+    nlBuildTray(idx);
+    nlOpenTray();
+}
+
+function nlBuildTray(slotIdx) {
+    let tray = document.getElementById('nl-tray');
+    if (!tray) return;
+    tray.innerHTML = '';
+    let slot = lsUIState.slots[slotIdx];
+    if (!slot) return;
+    let items = [];
+    if (slot.slotType === 'wingman') items = Object.values(WINGMAN_TYPES);
+    else if (slot.slotType === 'subweapon') items = Object.values(SUBWEAPON_TYPES);
+    else if (slot.slotType === 'primary') {
+        let cfg = SHIPS[newFlowShipId] || {};
+        items = (cfg.primaryOptions || ['none', 'proto2']).map(id => {
+            if (id === 'none') return { id: 'none', name: 'Standard Gun', color: '#4caf50' };
+            return upgradePool && upgradePool.find(u => u.id === id);
+        }).filter(Boolean);
+    }
+    items.forEach(def => {
+        let cvs = document.createElement('canvas');
+        cvs.width = 44; cvs.height = 44;
+        cvs.className = 'nl-eq-icon';
+        let ctx = cvs.getContext('2d');
+        ctx.fillStyle = '#080816';
+        ctx.fillRect(0, 0, 44, 44);
+        lsDrawEquipIcon(ctx, def.id, 22, 20, 20);
+        ctx.fillStyle = def.color || '#555';
+        ctx.fillRect(0, 40, 44, 4);
+        cvs.dataset.equipId = def.id;
+        cvs.addEventListener('click', (e) => { e.stopPropagation(); nlClickEquip(def.id, def); });
+        tray.appendChild(cvs);
+    });
+}
+
+function nlClickEquip(id, def) {
+    if (nlDetailEquipId === id) {
+        let slot = lsUIState.slots[nlSelectedSlotIdx];
+        if (slot) {
+            slot.currentType = id;
+            if (slot.slotType === 'wingman') pendingLoadoutData.wingman[slot.groupIdx] = id;
+            else if (slot.slotType === 'subweapon') pendingLoadoutData.subweapon[slot.groupIdx] = id;
+            else if (slot.slotType === 'primary') pendingLoadoutData.primary = id;
+            let col = document.getElementById('nl-slot-col');
+            let squares = col && col.querySelectorAll('canvas');
+            if (squares && squares[nlSelectedSlotIdx]) nlDrawSlot(squares[nlSelectedSlotIdx], slot, true);
+        }
+        nlCloseTray();
+    } else {
+        nlDetailEquipId = id;
+        nlSetDetail(def);
+        let tray = document.getElementById('nl-tray');
+        tray && tray.querySelectorAll('.nl-eq-icon').forEach(c => {
+            c.classList.toggle('nl-focused', c.dataset.equipId === id);
+        });
+    }
+}
+
+function nlSetDetail(def) {
+    let panel = document.getElementById('nl-detail');
+    if (!panel) return;
+    if (!def) {
+        panel.classList.remove('nl-open');
+        panel.innerHTML = '';
+        return;
+    }
+    let statDef = LS_ITEM_STATS[def.id];
+    let rows = statDef ? statDef.rows.map(r => `<div style="display:flex;justify-content:space-between;font-size:6px;color:#aaa;margin-bottom:3px;"><span>${r[0]}</span><span style="color:#fff">${r[1]}</span></div>`).join('') : '';
+    panel.innerHTML = `
+        <div style="font-family:'Press Start 2P',monospace;font-size:7px;color:${def.color||'#fff'};margin-bottom:8px;line-height:1.4;">${def.name||''}</div>
+        <div style="font-family:'Press Start 2P',monospace;">${rows}</div>
+        <div style="margin-top:10px;font-family:'Press Start 2P',monospace;font-size:6px;color:#00e676;">TAP AGAIN<br>TO EQUIP</div>`;
+    // vertical position: align with ship area
+    let stage = document.getElementById('nl-stage');
+    let shipArea = document.getElementById('nl-ship-area');
+    if (stage && shipArea) {
+        let shipRect = shipArea.getBoundingClientRect();
+        let scRect = document.getElementById('new-loadout-screen').getBoundingClientRect();
+        panel.style.top = (shipRect.top - scRect.top) + 'px';
+        panel.style.height = shipRect.height + 'px';
+    }
+    panel.classList.add('nl-open');
+}
+
+function nlOpenTray() {
+    let tray = document.getElementById('nl-tray');
+    let stage = document.getElementById('nl-stage');
+    if (tray) tray.classList.add('nl-open');
+    if (stage) stage.classList.add('nl-compact');
+}
+
+function nlCloseTray() {
+    let tray = document.getElementById('nl-tray');
+    let stage = document.getElementById('nl-stage');
+    if (tray) tray.classList.remove('nl-open');
+    if (stage) stage.classList.remove('nl-compact');
+    nlDetailEquipId = null;
+    nlSetDetail(null);
+}
+
+function nlOnShipClick() {
+    try {
+        let saved = JSON.parse(localStorage.getItem('pxROG_loadout_pref') || '{}');
+        saved[newFlowShipId] = {
+            wingman: [...pendingLoadoutData.wingman],
+            subweapon: [...pendingLoadoutData.subweapon],
+            primary: pendingLoadoutData.primary
+        };
+        localStorage.setItem('pxROG_loadout_pref', JSON.stringify(saved));
+    } catch(e) {}
+    openDifficultyScreen();
+}
+
+// ═══ 难度选择界面 ═══
+const DIFF_NAMES = ['EASY', 'NORMAL', 'HARD', 'ABYSS'];
+const DIFF_COLORS = ['#4caf50', '#00b0ff', '#ff9800', '#ff1744'];
+const DIFF_DESCS = ['Beginner friendly. Fewer swarm enemies.', 'Standard challenge.', 'Increased enemy HP and density.', 'Extreme difficulty. No mercy.'];
+let dcExpanded = null, dcSelected = 0, dcLastClickLevel = -1, dcLastClickTime = 0;
+
+function openDifficultyScreen() {
+    uiBgParallaxTarget = 90;
+    let cont = document.getElementById('diff-cards-new');
+    if (!cont) return;
+    cont.innerHTML = '';
+    DIFF_NAMES.forEach((name, level) => {
+        let card = document.createElement('div');
+        card.className = 'dc-card';
+        card.dataset.level = level;
+        card.innerHTML = `<div class="dc-header"><span>${name}</span><span style="color:${DIFF_COLORS[level]};font-size:7px;">▼</span></div><div class="dc-body">${DIFF_DESCS[level]}</div>`;
+        card.addEventListener('click', () => dcClickCard(level));
+        cont.appendChild(card);
+    });
+    dcExpanded = null;
+    dcSelected = 1;
+    dcClickCard(1);
+    showScreen('difficulty');
+}
+
+function dcClickCard(level) {
+    let cards = document.querySelectorAll('#diff-cards-new .dc-card');
+    let now = Date.now();
+    if (dcExpanded === level && dcLastClickLevel === level && now - dcLastClickTime < 700) {
+        dcConfirm(level);
+        return;
+    }
+    if (dcExpanded !== null && dcExpanded !== level && cards[dcExpanded])
+        cards[dcExpanded].classList.remove('dc-expanded');
+    dcExpanded = level;
+    cards[level] && cards[level].classList.add('dc-expanded');
+    dcSelected = level;
+    cards.forEach((c, i) => c.classList.toggle('dc-selected', i === level));
+    dcLastClickLevel = level;
+    dcLastClickTime = now;
+}
+
+function dcConfirm(level) {
+    selectDifficulty(level);
+    startGame('sector1', false, newFlowShipId, pendingLoadoutData);
+}
+
+function initUI() {
+    initDifficultyUI();
+    setControlMode(config.controlMode);
+    setTouchMode(config.touchMode);
+    setupMultiTouchButtons();
+    initUIBackground();
 }
 
 canvas.addEventListener('touchstart', e => { e.preventDefault(); handleTouchStart(e); }, {passive: false});
@@ -3143,6 +3618,12 @@ canvas.addEventListener('mousemove', e => {
 canvas.addEventListener('mouseup', () => { isTouchActive = false; });
 canvas.addEventListener('mouseleave', () => { isTouchActive = false; });
 window.addEventListener('resize', resize);
+
+// 新装备界面：点击空白处关闭托盘
+(function() {
+    let sc = document.getElementById('new-loadout-screen');
+    if (sc) sc.addEventListener('click', e => { if (e.target.id === 'new-loadout-screen') nlCloseTray(); });
+})();
 
 // 预加载 PNG 图像资产（异步，后续 initSprites 优先使用）
 preloadGameImages();

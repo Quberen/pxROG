@@ -24,7 +24,7 @@ const SHIPS = {
         wingmanGroups: [1, 1, 1],
         subweaponGroups: [2, 2],
         initSlots: 5,
-        primaryOptions: ['spread', 'proto2', 'pulse', 'homing'],
+        primaryOptions: ['none', 'proto2'],
         sprite: 'player'
     },
     rtg2: {
@@ -35,7 +35,7 @@ const SHIPS = {
         subweaponGroups: [1],
         initSlots: 4,
         p_hp: 120,
-        primaryOptions: ['spread', 'proto2', 'burst_core', 'homing'],
+        primaryOptions: ['none', 'proto2'],
         sprite: 'player_exp'
     }
 };
