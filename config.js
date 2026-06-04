@@ -128,9 +128,12 @@ function _imgToCanvas(img, w, h) {
     cx.imageSmoothingEnabled = false;
     cx.drawImage(img, 0, 0, w, h);
     let d = cx.getImageData(0, 0, w, h);
+    // 从左上角像素采样背景色，去除色差 < 40 的像素（处理灰/白等任意背景）
+    let bgR = d.data[0], bgG = d.data[1], bgB = d.data[2];
+    let thresh = 40 * 40;
     for (let i = 0; i < d.data.length; i += 4) {
-        if (d.data[i] > 220 && d.data[i+1] > 220 && d.data[i+2] > 220)
-            d.data[i+3] = 0;
+        let dr = d.data[i] - bgR, dg = d.data[i+1] - bgG, db = d.data[i+2] - bgB;
+        if (dr*dr + dg*dg + db*db < thresh) d.data[i+3] = 0;
     }
     cx.putImageData(d, 0, 0);
     return c;
@@ -267,7 +270,10 @@ function initSprites() {
 
     // PNAM-1 游戏内精灵：优先使用 PNG；PNG 未加载时用像素阵列 fallback
     if (window.preloadedImages && window.preloadedImages.pnam) {
-        sprites.pnam_drone = _imgToCanvas(window.preloadedImages.pnam, 14, 36);
+        let _dpr = window.canvasDPR || window.devicePixelRatio || 1;
+        let s = _imgToCanvas(window.preloadedImages.pnam, Math.round(14 * _dpr), Math.round(36 * _dpr));
+        s.cssW = 14; s.cssH = 36;
+        sprites.pnam_drone = s;
     } else {
         sprites.pnam_drone = createPixelTexture([
             [0,0,1,1,0,0],
@@ -317,7 +323,8 @@ function initSprites() {
 
     // 核辐射图标：优先使用 PNG；未加载时用数学生成 fallback
     if (window.preloadedImages && window.preloadedImages.nuclear) {
-        window._nuclearSymSprite = _imgToCanvas(window.preloadedImages.nuclear, 32, 32);
+        let _dpr = window.canvasDPR || window.devicePixelRatio || 1;
+        window._nuclearSymSprite = _imgToCanvas(window.preloadedImages.nuclear, Math.round(32 * _dpr), Math.round(32 * _dpr));
     } else {
         (function() {
             let size = 16, c = size / 2;

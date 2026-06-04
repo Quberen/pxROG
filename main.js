@@ -792,8 +792,15 @@ function _drawNuclearSymbol(ctx, cx, cy, r) {
 function drawPixelButton(id, icon, progress, color, isActive = false, cdProgress = 0, solidReady = false, ptCost = 0) {
     let cvs = document.getElementById(id);
     if (!cvs) return;
+    let dpr = window.canvasDPR || 1;
+    let BASE = 48;
+    if (cvs.width !== Math.round(BASE * dpr)) {
+        cvs.width = Math.round(BASE * dpr);
+        cvs.height = Math.round(BASE * dpr);
+    }
     let ctx = cvs.getContext('2d');
-    ctx.clearRect(0, 0, 48, 48);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, BASE, BASE);
     ctx.fillStyle = '#111'; ctx.fillRect(4, 4, 40, 40);
     if (progress > 0) {
         ctx.fillStyle = color;
@@ -2168,13 +2175,16 @@ function processGroup(group, isPlaying) {
     }
 }
 
-function resize() { 
-    width = window.innerWidth; 
-    height = window.innerHeight; 
-    canvas.width = width; 
-    canvas.height = height; 
-    ctx.imageSmoothingEnabled = false; 
-    updateUIRects(); 
+function resize() {
+    let dpr = window.devicePixelRatio || 1;
+    window.canvasDPR = dpr;
+    width = window.innerWidth;
+    height = window.innerHeight;
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    updateUIRects();
 }
 // --- [新增] 战术终端逻辑 ---
 function toggleTerminal() {

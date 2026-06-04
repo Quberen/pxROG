@@ -2131,7 +2131,8 @@ class PNAMDrone {
         ctx.translate(this.x, this.y);
         let spr = sprites.pnam_drone;
         if (spr) {
-            ctx.drawImage(spr, -spr.width/2, -spr.height/2);
+            let sw = spr.cssW || 14, sh = spr.cssH || 36;
+            ctx.drawImage(spr, -sw/2, -sh/2, sw, sh);
             // 红色小灯（覆盖在精灵正中心，颜色随状态变化）
             let lightColor = this._lightOn ? '#ff1744' : '#555555';
             ctx.fillStyle = lightColor;
