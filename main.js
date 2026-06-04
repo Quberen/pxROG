@@ -828,7 +828,7 @@ function drawPixelButton(id, icon, progress, color, isActive = false, cdProgress
     if (id && id.includes('pnam') && window._nuclearSymSprite) {
         ctx.save();
         ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(window._nuclearSymSprite, 30, 30, 12, 12);
+        ctx.drawImage(window._nuclearSymSprite, 28, 28, 16, 16);
         ctx.restore();
     }
     // PT 费用：右上角罗马数字（始终白色加粗）
