@@ -1720,7 +1720,7 @@ function loop(timestamp) {
                     flashScreenColor = '255, 100, 0';
                     triggerShake(4, 4);
                 }
-            } else if (player.skillCdTimer > 0) { player.skillCdTimer--; }
+            } else if (player.skillCdTimer > 0) { player.skillCdTimer = Math.max(0, player.skillCdTimer - (isDebugMode ? 10 : 1)); }
         }
 
         applyElastic(uiOffsets.hp, ui.hpVal, 'hp');
@@ -2020,7 +2020,7 @@ function loop(timestamp) {
                 });
                 // Decrement avenger CDs
                 for (let i = 0; i < avengerSlotCds.length; i++) {
-                    if (avengerSlotCds[i] > 0) avengerSlotCds[i]--;
+                    if (avengerSlotCds[i] > 0) avengerSlotCds[i] = Math.max(0, avengerSlotCds[i] - (isDebugMode ? 10 : 1));
                 }
                 // Process missile fire queue
                 for (let i = avengerFireQueues.length-1; i >= 0; i--) {
@@ -2034,7 +2034,7 @@ function loop(timestamp) {
                 }
                 // Decrement ASR CDs
                 for (let i = 0; i < asrSlotCds.length; i++) {
-                    if (asrSlotCds[i] > 0) asrSlotCds[i]--;
+                    if (asrSlotCds[i] > 0) asrSlotCds[i] = Math.max(0, asrSlotCds[i] - (isDebugMode ? 10 : 1));
                 }
                 // Process ASR fire queues: each entry spawns a 4-rocket salvo
                 for (let i = asrFireQueues.length-1; i >= 0; i--) {
@@ -2052,7 +2052,7 @@ function loop(timestamp) {
                 }
                 // Decrement PNAM CDs
                 for (let i = 0; i < pnamSlotCds.length; i++) {
-                    if (pnamSlotCds[i] > 0) pnamSlotCds[i]--;
+                    if (pnamSlotCds[i] > 0) pnamSlotCds[i] = Math.max(0, pnamSlotCds[i] - (isDebugMode ? 10 : 1));
                 }
                 // Process PNAM fire queues
                 for (let i = pnamFireQueues.length-1; i >= 0; i--) {
@@ -2367,8 +2367,8 @@ window.terminalBuyBlue = function(key) {
     if (!cfg || lv >= cfg.values.length) return; 
     
     let cost = cfg.costs[lv];
-    if (player.pt >= cost) {
-        player.pt -= cost; // 精准扣除阶梯点数
+    if (isDebugMode || player.pt >= cost) {
+        if (!isDebugMode) player.pt -= cost; // 精准扣除阶梯点数
         let nextVal = cfg.values[lv];
         
         // 动态注入四维引擎
@@ -2405,8 +2405,8 @@ window.techTreeBuy = function(nodeId) {
     let rootMet   = (node.minRootLevel || 0) <= rootLv;
     if (!prereqMet || !rootMet) { triggerShake(4, 4); return; }
     let cost = node.costs[curLv];
-    if (player.pt < cost) { triggerShake(4, 4); return; }
-    player.pt -= cost;
+    if (!isDebugMode && player.pt < cost) { triggerShake(4, 4); return; }
+    if (!isDebugMode) player.pt -= cost;
     player.techTree[nodeId] = curLv + 1;
     if (nodeId === 'hp_max') player.hp = Math.min(player.maxHp, player.hp + 20);
     switchTerminalTab('tech');
@@ -2612,7 +2612,7 @@ function renderShipPreviews() {
 function fireAvenger(btnIdx) {
     if (!player || gameState !== 'PLAYING') return;
     if ((avengerSlotCds[btnIdx] || 0) > 0) { triggerShake(4, 4); return; }
-    if ((player.pt || 0) < 1) { triggerShake(4, 4); return; }  // PT不足
+    if (!isDebugMode && (player.pt || 0) < 1) { triggerShake(4, 4); return; }  // PT不足
     let avengerCount = -1, targetGroupIdx = -1;
     let slotOffset = 0;
     for (let g = 0; g < (player.subweaponGroups || []).length; g++) {
@@ -2628,14 +2628,14 @@ function fireAvenger(btnIdx) {
     for (let s = 0; s < groupSize; s++) {
         avengerFireQueues.push({ timer: s * 12, sharedTargetRef });
     }
-    player.pt -= 1;
+    if (!isDebugMode) player.pt -= 1;
     avengerSlotCds[btnIdx] = 240;  // 4秒
 }
 
 function fireASR(btnIdx) {
     if (!player || gameState !== 'PLAYING') return;
     if ((asrSlotCds[btnIdx] || 0) > 0) { triggerShake(4, 4); return; }
-    if ((player.pt || 0) < 2) { triggerShake(4, 4); return; }  // PT不足
+    if (!isDebugMode && (player.pt || 0) < 2) { triggerShake(4, 4); return; }  // PT不足
     let asrCount = -1, targetGroupIdx = -1, slotOffset = 0;
     for (let g = 0; g < (player.subweaponGroups || []).length; g++) {
         if (player.subweaponLoadout[slotOffset] === 'asr') {
@@ -2649,14 +2649,14 @@ function fireASR(btnIdx) {
     for (let s = 0; s < groupSize; s++) {
         asrFireQueues.push({ timer: s * 24 });
     }
-    player.pt -= 2;
+    if (!isDebugMode) player.pt -= 2;
     asrSlotCds[btnIdx] = 540;  // 9秒
 }
 
 function firePNAM(btnIdx) {
     if (!player || gameState !== 'PLAYING') return;
     if ((pnamSlotCds[btnIdx] || 0) > 0) { triggerShake(4, 4); return; }
-    if ((player.pt || 0) < 6) { triggerShake(4, 4); return; }  // PT不足
+    if (!isDebugMode && (player.pt || 0) < 6) { triggerShake(4, 4); return; }  // PT不足
     // 找到该按钮对应的group及大小，多槽以48帧(0.8s)间隔弹射
     let pnamCount = -1, groupSize = 1, slotOffset = 0;
     for (let g = 0; g < (player.wingmanGroups || []).length; g++) {
@@ -2669,7 +2669,7 @@ function firePNAM(btnIdx) {
     for (let s = 0; s < groupSize; s++) {
         pnamFireQueues.push({ timer: s * 48 });  // s=0立即，s=1等0.8s
     }
-    player.pt -= 6;
+    if (!isDebugMode) player.pt -= 6;
     pnamSlotCds[btnIdx] = 1140;  // 19秒
 }
 
