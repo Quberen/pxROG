@@ -128,11 +128,17 @@ function _imgToCanvas(img, w, h) {
     cx.imageSmoothingEnabled = false;
     cx.drawImage(img, 0, 0, w, h);
     let d = cx.getImageData(0, 0, w, h);
-    // 从左上角像素采样背景色，去除色差 < 60 的像素（处理灰/白等任意背景）
+    // 第一遍：角点采样背景色，去除色差 < 60 的像素
     let bgR = d.data[0], bgG = d.data[1], bgB = d.data[2];
     let thresh = 60 * 60;
     for (let i = 0; i < d.data.length; i += 4) {
         let dr = d.data[i] - bgR, dg = d.data[i+1] - bgG, db = d.data[i+2] - bgB;
+        if (dr*dr + dg*dg + db*db < thresh) d.data[i+3] = 0;
+    }
+    // 第二遍：去除近白色像素（角点为灰色时白色背景区域不被第一遍覆盖）
+    for (let i = 0; i < d.data.length; i += 4) {
+        if (d.data[i+3] === 0) continue;
+        let dr = d.data[i] - 255, dg = d.data[i+1] - 255, db = d.data[i+2] - 255;
         if (dr*dr + dg*dg + db*db < thresh) d.data[i+3] = 0;
     }
     cx.putImageData(d, 0, 0);
@@ -322,9 +328,12 @@ function initSprites() {
     ], ['#ffffff'], 2);
 
     // 核辐射图标：优先使用 PNG；未加载时用数学生成 fallback
+    // 源图 1112×960（横向宽），按比例缩到 16×14（约 1.14:1），避免拉伸
     if (window.preloadedImages && window.preloadedImages.nuclear) {
         let _dpr = window.canvasDPR || window.devicePixelRatio || 1;
-        window._nuclearSymSprite = _imgToCanvas(window.preloadedImages.nuclear, Math.round(32 * _dpr), Math.round(32 * _dpr));
+        let s = _imgToCanvas(window.preloadedImages.nuclear, Math.round(16 * _dpr), Math.round(14 * _dpr));
+        s.cssW = 16; s.cssH = 14;
+        window._nuclearSymSprite = s;
     } else {
         (function() {
             let size = 16, c = size / 2;
