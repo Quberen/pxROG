@@ -128,9 +128,9 @@ function _imgToCanvas(img, w, h) {
     cx.imageSmoothingEnabled = false;
     cx.drawImage(img, 0, 0, w, h);
     let d = cx.getImageData(0, 0, w, h);
-    // 从左上角像素采样背景色，去除色差 < 40 的像素（处理灰/白等任意背景）
+    // 从左上角像素采样背景色，去除色差 < 60 的像素（处理灰/白等任意背景）
     let bgR = d.data[0], bgG = d.data[1], bgB = d.data[2];
-    let thresh = 40 * 40;
+    let thresh = 60 * 60;
     for (let i = 0; i < d.data.length; i += 4) {
         let dr = d.data[i] - bgR, dg = d.data[i+1] - bgG, db = d.data[i+2] - bgB;
         if (dr*dr + dg*dg + db*db < thresh) d.data[i+3] = 0;
