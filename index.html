@@ -418,32 +418,30 @@
     ══════════════════════════════════════ -->
     <div id="ship-select-screen" class="overlay" data-level-id="">
         <button onclick="showScreen('start')" style="position:absolute;top:16px;left:16px;background:none;border:none;color:#fff;font-family:'Press Start 2P',monospace;font-size:18px;cursor:pointer;padding:4px;line-height:1;">〈</button>
-        <h1>战机选择</h1>
-        <p style="font-size:8px;color:#777;margin-bottom:8px;max-width:280px;">点击卡片选择战机，再次点击确认</p>
+        <h1>Ship Select</h1>
+        <p style="font-size:8px;color:#777;margin-bottom:8px;max-width:280px;">Select a ship · click again to confirm</p>
         <div class="ship-cards-row">
             <div class="ship-card unselected" id="ship-card-rt1" onclick="selectShip('rt1')">
                 <canvas class="ship-preview" id="preview-rt1" width="66" height="48"></canvas>
                 <div class="ship-name">RT-1 RESCUER</div>
-                <div class="ship-name-zh">拯救者</div>
                 <div class="ship-slots-table">
-                    <div class="slot-row"><span>射击位</span><span class="slot-val">×1</span></div>
-                    <div class="slot-row"><span>僚机位</span><span class="slot-val">×3</span></div>
-                    <div class="slot-row"><span>副武器</span><span class="slot-val slot-hl">×4</span></div>
-                    <div class="slot-row"><span>初始槽</span><span class="slot-val">5</span></div>
+                    <div class="slot-row"><span>Guns</span><span class="slot-val">×1</span></div>
+                    <div class="slot-row"><span>Wings</span><span class="slot-val">×3</span></div>
+                    <div class="slot-row"><span>Sub-Wpn</span><span class="slot-val slot-hl">×4</span></div>
+                    <div class="slot-row"><span>Slots</span><span class="slot-val">5</span></div>
                 </div>
-                <div class="ship-desc">均衡型战机。三联分体僚机独立索敌，双翼副武器覆盖广。</div>
+                <div class="ship-desc">Balanced fighter. Three split drones engage independently, wide dual-wing coverage.</div>
             </div>
             <div class="ship-card unselected" id="ship-card-rtg2" onclick="selectShip('rtg2')">
                 <canvas class="ship-preview" id="preview-rtg2" width="66" height="48"></canvas>
                 <div class="ship-name">RTG-II</div>
-                <div class="ship-name-zh">RTG-II</div>
                 <div class="ship-slots-table">
-                    <div class="slot-row"><span>射击位</span><span class="slot-val slot-hl">×2</span></div>
-                    <div class="slot-row"><span>僚机位</span><span class="slot-val">×2</span></div>
-                    <div class="slot-row"><span>副武器</span><span class="slot-val slot-dim">×1</span></div>
-                    <div class="slot-row"><span>初始槽</span><span class="slot-val slot-dim">4</span></div>
+                    <div class="slot-row"><span>Guns</span><span class="slot-val slot-hl">×2</span></div>
+                    <div class="slot-row"><span>Wings</span><span class="slot-val">×2</span></div>
+                    <div class="slot-row"><span>Sub-Wpn</span><span class="slot-val slot-dim">×1</span></div>
+                    <div class="slot-row"><span>Slots</span><span class="slot-val slot-dim">4</span></div>
                 </div>
-                <div class="ship-desc">双炮战机。双槽僚机始终锁定同一目标，副武器搭载受限。</div>
+                <div class="ship-desc">Twin cannon. Dual drones lock the same target, limited sub-weapon hardpoints.</div>
             </div>
         </div>
     </div>
@@ -472,7 +470,7 @@
 
         <div id="ls-icon-row" style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;justify-content:center;opacity:0;transition:opacity 0.15s;pointer-events:none;max-width:340px;"></div>
 
-        <button class="btn btn-green" style="margin-top:14px;" onclick="confirmLoadout();event.stopPropagation();">确认出发</button>
+        <button class="btn btn-green" style="margin-top:14px;" onclick="confirmLoadout();event.stopPropagation();">Launch</button>
     </div>
 
     <!-- ══════════════════════════════════════

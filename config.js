@@ -19,21 +19,23 @@ const TYPE_TAGS = { 'equip': { label: '装' }, 'stat': { label: '属' }, 'utilit
 const SHIPS = {
     rt1: {
         name: '拯救者', nameEn: 'RT-1 RESCUER',
-        desc: '均衡型战机。三联分体僚机独立索敌，双翼副武器覆盖广。',
+        desc: 'Balanced fighter. Three split drones engage independently, wide dual-wing coverage.',
         shootSlots: 1,
         wingmanGroups: [1, 1, 1],
         subweaponGroups: [2, 2],
         initSlots: 5,
+        primaryOptions: ['spread', 'proto2', 'pulse', 'homing'],
         sprite: 'player'
     },
     rtg2: {
         name: 'RTG-II', nameEn: 'RTG-II',
-        desc: '双炮战机。双槽僚机始终锁定同一目标，副武器搭载受限。',
+        desc: 'Twin cannon. Dual drones lock the same target, limited sub-weapon hardpoints.',
         shootSlots: 2,
         wingmanGroups: [2],
         subweaponGroups: [1],
         initSlots: 4,
         p_hp: 120,
+        primaryOptions: ['spread', 'proto2', 'burst_core', 'homing'],
         sprite: 'player_exp'
     }
 };
@@ -41,12 +43,12 @@ const SHIPS = {
 const WINGMAN_TYPES = {
     as1:  { id: 'as1',  name: 'AS-1',   desc: '自爆机。弧线突袭敌人，接触引爆。',               color: '#ffea00' },
     ds1:  { id: 'ds1',  name: 'DS-1',   desc: '拦截者。护卫机体，每3秒拦截最近敌人子弹。',     color: '#00b0ff' },
-    pnam: { id: 'pnam', name: "PNAM-1'寂星'", desc: '核战僚机。手动发射，接触敌人触发核爆。冷却19秒。', color: '#b0bec5' }
+    pnam: { id: 'pnam', name: "PNAM-1 'Silent Star'", desc: '核战僚机。手动发射，接触敌人触发核爆。冷却19秒。', color: '#b0bec5' }
 };
 const SUBWEAPON_TYPES = {
     rfa:     { id: 'rfa',     name: 'RF-A',          desc: '自动机枪。每0.4秒攻击最近敌人，伤害0.5。',                  color: '#ff9800' },
-    avenger: { id: 'avenger', name: "AS'AVENGER'",   desc: '制导导弹。手动发射，25伤害+20溅射，装填4秒。',             color: '#ab47bc' },
-    asr:     { id: 'asr',     name: "ASR-1'鳄鱼'",  desc: '火箭弹。手动散射4枚，命中20+AOE5，摧毁敌弹，冷却9秒。',  color: '#ef5350' }
+    avenger: { id: 'avenger', name: 'AVENGER',        desc: '制导导弹。手动发射，25伤害+20溅射，装填4秒。',             color: '#ab47bc' },
+    asr:     { id: 'asr',     name: "ASR-1 'Croc'",  desc: '火箭弹。手动散射4枚，命中20+AOE5，摧毁敌弹，冷却9秒。',  color: '#ef5350' }
 };
 
 // 【动态拼装】：从工坊读取数值，拼装为引擎可用的敌人数组
@@ -56,32 +58,32 @@ const ENEMY_TYPES = Object.keys(WORKSHOP.data.enemies).map(key => {
 
 // 【数据混入】：保留静态描述，混入工坊里的价格与等级上限
 const baseUpgradePool = [
-{ id: 'high_explosive', type: 'equip', name: '高能弹头',  slotCost: 1, rarity: 'R', prices: [3,5,10,15,19], max: 5, desc: '弹头伤害提升。每级+20%基础伤害。' },
+{ id: 'high_explosive', type: 'equip', name: 'Hi-Explosive',  slotCost: 1, rarity: 'R', prices: [3,5,10,15,19], max: 5, desc: '弹头伤害提升。每级+20%基础伤害。' },
 { id: 'proto2',         type: 'equip', name: 'Prototype-2 (Short Range)', slotCost: 2, rarity: 'R', prices: [4], max: 1, desc: '短程爆破主炮。子弹在到达40%射程或命中敌人时爆炸，爆炸伤害敌人和敌弹。深渊难度下爆炸伤害降低。' },
-{ id: 'spread',         type: 'equip', name: '散弹模组',  slotCost: 2, rarity: 'R', prices: [3,6,9,16],    max: 4, desc: '发射扇形散弹。分弹头伤害为主弹80%。' },
-{ id: 'skill_duration', type: 'upgrade', name: '超频运转', rarity: 'R', cost: 3, max: 3, desc: '技能持续时间+1秒/级。' },
-{ id: 'burst_core',     type: 'equip', name: '连发核心',  slotCost: 1, rarity: 'E', initialCost: 2,   cost: 3.0, costStep: 2, max: 3, desc: '射速大幅提升。每级额外缩短射击间隔。' },
+{ id: 'spread',         type: 'equip', name: 'Scatter Mod',  slotCost: 2, rarity: 'R', prices: [3,6,9,16],    max: 4, desc: '发射扇形散弹。分弹头伤害为主弹80%。' },
+{ id: 'skill_duration', type: 'upgrade', name: 'Overclock', rarity: 'R', cost: 3, max: 3, desc: '技能持续时间+1秒/级。' },
+{ id: 'burst_core',     type: 'equip', name: 'Rapid Fire',  slotCost: 1, rarity: 'E', initialCost: 2,   cost: 3.0, costStep: 2, max: 3, desc: '射速大幅提升。每级额外缩短射击间隔。' },
 
-    { id: 'heal',       type: 'utility', name: '紧急修复', rarity: 'C', unlockPT: 0,    unlockTime: 0,   desc: '立刻固定恢复20点耐久度。' },
-    { id: 'heal_up',    type: 'utility', name: '修复增幅', rarity: 'C', unlockPT: 0,    unlockTime: 0,   prices: [2,4,6,9,12], desc: '血包恢复量+80%/级。' },
-    { id: 'magnet',     type: 'utility', name: '引力场',   rarity: 'C', unlockPT: 0,    unlockTime: 0,   desc: '扩大能量晶体与补给的拾取范围。' },
-    { id: 'crit_rate',  type: 'stat',    name: '精准校准', rarity: 'C', unlockPT: 1.0,  unlockTime: 0,   prices: [2,4,6,8,10],  desc: '暴击概率+5%/级。' },
-    { id: 'crit_dmg',   type: 'stat',    name: '弱点分析', rarity: 'C', unlockPT: 2.0,  unlockTime: 0,   prices: [2,5,7,9,12],  desc: '暴击伤害+25%/级。' },
-    { id: 'aoe',        type: 'equip',   name: '高爆弹头', slotCost: 2, rarity: 'E', initialCost: 3.0, unlockPT: 8.0,  unlockTime: 60,  desc: '部分攻击引发大范围爆炸。' },
-    { id: 'wingman',    type: 'stat',    name: '战斗僚机', shopHidden: true, rarity: 'E', unlockPT: 12.0, unlockTime: 90, prices: [9,16,24], desc: '强化战斗僚机系统，提升伤害与冷却效率。' },
-    { id: 'slot',       type: 'utility', name: '系统插槽', rarity: 'R', unlockPT: 2.0,  unlockTime: 0,   desc: '背包容量扩充，+1 装备插槽。' },
+    { id: 'heal',       type: 'utility', name: 'Repair Kit', rarity: 'C', unlockPT: 0,    unlockTime: 0,   desc: '立刻固定恢复20点耐久度。' },
+    { id: 'heal_up',    type: 'utility', name: 'Heal Boost', rarity: 'C', unlockPT: 0,    unlockTime: 0,   prices: [2,4,6,9,12], desc: '血包恢复量+80%/级。' },
+    { id: 'magnet',     type: 'utility', name: 'Gravity Field', rarity: 'C', unlockPT: 0,    unlockTime: 0,   desc: '扩大能量晶体与补给的拾取范围。' },
+    { id: 'crit_rate',  type: 'stat',    name: 'Precision', rarity: 'C', unlockPT: 1.0,  unlockTime: 0,   prices: [2,4,6,8,10],  desc: '暴击概率+5%/级。' },
+    { id: 'crit_dmg',   type: 'stat',    name: 'Crit Analysis', rarity: 'C', unlockPT: 2.0,  unlockTime: 0,   prices: [2,5,7,9,12],  desc: '暴击伤害+25%/级。' },
+    { id: 'aoe',        type: 'equip',   name: 'HE Warhead', slotCost: 2, rarity: 'E', initialCost: 3.0, unlockPT: 8.0,  unlockTime: 60,  desc: '部分攻击引发大范围爆炸。' },
+    { id: 'wingman',    type: 'stat',    name: 'Combat Wing', shopHidden: true, rarity: 'E', unlockPT: 12.0, unlockTime: 90, prices: [9,16,24], desc: '强化战斗僚机系统，提升伤害与冷却效率。' },
+    { id: 'slot',       type: 'utility', name: 'Sys Slot', rarity: 'R', unlockPT: 2.0,  unlockTime: 0,   desc: '背包容量扩充，+1 装备插槽。' },
 
-    { id: 'homing',   type: 'equip', name: '追踪模块', rarity: 'E', slotCost: 2, unlockPT: 5.0,  unlockTime: 60,  initialCost: 2.5, desc: '子弹弱追踪敌机。升级提升制导强度。' },
-    { id: 'pulse',    type: 'equip', name: '脉冲发射', rarity: 'R', slotCost: 2, unlockPT: 4.0,  unlockTime: 60,  desc: '点射模式。升级缩短发射间隔。' },
-    { id: 'laser',    type: 'equip', name: '高能激光', rarity: 'E', slotCost: 3, unlockPT: 15.0, unlockTime: 120, initialCost: 5.0, desc: '发射贯穿屏障的高频光束。' },
-    { id: 'pierce',   type: 'equip', name: '穿透弹头', rarity: 'E', slotCost: 1, unlockPT: 4.0,  unlockTime: 60,  desc: '子弹穿透敌机。升级降低衰减并增加穿透数。' },
+    { id: 'homing',   type: 'equip', name: 'Tracking Mod', rarity: 'E', slotCost: 2, unlockPT: 5.0,  unlockTime: 60,  initialCost: 2.5, desc: '子弹弱追踪敌机。升级提升制导强度。' },
+    { id: 'pulse',    type: 'equip', name: 'Pulse Burst', rarity: 'R', slotCost: 2, unlockPT: 4.0,  unlockTime: 60,  desc: '点射模式。升级缩短发射间隔。' },
+    { id: 'laser',    type: 'equip', name: 'HE Laser', rarity: 'E', slotCost: 3, unlockPT: 15.0, unlockTime: 120, initialCost: 5.0, desc: '发射贯穿屏障的高频光束。' },
+    { id: 'pierce',   type: 'equip', name: 'Piercing', rarity: 'E', slotCost: 1, unlockPT: 4.0,  unlockTime: 60,  desc: '子弹穿透敌机。升级降低衰减并增加穿透数。' },
 
-    { id: 'rapid_charge', type: 'stat',    name: '快速充能', rarity: 'C', unlockPT: 1.0,  unlockTime: 0,  prices: [2,3,5,7,12], desc: '拾取能量晶体获得+15%额外充能/级。' },
-    { id: 'phase_dodge',  type: 'stat',    name: '相位闪避', rarity: 'E', unlockPT: 3.0,  unlockTime: 30, prices: [2,4,6,15],   desc: '受伤减免+2/2/2/4%（满级共-10%）。' },
-    { id: 'afterburn',    type: 'equip',   name: '余烬',     slotCost: 1, rarity: 'R', prices: [5,9,18], unlockPT: 5.0, unlockTime: 60, desc: '子弹命中后留下燃烧区域，以绝对值灼烧。' },
-    { id: 'shield_gen',   type: 'utility', name: '屏障再生', rarity: 'R', unlockPT: 1.5,  unlockTime: 0,  desc: '每次休整波次结束时回复8%最大HP/级。' },
-    { id: 'skill_cd',     type: 'upgrade', name: '超频缩减', rarity: 'C', unlockPT: 2.0,  unlockTime: 0,  prices: [2,4,6,9,12], desc: '技能冷却时间-10%/级（最多-50%）。' },
-    { id: 'temp_armor',   type: 'utility', name: '临时装甲', rarity: 'R', unlockPT: 0,    unlockTime: 0,  prices: [4],  max: 999, desc: '一次性获得50点临时护甲（最多3层=150）。' }
+    { id: 'rapid_charge', type: 'stat',    name: 'Rapid Charge', rarity: 'C', unlockPT: 1.0,  unlockTime: 0,  prices: [2,3,5,7,12], desc: '拾取能量晶体获得+15%额外充能/级。' },
+    { id: 'phase_dodge',  type: 'stat',    name: 'Phase Dodge', rarity: 'E', unlockPT: 3.0,  unlockTime: 30, prices: [2,4,6,15],   desc: '受伤减免+2/2/2/4%（满级共-10%）。' },
+    { id: 'afterburn',    type: 'equip',   name: 'Afterburn',     slotCost: 1, rarity: 'R', prices: [5,9,18], unlockPT: 5.0, unlockTime: 60, desc: '子弹命中后留下燃烧区域，以绝对值灼烧。' },
+    { id: 'shield_gen',   type: 'utility', name: 'Shield Regen', rarity: 'R', unlockPT: 1.5,  unlockTime: 0,  desc: '每次休整波次结束时回复8%最大HP/级。' },
+    { id: 'skill_cd',     type: 'upgrade', name: 'CD Override', rarity: 'C', unlockPT: 2.0,  unlockTime: 0,  prices: [2,4,6,9,12], desc: '技能冷却时间-10%/级（最多-50%）。' },
+    { id: 'temp_armor',   type: 'utility', name: 'Temp Armor', rarity: 'R', unlockPT: 0,    unlockTime: 0,  prices: [4],  max: 999, desc: '一次性获得50点临时护甲（最多3层=150）。' }
 ];
 
 const upgradePool = baseUpgradePool.map(item => {

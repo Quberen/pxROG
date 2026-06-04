@@ -2147,12 +2147,11 @@ class PNAMDrone {
         if (spr) {
             let sw = spr.cssW || 14, sh = spr.cssH || 36;
             ctx.drawImage(spr, -sw/2, -sh/2, sw, sh);
-            // 红色小灯（暂时注释）
-            // let lightColor = this._lightOn ? '#ff1744' : '#555555';
-            // ctx.fillStyle = lightColor;
-            // if (this._lightOn) { ctx.shadowBlur = 4; ctx.shadowColor = '#ff1744'; }
-            // ctx.fillRect(-1.5, -1.5, 3, 3);
-            // ctx.shadowBlur = 0;
+            let lightColor = this._lightOn ? '#ff1744' : '#555555';
+            ctx.fillStyle = lightColor;
+            if (this._lightOn) { ctx.shadowBlur = 5; ctx.shadowColor = '#ff1744'; }
+            ctx.fillRect(2, -7, 2.5, 2.5);
+            ctx.shadowBlur = 0;
         } else {
             ctx.fillStyle = '#111111'; ctx.fillRect(-7,-10,14,20);
             ctx.fillStyle = this._lightOn ? '#ff1744' : '#555555';

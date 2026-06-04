@@ -151,7 +151,8 @@ const ITEM_ICONS = {
     'rapid_charge':   '◉',  'phase_dodge': '◈', 'afterburn': '✦', 'skill_cd': '⟳',
     'crit_rate': '★',  'crit_dmg': '◆', 'aoe': '◎', 'wingman': '✈',
     'heal': '✚',  'heal_up': '✚', 'magnet': '⊕', 'shield_gen': '◈', 'slot': '▣', 'temp_armor': '◧',
-    'healer_rate': '✚', 'skill_duration': '◉'
+    'healer_rate': '✚', 'skill_duration': '◉',
+    'as1': '✕', 'ds1': '◇', 'pnam': '☢', 'rfa': '≡', 'avenger': '↑', 'asr': '⊿', 'proto2': '⊕'
 };
 function getItemIcon(id) { return ITEM_ICONS[id] || (id ? '◆' : '◆'); }
 let bullets = [], enemyBullets = [], enemies = [], particles = [], items = [], floatingTexts = [], stars = [], aoeEffects = [], burnEffects = [];
@@ -179,12 +180,12 @@ function preloadGameImages() {
 }
 
 const LS_ITEM_STATS = {
-    as1:     { typeName:'自爆僚机',  color:'#ffea00', rows:[['伤害','80'],['溅射','20 (小)'],['制导','弱'],['冷却','2.5s']] },
-    ds1:     { typeName:'拦截僚机',  color:'#00b0ff', rows:[['制导','弱'],['冷却','3s'],['备注','拦截最近敌弹']] },
-    pnam:    { typeName:'核战僚机',  color:'#b0bec5', rows:[['伤害','650'],['溅射','100 (大)'],['制导','无'],['冷却','19s'],['费用','PT×6']] },
-    rfa:     { typeName:'机枪',      color:'#ff9800', rows:[['伤害','1'],['制导','弱'],['冷却','0.4s'],['备注','自动攻击']] },
-    avenger: { typeName:'制导导弹',  color:'#ab47bc', rows:[['伤害','25'],['溅射','20 (小)'],['制导','强'],['冷却','4s'],['费用','PT×1']] },
-    asr:     { typeName:'火箭炮',    color:'#ef5350', rows:[['伤害','20'],['溅射','5 (小)'],['制导','无'],['冷却','9s'],['费用','PT×2']] }
+    as1:     { typeName:'Suicide Wing',    color:'#ffea00', rows:[['DMG','80'],['Splash','20 (sm)'],['Guide','weak'],['CD','2.5s']] },
+    ds1:     { typeName:'Interceptor',     color:'#00b0ff', rows:[['Guide','weak'],['CD','3s'],['Note','intercepts nearest bullet']] },
+    pnam:    { typeName:'Nuclear Wing',    color:'#b0bec5', rows:[['DMG','500'],['Splash','85 (lg)'],['Guide','none'],['CD','19s'],['Cost','PT×6']] },
+    rfa:     { typeName:'Machine Gun',     color:'#ff9800', rows:[['DMG','1'],['Guide','weak'],['CD','0.4s'],['Note','auto-attack']] },
+    avenger: { typeName:'Guided Missile',  color:'#ab47bc', rows:[['DMG','25'],['Splash','20 (sm)'],['Guide','strong'],['CD','4s'],['Cost','PT×1']] },
+    asr:     { typeName:'Rocket Launcher', color:'#ef5350', rows:[['DMG','20'],['Splash','5 (sm)'],['Guide','none'],['CD','9s'],['Cost','PT×2']] }
 };
 let waveIndexLastSaved = -1;
 let isDebugMode = false;
@@ -2694,7 +2695,8 @@ window.openLoadoutSelect = function(levelId, shipType) {
     if (!cfg) { startGame(levelId, false, shipType); return; }
     pendingLoadoutData = {
         wingman: Array(cfg.wingmanGroups.length).fill('as1'),
-        subweapon: Array(cfg.subweaponGroups.length).fill('rfa')
+        subweapon: Array(cfg.subweaponGroups.length).fill('rfa'),
+        primary: null
     };
     // 读取上次选择
     try {
@@ -2705,6 +2707,8 @@ window.openLoadoutSelect = function(levelId, shipType) {
                 pendingLoadoutData.wingman = s.wingman.map(t => WINGMAN_TYPES[t] ? t : 'as1');
             if (s.subweapon && s.subweapon.length === cfg.subweaponGroups.length)
                 pendingLoadoutData.subweapon = s.subweapon.map(t => SUBWEAPON_TYPES[t] ? t : 'rfa');
+            if (s.primary && cfg.primaryOptions && cfg.primaryOptions.includes(s.primary))
+                pendingLoadoutData.primary = s.primary;
         }
     } catch(e) {}
 
@@ -2723,27 +2727,69 @@ window.openLoadoutSelect = function(levelId, shipType) {
     showScreen('loadout-select');
 };
 
+function lsDrawEquipIcon(ctx, type, cx, cy, sz) {
+    ctx.save();
+    switch(type) {
+        case 'as1':
+            ctx.strokeStyle = '#ff5722'; ctx.lineWidth = sz * 0.18;
+            ctx.beginPath(); ctx.moveTo(cx-sz*.4,cy-sz*.4); ctx.lineTo(cx+sz*.4,cy+sz*.4); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(cx+sz*.4,cy-sz*.4); ctx.lineTo(cx-sz*.4,cy+sz*.4); ctx.stroke();
+            break;
+        case 'ds1':
+            ctx.fillStyle = '#00b0ff';
+            ctx.beginPath(); ctx.moveTo(cx,cy-sz*.5); ctx.lineTo(cx+sz*.5,cy); ctx.lineTo(cx,cy+sz*.5); ctx.lineTo(cx-sz*.5,cy); ctx.closePath(); ctx.fill();
+            break;
+        case 'pnam':
+            if (typeof _drawNuclearSymbol === 'function') _drawNuclearSymbol(ctx, cx, cy, sz * 0.48);
+            else { ctx.fillStyle='#b0bec5'; ctx.font=`bold ${Math.round(sz*0.85)}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('☢',cx,cy+sz*.05); }
+            break;
+        case 'rfa':
+            ctx.fillStyle = '#ff9800';
+            [-sz*.3, 0, sz*.3].forEach(dy => ctx.fillRect(cx-sz*.4, cy+dy-sz*.06, sz*.8, sz*.12));
+            break;
+        case 'avenger':
+            ctx.fillStyle = '#ab47bc';
+            ctx.beginPath(); ctx.moveTo(cx,cy-sz*.5); ctx.lineTo(cx+sz*.35,cy+sz*.35); ctx.lineTo(cx-sz*.35,cy+sz*.35); ctx.closePath(); ctx.fill();
+            break;
+        case 'asr':
+            ctx.fillStyle = '#ef5350';
+            ctx.fillRect(cx-sz*.15, cy-sz*.3, sz*.3, sz*.6);
+            ctx.beginPath(); ctx.moveTo(cx,cy-sz*.5); ctx.lineTo(cx+sz*.2,cy-sz*.2); ctx.lineTo(cx-sz*.2,cy-sz*.2); ctx.closePath(); ctx.fill();
+            break;
+        default:
+            let ic = ITEM_ICONS[type] || '◆';
+            ctx.font = `bold ${Math.round(sz*0.85)}px serif`;
+            ctx.fillStyle = '#bbb';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(ic, cx, cy + sz*0.05);
+    }
+    ctx.restore();
+}
+
 function lsDrawSlotSquare(cvs, isSelected, groupSize, equippedType, slotType) {
     let ctx = cvs.getContext('2d');
     ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, 40, 40);
-    ctx.fillStyle = isSelected ? '#0d1f0d' : '#0a0a1e';
+    ctx.fillStyle = isSelected ? '#0d1f0d' : '#090918';
     ctx.fillRect(0, 0, 40, 40);
     ctx.strokeStyle = isSelected ? '#00e676' : '#2a2a40';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(1, 1, 38, 38);
-    let typeMap = slotType === 'wingman' ? WINGMAN_TYPES : SUBWEAPON_TYPES;
-    let def = typeMap[equippedType];
+    ctx.lineWidth = 2; ctx.strokeRect(1, 1, 38, 38);
+    let barColor = slotType === 'wingman' ? '#ff6d00' : (slotType === 'primary' ? '#ffd600' : '#0091ea');
+    ctx.fillStyle = barColor;
+    ctx.fillRect(2, 4, 2, 32);
+    let def = null;
+    if (slotType === 'wingman') def = WINGMAN_TYPES[equippedType];
+    else if (slotType === 'subweapon') def = SUBWEAPON_TYPES[equippedType];
+    else if (slotType === 'primary') def = upgradePool && upgradePool.find(u => u.id === equippedType);
     if (def) {
-        ctx.fillStyle = def.color;
-        ctx.fillRect(2, 2, 36, 4);
+        lsDrawEquipIcon(ctx, equippedType, 22, 19, 18);
+        ctx.fillStyle = def.color || '#555';
+        ctx.fillRect(5, 35, 30, 3);
     }
     if (groupSize > 1) {
-        ctx.font = '7px monospace';
-        ctx.fillStyle = '#888';
-        ctx.textAlign = 'right';
-        ctx.textBaseline = 'bottom';
-        ctx.fillText('×' + groupSize, 37, 38);
+        ctx.font = '7px monospace'; ctx.fillStyle = '#888';
+        ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+        ctx.fillText('×' + groupSize, 38, 39);
     }
 }
 
@@ -2754,15 +2800,22 @@ function lsDrawItemChip(cvs, def, isActive, isEquipped) {
     ctx.fillStyle = isActive ? '#0d200d' : (isEquipped ? '#0a1420' : '#0a0a18');
     ctx.fillRect(0, 0, cvs.width, cvs.height);
     ctx.strokeStyle = isActive ? '#00e676' : (isEquipped ? '#00b0ff' : '#333');
-    ctx.lineWidth = 2;
-    ctx.strokeRect(1, 1, cvs.width - 2, cvs.height - 2);
-    ctx.font = '6px monospace';
-    ctx.fillStyle = '#ddd';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(def.name, 4, 14);
-    ctx.fillStyle = def.color;
-    ctx.fillRect(0, cvs.height - 3, cvs.width, 3);
+    ctx.lineWidth = 2; ctx.strokeRect(1, 1, cvs.width-2, cvs.height-2);
+    lsDrawEquipIcon(ctx, def.id, 15, 14, 16);
+    ctx.fillStyle = '#222'; ctx.fillRect(30, 4, 1, cvs.height-8);
+    ctx.font = '5px "Press Start 2P", monospace';
+    ctx.fillStyle = isActive ? '#00e676' : (isEquipped ? '#00b0ff' : '#bbb');
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    let name = def.name || '';
+    let maxW = cvs.width - 36;
+    if (ctx.measureText(name).width <= maxW) {
+        ctx.fillText(name, 34, 8);
+    } else {
+        ctx.fillText(name.slice(0, 9), 34, 4);
+        ctx.fillText(name.slice(9), 34, 14);
+    }
+    ctx.fillStyle = def.color || '#555';
+    ctx.fillRect(0, cvs.height-3, cvs.width, 3);
 }
 
 function lsSelectSlot(idx) {
@@ -2786,7 +2839,8 @@ function lsClickIcon(itemType) {
         let slot = lsUIState.slots[lsUIState.selectedSlotIdx];
         if (slot) {
             if (slot.slotType === 'wingman') pendingLoadoutData.wingman[slot.groupIdx] = itemType;
-            else pendingLoadoutData.subweapon[slot.groupIdx] = itemType;
+            else if (slot.slotType === 'subweapon') pendingLoadoutData.subweapon[slot.groupIdx] = itemType;
+            else if (slot.slotType === 'primary') pendingLoadoutData.primary = itemType;
             slot.currentType = itemType;
         }
         lsUIState.focusedItemType = null;
@@ -2816,13 +2870,29 @@ function lsUpdateIconRow() {
     row.innerHTML = '';
     let slot = lsUIState.slots[lsUIState.selectedSlotIdx];
     if (!slot) { row.style.opacity = '0'; row.style.pointerEvents = 'none'; return; }
-    let typeMap = slot.slotType === 'wingman' ? WINGMAN_TYPES : SUBWEAPON_TYPES;
     row.style.opacity = '1';
     row.style.pointerEvents = 'auto';
+    if (slot.slotType === 'primary') {
+        let shipType = document.getElementById('loadout-select-screen').dataset.shipType;
+        let shipCfg = SHIPS[shipType] || {};
+        let opts = shipCfg.primaryOptions || [];
+        opts.forEach(id => {
+            let def = upgradePool && upgradePool.find(u => u.id === id);
+            if (!def) return;
+            let cvs = document.createElement('canvas');
+            cvs.width = 88; cvs.height = 34;
+            cvs.style.cssText = 'cursor:pointer;image-rendering:pixelated;display:block;';
+            lsDrawItemChip(cvs, def, lsUIState.focusedItemType === id, slot.currentType === id);
+            cvs.onclick = (e) => { e.stopPropagation(); lsClickIcon(id); };
+            row.appendChild(cvs);
+        });
+        return;
+    }
+    let typeMap = slot.slotType === 'wingman' ? WINGMAN_TYPES : SUBWEAPON_TYPES;
     Object.keys(typeMap).forEach(type => {
         let def = typeMap[type];
         let cvs = document.createElement('canvas');
-        cvs.width = 72; cvs.height = 28;
+        cvs.width = 88; cvs.height = 34;
         cvs.style.cssText = 'cursor:pointer;image-rendering:pixelated;display:block;';
         lsDrawItemChip(cvs, def, lsUIState.focusedItemType === type, slot.currentType === type);
         cvs.onclick = (e) => { e.stopPropagation(); lsClickIcon(type); };
@@ -2835,6 +2905,18 @@ function lsUpdateIconRowActive() {
     if (!row) return;
     let slot = lsUIState.slots[lsUIState.selectedSlotIdx];
     if (!slot) return;
+    if (slot.slotType === 'primary') {
+        let shipType = document.getElementById('loadout-select-screen').dataset.shipType;
+        let shipCfg = SHIPS[shipType] || {};
+        let opts = shipCfg.primaryOptions || [];
+        row.querySelectorAll('canvas').forEach((cvs, i) => {
+            let id = opts[i];
+            if (!id) return;
+            let def = upgradePool && upgradePool.find(u => u.id === id);
+            if (def) lsDrawItemChip(cvs, def, lsUIState.focusedItemType === id, slot.currentType === id);
+        });
+        return;
+    }
     let typeMap = slot.slotType === 'wingman' ? WINGMAN_TYPES : SUBWEAPON_TYPES;
     let keys = Object.keys(typeMap);
     row.querySelectorAll('canvas').forEach((cvs, i) => {
@@ -2845,15 +2927,20 @@ function lsUpdateIconRowActive() {
 }
 
 function lsUpdateDetailPanel(itemType) {
+    let slot = lsUIState.slots[lsUIState.selectedSlotIdx];
+    let isPrimary = slot && slot.slotType === 'primary';
+    let def = isPrimary
+        ? (upgradePool && upgradePool.find(u => u.id === itemType))
+        : Object.assign({}, WINGMAN_TYPES, SUBWEAPON_TYPES)[itemType];
+    if (!def) return;
     let stats = LS_ITEM_STATS[itemType];
-    let allTypes = Object.assign({}, WINGMAN_TYPES, SUBWEAPON_TYPES);
-    let def = allTypes[itemType];
-    if (!stats || !def) return;
     let header = document.getElementById('ls-detail-header');
-    if (header) header.innerHTML = '<span style="color:' + def.color + '">〈' + stats.typeName + '〉</span><br>' + def.name;
+    let typeName = stats ? stats.typeName : 'Primary Mod';
+    if (header) header.innerHTML = '<span style="color:' + (def.color||'#fff') + '">〈' + typeName + '〉</span><br>' + (def.name||'');
     let statsDiv = document.getElementById('ls-detail-stats');
     if (statsDiv) {
-        statsDiv.innerHTML = stats.rows.map(([label, value]) =>
+        let rows = stats ? stats.rows : (def.desc ? [[def.desc, '']] : []);
+        statsDiv.innerHTML = rows.map(([label, value]) =>
             '<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #1a1a30;">' +
             '<span style="color:#666;font-family:\'Press Start 2P\',monospace;font-size:7px">' + label + '</span>' +
             '<span style="color:#fff;font-family:\'Press Start 2P\',monospace;font-size:7px">' + value + '</span>' +
@@ -2896,6 +2983,10 @@ function buildLoadoutUI(shipType) {
     cfg.subweaponGroups.forEach((groupSize, gIdx) => {
         slots.push({ slotType:'subweapon', groupIdx:gIdx, groupSize, currentType: pendingLoadoutData.subweapon[gIdx] || 'rfa' });
     });
+    if (cfg.primaryOptions && cfg.primaryOptions.length > 0) {
+        if (!pendingLoadoutData.primary) pendingLoadoutData.primary = cfg.primaryOptions[0];
+        slots.push({ slotType:'primary', groupIdx:0, groupSize:1, currentType: pendingLoadoutData.primary });
+    }
     lsUIState.slots = slots;
     if (lsUIState.selectedSlotIdx >= slots.length) lsUIState.selectedSlotIdx = 0;
 
@@ -2922,7 +3013,7 @@ window.confirmLoadout = function() {
     // 保存本次选择
     try {
         let saved = JSON.parse(localStorage.getItem('pxROG_loadout_pref') || '{}');
-        saved[shipType] = { wingman: [...pendingLoadoutData.wingman], subweapon: [...pendingLoadoutData.subweapon] };
+        saved[shipType] = { wingman: [...pendingLoadoutData.wingman], subweapon: [...pendingLoadoutData.subweapon], primary: pendingLoadoutData.primary };
         localStorage.setItem('pxROG_loadout_pref', JSON.stringify(saved));
     } catch(e) {}
     startGame(screen.dataset.levelId, false, shipType, pendingLoadoutData);
@@ -2947,6 +3038,16 @@ function startGame(levelId, useCheckpoint = false, shipType = 'rt1', loadoutData
             for (let s = 0; s < size; s++) player.subweaponLoadout.push(loadoutData.subweapon[g] || 'rfa');
         });
         player.subweaponTimers = Array(player.subweaponSlots).fill(0);
+        if (loadoutData.primary) {
+            let pId = loadoutData.primary;
+            let pDef = upgradePool && upgradePool.find(u => u.id === pId);
+            if (pDef && player.equipment[pId]) {
+                player.equipment[pId].owned = true;
+                player.equipment[pId].equipped = true;
+                player.equipment[pId].level = 1;
+                player.usedSlots += pDef.slotCost || 1;
+            }
+        }
     } else if (useCheckpoint && ckptData && ckptData.loadout) {
         player.wingmanLoadout   = ckptData.loadout.wingman || [];
         player.subweaponLoadout = ckptData.loadout.subweapon || [];
