@@ -3192,12 +3192,14 @@ function buildCarousel() {
         div.appendChild(nm);
         let sub = document.createElement('div');
         sub.className = 'c-card-sub ' + (data.unlocked ? 'c-card-tap' : 'c-card-locked');
-        sub.textContent = data.unlocked ? (i === 0 ? 'TAP AGAIN' : 'TAP AGAIN') : 'LOCKED';
+        sub.textContent = data.unlocked ? 'TAP AGAIN' : 'LOCKED';
         div.appendChild(sub);
-        div.addEventListener('pointerdown', cOnDown);
         wrap.appendChild(div);
     });
+    // 事件绑定在 wrap 层，避免 CSS transform 导致的 hit-test 偏移
+    wrap.addEventListener('pointerdown', cOnDown);
     cRenderPreviews();
+    requestAnimationFrame(cRenderPreviews); // 保底重绘（等待 layout 完成）
     cDrawCarousel();
 }
 
@@ -3271,36 +3273,42 @@ function cOnUp(e) {
     document.removeEventListener('pointerup', cOnUp);
     cDragging = false;
     let totalDx = Math.abs(e.clientX - cDragX0);
-    if (totalDx < 8) {
-        let target = e.target.closest('.c-card');
-        if (target) {
-            let idx = parseInt(target.dataset.idx);
+    if (totalDx < 10) {
+        // 按点击的 X 位置算最近目标卡片，不依赖 CSS transform 的 hit-test
+        let wrap = document.getElementById('carousel-wrap');
+        if (wrap) {
+            let cx = wrap.clientWidth / 2;
+            let rawDiff = (e.clientX - cx) / CARD_SPACING;
             let centerIdx = cIdxWrap(Math.round(cPos));
-            if (centerIdx === idx) {
+            if (Math.abs(rawDiff) < 0.35) {
+                // 点击中心区域 → 双击判定
                 let now = Date.now();
-                if (cLastTapIdx === idx && now - cLastTapTime < 700) {
-                    cOnConfirm(idx);
+                if (cLastTapIdx === centerIdx && now - cLastTapTime < 700) {
+                    cOnConfirm(centerIdx);
                 } else {
-                    cLastTapIdx = idx;
+                    cLastTapIdx = centerIdx;
                     cLastTapTime = now;
                 }
             } else {
-                let diff = idx - Math.round(cPos);
-                while (diff > CARD_COUNT / 2) diff -= CARD_COUNT;
-                while (diff < -CARD_COUNT / 2) diff += CARD_COUNT;
-                cVel = diff * 0.2;
+                // 点击非中心区域 → 平滑吸附到最近整数卡
+                let targetIdx = Math.round(cPos + rawDiff);
+                cVel = (targetIdx - cPos) * 0.28;
             }
         }
     }
     cStartInertia();
 }
+let cCoastFrames = 0;
 function cStartInertia() {
     cancelAnimationFrame(cRafId);
+    cCoastFrames = 0;
     (function tick() {
         if (cDragging) return;
         cPos += cVel;
-        cVel *= 0.88;
-        if (Math.abs(cVel) < 0.008) {
+        cVel *= 0.90;   // 摩擦系数宽松，让卡片滑得更远
+        cCoastFrames++;
+        // 至少滑行 12 帧后才允许 snap，避免慢速拖拽松手立即吸附
+        if (cCoastFrames >= 12 && Math.abs(cVel) < 0.015) {
             cPos = Math.round(cPos);
             cVel = 0;
             cDrawCarousel();
@@ -3350,16 +3358,20 @@ function openNewLoadout(shipId) {
 
 function nlBuildUI(cfg) {
     let lsCvs = document.getElementById('nl-ship-canvas');
-    if (lsCvs && sprites) {
-        let ctx = lsCvs.getContext('2d');
-        ctx.imageSmoothingEnabled = false;
-        let spr = sprites[cfg.sprite];
-        if (spr) {
+    if (lsCvs) {
+        let drawShip = () => {
+            if (!sprites) return;
+            let ctx = lsCvs.getContext('2d');
+            ctx.imageSmoothingEnabled = false;
+            let spr = sprites[cfg.sprite];
+            if (!spr) return;
             ctx.clearRect(0, 0, lsCvs.width, lsCvs.height);
             let sw = spr.cssW || spr.width, sh = spr.cssH || spr.height;
             let sc = Math.min(lsCvs.width / sw, lsCvs.height / sh) * 0.8;
             ctx.drawImage(spr, (lsCvs.width - sw * sc) / 2, (lsCvs.height - sh * sc) / 2, sw * sc, sh * sc);
-        }
+        };
+        drawShip();
+        requestAnimationFrame(drawShip); // 保底
     }
     let lbl = document.getElementById('nl-ship-label');
     if (lbl) lbl.textContent = cfg.nameEn || cfg.name || newFlowShipId.toUpperCase();
@@ -3377,32 +3389,33 @@ function nlBuildUI(cfg) {
     lsUIState.slots = groups;
     nlSelectedSlotIdx = 0;
 
-    let col = document.getElementById('nl-slot-col');
-    if (!col) return;
-    col.innerHTML = '';
+    let row = document.getElementById('nl-slot-row');
+    if (!row) return;
+    row.innerHTML = '';
     groups.forEach((slot, idx) => {
+        // 组间分隔线
         if (idx > 0 && ((slot.slotType === 'subweapon' && slot.groupIdx === 0) ||
                         (slot.slotType === 'wingman' && slot.groupIdx === 0))) {
-            let div = document.createElement('div');
-            div.className = 'nl-divider';
-            col.appendChild(div);
+            let sep = document.createElement('div');
+            sep.className = 'nl-slot-sep';
+            row.appendChild(sep);
         }
         let wrapper = document.createElement('div');
-        wrapper.style.cssText = 'position:relative;display:inline-block;';
+        wrapper.style.cssText = 'position:relative;display:inline-block;flex-shrink:0;';
         let cvs = document.createElement('canvas');
         cvs.width = 40; cvs.height = 40;
         cvs.style.cssText = 'display:block;cursor:pointer;image-rendering:pixelated;';
-        nlDrawSlot(cvs, slot, idx === nlSelectedSlotIdx);
+        nlDrawSlot(cvs, slot, idx === 0);
         cvs.onclick = (e) => { e.stopPropagation(); nlClickSlot(idx); };
         wrapper.appendChild(cvs);
         let mult = slot.displayMult || slot.groupSize;
-        if (mult > 1 || slot.slotType !== 'primary') {
+        if (mult > 1) {
             let lbl2 = document.createElement('span');
             lbl2.textContent = '×' + mult;
             lbl2.style.cssText = 'position:absolute;right:-1px;bottom:-1px;font-family:monospace;font-size:7px;color:#666;line-height:1;';
             wrapper.appendChild(lbl2);
         }
-        col.appendChild(wrapper);
+        row.appendChild(wrapper);
     });
 }
 
@@ -3411,17 +3424,38 @@ function nlDrawSlot(cvs, slot, isSelected) {
     lsDrawSlotSquare(cvs, isSelected, slot.displayMult || slot.groupSize, slot.currentType, slot.slotType);
 }
 
+function nlGetCurrentDef(slot) {
+    if (!slot) return null;
+    if (slot.slotType === 'wingman') return WINGMAN_TYPES[slot.currentType] || null;
+    if (slot.slotType === 'subweapon') return SUBWEAPON_TYPES[slot.currentType] || null;
+    if (slot.slotType === 'primary') {
+        if (slot.currentType === 'none') return { id: 'none', name: 'Standard Gun', color: '#4caf50' };
+        return (upgradePool && upgradePool.find(u => u.id === slot.currentType)) || null;
+    }
+    return null;
+}
+
 function nlClickSlot(idx) {
     nlSelectedSlotIdx = idx;
     nlDetailEquipId = null;
-    let col = document.getElementById('nl-slot-col');
-    col && col.querySelectorAll('canvas').forEach((cvs, i) => {
+    let row = document.getElementById('nl-slot-row');
+    row && row.querySelectorAll('canvas').forEach((cvs, i) => {
         let s = lsUIState.slots[i];
         if (s) nlDrawSlot(cvs, s, i === idx);
     });
-    nlSetDetail(null);
     nlBuildTray(idx);
     nlOpenTray();
+    // 自动展示当前槽位已装备项的详情
+    let def = nlGetCurrentDef(lsUIState.slots[idx]);
+    if (def) {
+        nlDetailEquipId = def.id;
+        nlSetDetail(def);
+        let tray = document.getElementById('nl-tray');
+        tray && tray.querySelectorAll('.nl-eq-icon').forEach(c =>
+            c.classList.toggle('nl-focused', c.dataset.equipId === def.id));
+    } else {
+        nlSetDetail(null);
+    }
 }
 
 function nlBuildTray(slotIdx) {
@@ -3458,24 +3492,28 @@ function nlBuildTray(slotIdx) {
 
 function nlClickEquip(id, def) {
     if (nlDetailEquipId === id) {
+        // 第二次点击 → 挂载装备，但保持托盘开启
         let slot = lsUIState.slots[nlSelectedSlotIdx];
         if (slot) {
             slot.currentType = id;
             if (slot.slotType === 'wingman') pendingLoadoutData.wingman[slot.groupIdx] = id;
             else if (slot.slotType === 'subweapon') pendingLoadoutData.subweapon[slot.groupIdx] = id;
             else if (slot.slotType === 'primary') pendingLoadoutData.primary = id;
-            let col = document.getElementById('nl-slot-col');
-            let squares = col && col.querySelectorAll('canvas');
+            let row = document.getElementById('nl-slot-row');
+            let squares = row && row.querySelectorAll('canvas');
             if (squares && squares[nlSelectedSlotIdx]) nlDrawSlot(squares[nlSelectedSlotIdx], slot, true);
         }
-        nlCloseTray();
+        // 清空详情，不关闭托盘
+        nlDetailEquipId = null;
+        nlSetDetail(null);
+        let tray = document.getElementById('nl-tray');
+        tray && tray.querySelectorAll('.nl-eq-icon').forEach(c => c.classList.remove('nl-focused'));
     } else {
         nlDetailEquipId = id;
         nlSetDetail(def);
         let tray = document.getElementById('nl-tray');
-        tray && tray.querySelectorAll('.nl-eq-icon').forEach(c => {
-            c.classList.toggle('nl-focused', c.dataset.equipId === id);
-        });
+        tray && tray.querySelectorAll('.nl-eq-icon').forEach(c =>
+            c.classList.toggle('nl-focused', c.dataset.equipId === id));
     }
 }
 
@@ -3488,40 +3526,37 @@ function nlSetDetail(def) {
         return;
     }
     let statDef = LS_ITEM_STATS[def.id];
-    let rows = statDef ? statDef.rows.map(r => `<div style="display:flex;justify-content:space-between;font-size:6px;color:#aaa;margin-bottom:3px;"><span>${r[0]}</span><span style="color:#fff">${r[1]}</span></div>`).join('') : '';
+    let rows = statDef ? statDef.rows.map(r =>
+        `<div style="display:flex;justify-content:space-between;font-size:6px;color:#aaa;margin-bottom:4px;"><span>${r[0]}</span><span style="color:#fff">${r[1]}</span></div>`
+    ).join('') : '';
     panel.innerHTML = `
-        <div style="font-family:'Press Start 2P',monospace;font-size:7px;color:${def.color||'#fff'};margin-bottom:8px;line-height:1.4;">${def.name||''}</div>
+        <div style="font-family:'Press Start 2P',monospace;font-size:7px;color:${def.color||'#fff'};margin-bottom:10px;line-height:1.5;">${def.name||''}</div>
         <div style="font-family:'Press Start 2P',monospace;">${rows}</div>
-        <div style="margin-top:10px;font-family:'Press Start 2P',monospace;font-size:6px;color:#00e676;">TAP AGAIN<br>TO EQUIP</div>`;
-    // vertical position: align with ship area
-    let stage = document.getElementById('nl-stage');
-    let shipArea = document.getElementById('nl-ship-area');
-    if (stage && shipArea) {
-        let shipRect = shipArea.getBoundingClientRect();
-        let scRect = document.getElementById('new-loadout-screen').getBoundingClientRect();
-        panel.style.top = (shipRect.top - scRect.top) + 'px';
-        panel.style.height = shipRect.height + 'px';
-    }
+        <div style="margin-top:12px;font-family:'Press Start 2P',monospace;font-size:6px;color:#00e676;line-height:1.8;">TAP AGAIN<br>TO EQUIP</div>`;
+    // 位置由 CSS 静态定义（top:44px; bottom:64px），无需动态计算
     panel.classList.add('nl-open');
 }
 
 function nlOpenTray() {
-    let tray = document.getElementById('nl-tray');
-    let stage = document.getElementById('nl-stage');
-    if (tray) tray.classList.add('nl-open');
-    if (stage) stage.classList.add('nl-compact');
+    document.getElementById('nl-tray')?.classList.add('nl-open');
+    document.getElementById('nl-ship-area')?.classList.add('nl-compact');
 }
 
 function nlCloseTray() {
-    let tray = document.getElementById('nl-tray');
-    let stage = document.getElementById('nl-stage');
-    if (tray) tray.classList.remove('nl-open');
-    if (stage) stage.classList.remove('nl-compact');
+    document.getElementById('nl-tray')?.classList.remove('nl-open');
+    document.getElementById('nl-ship-area')?.classList.remove('nl-compact');
     nlDetailEquipId = null;
     nlSetDetail(null);
 }
 
 function nlOnShipClick() {
+    // 托盘开着时点战机 → 先收起托盘
+    let tray = document.getElementById('nl-tray');
+    if (tray && tray.classList.contains('nl-open')) {
+        nlCloseTray();
+        return;
+    }
+    // 托盘已关闭 → 保存并进入难度选择
     try {
         let saved = JSON.parse(localStorage.getItem('pxROG_loadout_pref') || '{}');
         saved[newFlowShipId] = {
@@ -3578,7 +3613,8 @@ function dcClickCard(level) {
 
 function dcConfirm(level) {
     selectDifficulty(level);
-    startGame('sector1', false, newFlowShipId, pendingLoadoutData);
+    let levelId = (level === 3) ? 'sector2' : 'sector1';
+    startGame(levelId, false, newFlowShipId, pendingLoadoutData);
 }
 
 function initUI() {

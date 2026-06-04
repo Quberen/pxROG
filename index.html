@@ -263,45 +263,55 @@
         #carousel-hint { font-family:'Press Start 2P',monospace; font-size:6px; color:#2a2a40; padding:14px 0 22px; flex-shrink:0; }
         /* ═══ 新装备界面 ═══ */
         #new-loadout-screen { overflow:hidden; flex-direction:column; }
-        #nl-stage {
-            display:flex; align-items:center; justify-content:center; gap:14px;
-            flex-shrink:0; margin-top:52px;
-            transition:transform 0.28s ease-out;
-            transform-origin:top left;
-        }
-        #nl-stage.nl-compact {
-            position:absolute; top:48px; left:0;
-            transform:scale(0.72);
-        }
+
+        /* 战机区 —— flex:1，开托盘时通过 max-height 缩小 */
         #nl-ship-area {
-            background:#07071a; border:3px solid #1e1e32;
-            padding:8px; display:flex; flex-direction:column; align-items:center; gap:4px;
-            flex-shrink:0; cursor:pointer; transition:border-color 0.15s;
+            flex:1; min-height:0;
+            display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;
+            overflow:hidden; cursor:pointer;
+            transition:max-height 0.28s ease-out;
+            max-height:75vh;
         }
-        #nl-ship-area:hover { border-color:#00e676; }
-        #nl-slot-col {
-            background:#07071a; border:3px solid #1e1e32;
-            padding:6px; display:flex; flex-direction:column; align-items:center; gap:0; flex-shrink:0;
+        #nl-ship-area.nl-compact { max-height:120px; }
+        #nl-ship-area:active { background:rgba(0,230,118,0.04); }
+
+        /* 横向槽位栏 —— 始终可见，位于托盘上方 */
+        #nl-slot-row {
+            flex-shrink:0; position:relative; z-index:5;
+            display:flex; flex-direction:row; align-items:center; justify-content:center;
+            gap:6px; padding:8px 14px;
+            background:#06060f; border-top:2px solid #1e1e32;
+            overflow-x:auto; overflow-y:visible;
+            scrollbar-width:none; -ms-overflow-style:none;
         }
-        .nl-divider { height:1px; background:#1e1e30; margin:3px 6px; align-self:stretch; }
+        #nl-slot-row::-webkit-scrollbar { display:none; }
+        .nl-slot-sep { width:1px; height:36px; background:#1e1e32; flex-shrink:0; }
+
+        /* 装备托盘 —— 绝对定位，从 slot-row 底线下方滑入，不遮挡 slot-row */
         #nl-tray {
             position:absolute; bottom:0; left:0; right:0;
-            height:30vh; min-height:120px;
-            background:rgba(3,3,12,0.98); border-top:2px solid #1e1e30;
-            padding:10px 12px;
+            /* padding-bottom 给 slot-row 留出 56px 高度 */
+            height:calc(30vh + 56px); padding:10px 12px 64px;
+            background:rgba(3,3,12,0.98); border-top:2px solid #1e1e32;
             display:flex; flex-wrap:wrap; gap:8px; align-content:flex-start;
             overflow-y:auto; overflow-x:hidden;
             transform:translateY(100%); transition:transform 0.25s ease-out;
-            pointer-events:none; z-index:15;
+            pointer-events:none; z-index:4;
         }
         #nl-tray.nl-open { transform:translateY(0); pointer-events:auto; }
         .nl-eq-icon { width:44px; height:44px; cursor:pointer; image-rendering:pixelated; flex-shrink:0; border:2px solid #1e1e30; box-shadow:2px 2px 0 #000; }
         .nl-eq-icon.nl-focused { border-color:#00e676; }
+
+        /* 介绍卡 —— 静态 top/bottom，四边完整边框 */
         #nl-detail {
             position:absolute; right:0;
-            width:min(50%, 180px);
-            background:#07071a; border:3px solid #00e676; border-right:none;
-            box-shadow:4px 4px 0 #000; padding:14px 12px; box-sizing:border-box;
+            top:44px; bottom:64px;
+            width:min(55%, 200px);
+            background:#06060f;
+            border:3px solid #00e676; border-right:none;
+            box-shadow:-4px 4px 0 #000, inset 1px 0 0 #00e67618;
+            padding:14px 12px; box-sizing:border-box;
+            overflow-y:auto;
             transform:translateX(110%); transition:transform 0.22s ease-out; z-index:20;
         }
         #nl-detail.nl-open { transform:translateX(0); }
@@ -408,13 +418,11 @@
     ══════════════════════════════════════ -->
     <div id="new-loadout-screen" class="overlay" style="z-index:10;overflow:hidden;flex-direction:column;">
         <button class="back-btn" onclick="showScreen('ship-carousel')">〈</button>
-        <div id="nl-stage">
-            <div id="nl-ship-area">
-                <canvas id="nl-ship-canvas" width="80" height="80" style="image-rendering:pixelated;cursor:pointer;display:block;" onclick="nlOnShipClick()"></canvas>
-                <div id="nl-ship-label" style="font-family:'Press Start 2P',monospace;font-size:6px;color:#00b0ff;margin-top:4px;"></div>
-            </div>
-            <div id="nl-slot-col"></div>
+        <div id="nl-ship-area" onclick="nlOnShipClick()">
+            <canvas id="nl-ship-canvas" width="100" height="100" style="image-rendering:pixelated;display:block;"></canvas>
+            <div id="nl-ship-label" style="font-family:'Press Start 2P',monospace;font-size:6px;color:#00b0ff;"></div>
         </div>
+        <div id="nl-slot-row"></div>
         <div id="nl-tray"></div>
         <div id="nl-detail"></div>
     </div>
