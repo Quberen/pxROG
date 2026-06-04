@@ -824,8 +824,9 @@ class Wanderer extends BaseEnemy {
                 this.x = bW;
                 if (this.vx < 0) this.vx *= -1;
             }
-            if (this.x > width - bW) {
-                this.x = width - bW;
+            let _ruiW = typeof RIGHT_UI_WIDTH !== 'undefined' ? RIGHT_UI_WIDTH : 0;
+            if (this.x > width - _ruiW - bW) {
+                this.x = width - _ruiW - bW;
                 if (this.vx > 0) this.vx *= -1;
             }
         }
@@ -1878,9 +1879,9 @@ class AvengerMissile {
                 let diff = desired - this.angle;
                 while (diff > Math.PI) diff -= Math.PI * 2;
                 while (diff < -Math.PI) diff += Math.PI * 2;
-                let angSpeed = Math.min(0.12, 0.02 + this.timer * 0.0003);
+                let angSpeed = Math.min(0.15, 0.025 + this.timer * 0.00035);
                 this.angle += Math.sign(diff) * Math.min(angSpeed, Math.abs(diff));
-                this.angle += (Math.random() - 0.5) * 0.03;
+                this.angle += (Math.random() - 0.5) * 0.02;
             }
         }
         this.vx = Math.cos(this.angle) * this.speed;

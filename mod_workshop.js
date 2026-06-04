@@ -169,7 +169,8 @@ window.WORKSHOP = {
         p5_supply: function(sec, frame, diff, w) {
             if (sec === 1 && frame % 60 === 0) {
                 let cols = 8, rows = 7;
-                let sW = w / (cols + 1);
+                let _gw = w - (typeof RIGHT_UI_WIDTH !== 'undefined' ? RIGHT_UI_WIDTH : 0);
+                let sW = _gw / (cols + 1);
                 for (let r = 0; r < rows; r++) {
                     for (let c = 1; c <= cols; c++) {
                         let isMidRow = r >= 2 && r <= 5;
@@ -354,7 +355,8 @@ window.WORKSHOP = {
                 const dMult = [1.0, 1.15, 1.30, 1.30][diff] || 1.0;
                 let cols = 8;
                 let rows = Math.min(20, Math.round(14 * dMult));
-                let sW = w / (cols + 1);
+                let _gw = w - (typeof RIGHT_UI_WIDTH !== 'undefined' ? RIGHT_UI_WIDTH : 0);
+                let sW = _gw / (cols + 1);
 
                 let grid = [];
                 for (let r = 0; r < rows; r++) {

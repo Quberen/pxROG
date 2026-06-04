@@ -1759,9 +1759,9 @@ function loop(timestamp) {
         if (player && player.hp > 0 && endingState !== 'playerDead') {
             let wLv = (player.upgrades && player.upgrades.wingman) || 0;
             let count = player.wingmanSlots || 0;
-            let swoopCD   = [720, 680, 640, 600][wLv];
-            let directDmg = [80, 100, 125, 155][wLv];
-            let splashDmg = [30,  42,  58,  78][wLv];
+            let swoopCD   = [180, 165, 150, 135][wLv];
+            let directDmg = [30,  48,  72, 100][wLv];
+            let splashDmg = [5,   12,  22,  35][wLv];
             let arcFrames = [60,  52,  44,  36][wLv];
             let splashR   = 60;
 
