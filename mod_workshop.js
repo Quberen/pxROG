@@ -58,8 +58,12 @@ window.WORKSHOP = {
         "s2_starfall":    { name: "开幕：星空坠落",     color: "#b39ddb" },
         "s2_supply":      { name: "补给方阵",            color: "#00e676" },
         "s2_cover_fire":  { name: "掩护射击",            color: "#ff9800" },
-        "s2_iron_barrel": { name: "铁通阵",              color: "#00e5ff" },
-        "s2_flanker":     { name: "双翼夹击",            color: "#ff9800" }
+        "s2_iron_barrel":       { name: "铁通阵",              color: "#00e5ff" },
+        "s2_flanker":           { name: "双翼夹击",            color: "#ff9800" },
+        "p_fragment_rain":      { name: '碎片雨',              color: '#78909c' },
+        "p_rainbow_cross":      { name: '虹桥交叉',            color: '#00b0ff' },
+        "p_phantom_assassin":   { name: '幻影刺客',            color: '#e040fb' },
+        "p_meat_grinder":       { name: '绞肉机',              color: '#ff1744' }
     },
 
     // 【核心黑科技】：波次导演的终极七印 + Boss
@@ -490,33 +494,37 @@ window.WORKSHOP = {
 
             timeline: [
                 // Act 1: 资源建设
-                { type: "s2_starfall",    duration: 25 },
-                { type: "p0_rest",        exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 8 }, { type: "clear_all", value: true }] } },
-                { type: "s2_supply",      duration: 20 },
-                { type: "p0_rest",        duration: 10 },
+                { type: "s2_starfall",        duration: 25 },
+                { type: "p0_rest",            duration: 10 },
+                { type: "s2_supply",          duration: 20 },
+                { type: "p0_rest",            duration: 10 },
 
-                // Act 2: 机制学习
-                { type: "s2_cover_fire",  duration: 25 },
-                { type: "p0_rest",        exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 10 }, { type: "clear_all", value: true }] } },
-                { type: "s2_flanker",     duration: 22 },
-                { type: "p0_rest",        exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 10 }, { type: "clear_all", value: true }] } },
+                // Act 2: 机制引入
+                { type: "p_fragment_rain",    duration: 20 },
+                { type: "p0_rest",            duration: 10 },
+                { type: "s2_cover_fire",      duration: 25 },
+                { type: "p0_rest",            duration: 10 },
 
-                // Act 3: 压力测试
-                { type: "s2_iron_barrel", duration: 25 },
-                { type: "p0_rest",        exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 10 }, { type: "clear_all", value: true }] } },
+                // Act 3: 压力升级
+                { type: "p_rainbow_cross",    duration: 20 },
+                { type: "p0_rest",            duration: 10 },
+                { type: "s2_iron_barrel",     duration: 25 },
+                { type: "p0_rest",            duration: 10 },
 
-                // 中场补给
-                { type: "s2_supply",      duration: 20 },
-                { type: "p0_rest",        duration: 12 },
+                // Act 4: 精英测试
+                { type: "s2_flanker",         duration: 22 },
+                { type: "p0_rest",            duration: 10 },
+                { type: "s2_supply",          duration: 20 },
+                { type: "p0_rest",            duration: 12 },
 
-                // Act 4: 强化重演
-                { type: "s2_cover_fire",  duration: 28 },
-                { type: "p0_rest",        exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 10 }, { type: "clear_all", value: true }] } },
-                { type: "s2_iron_barrel", duration: 28 },
-                { type: "p0_rest",        exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 10 }, { type: "clear_all", value: true }] } },
+                // Act 5: 最终冲刺
+                { type: "p_phantom_assassin", duration: 25 },
+                { type: "p0_rest",            duration: 10 },
+                { type: "p_meat_grinder",     duration: 25 },
+                { type: "p0_rest",            duration: 10 },
 
                 // Boss
-                { type: "p8_boss",        duration: 9999 }
+                { type: "p8_boss",            duration: 9999 }
             ],
 
             script: function(sec, frame) {
@@ -620,23 +628,23 @@ window.WORKSHOP = {
             timeline: [
                 // Act 1: 发育期（低威胁，建立资源基础）
                 { type: "p0_starfall",   duration: 20 },
-                { type: "p0_rest",       exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 8  }, { type: "clear_all", value: true }] } },
+                { type: "p0_rest",       duration: 8  },
                 { type: "p1_intro",      duration: 20 },
-                { type: "p0_rest",       exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 8  }, { type: "clear_all", value: true }] } },
+                { type: "p0_rest",       duration: 8  },
 
                 // Act 2: 机制入门（补给 + 炮台/空中协同 + 侧翼夹击）
                 { type: "p5_supply",     duration: 18 },
                 { type: "p0_rest",       duration: 10 },
                 { type: "p2_cover",      duration: 22 },
-                { type: "p0_rest",       exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 10 }, { type: "clear_all", value: true }] } },
+                { type: "p0_rest",       duration: 10 },
                 { type: "p9_flanker",    duration: 22 },
-                { type: "p0_rest",       exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 10 }, { type: "clear_all", value: true }] } },
+                { type: "p0_rest",       duration: 10 },
 
                 // Act 3: 空间谜题（走廊位置预判 + 铁桶阵收缩）
                 { type: "p11_corridor",  duration: 22 },
-                { type: "p0_rest",       exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 10 }, { type: "clear_all", value: true }] } },
+                { type: "p0_rest",       duration: 10 },
                 { type: "p3_gather",     duration: 25 },
-                { type: "p0_rest",       exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 10 }, { type: "clear_all", value: true }] } },
+                { type: "p0_rest",       duration: 10 },
 
                 // 中场补给（含水晶Locator，回血/补能）
                 { type: "p5_supply",     duration: 15 },
@@ -644,15 +652,15 @@ window.WORKSHOP = {
 
                 // Act 4: 高压进阶（弹幕阵 + 弹幕走廊 + 闪电压制）
                 { type: "p12_crossfire", duration: 22 },
-                { type: "p0_rest",       exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 12 }, { type: "clear_all", value: true }] } },
+                { type: "p0_rest",       duration: 12 },
                 { type: "p4_swarm_cover",duration: 28 },
                 { type: "p0_rest",       duration: 10 },
                 { type: "p13_blitz",     duration: 22 },
-                { type: "p0_rest",       exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 10 }, { type: "clear_all", value: true }] } },
+                { type: "p0_rest",       duration: 10 },
 
                 // Act 5: 最终高潮 + Boss
                 { type: "p6_press",      duration: 25 },
-                { type: "p0_rest",       exitConditions: { logic: "OR", rules: [{ type: "time_limit", value: 10 }, { type: "clear_all", value: true }] } },
+                { type: "p0_rest",       duration: 10 },
                 { type: "p8_boss",       duration: 9999 }
             ],
 
@@ -921,3 +929,48 @@ function spawn(type, x, opt) {
 // 第二关别名：复用第一关已有波次函数
 WORKSHOP.patterns.s2_iron_barrel = WORKSHOP.patterns.p3_gather;
 WORKSHOP.patterns.s2_flanker     = WORKSHOP.patterns.p9_flanker;
+
+// 第二关新波次
+WORKSHOP.patterns.p_fragment_rain = function(sec, frame, diff, w) {
+    let _gw = w - (typeof RIGHT_UI_WIDTH !== 'undefined' ? RIGHT_UI_WIDTH : 0);
+    let zone = Math.floor(sec / 7) % 3;
+    let zx = [_gw * 0.2, _gw * 0.8, _gw * 0.5][zone];
+    if (frame % 45 === 0)
+        for (let i = -1; i <= 1; i++)
+            spawn(diff >= 2 ? 'LocatorSwarm' : 'Locator', zx + i * 30, { speedOverride: 1.2 + diff * 0.1 });
+    if (diff >= 2 && sec >= 10 && frame % 480 === 0)
+        spawn('Tank', _gw / 2, { speedOverride: 0.7 });
+};
+
+WORKSHOP.patterns.p_rainbow_cross = function(sec, frame, diff, w) {
+    let _gw = w - (typeof RIGHT_UI_WIDTH !== 'undefined' ? RIGHT_UI_WIDTH : 0);
+    if (frame % 300 === 0) {
+        let t = diff >= 2 ? 'ArcFlyerSwarm' : 'ArcFlyer';
+        spawn(t, -30);
+        spawn(t, _gw + 30);
+    }
+    if (sec >= 12 && frame % 200 === 0)
+        spawn(diff >= 2 ? 'KamikazeSwarm' : 'Kamikaze', _gw / 2, { speedOverride: 2.2 });
+};
+
+WORKSHOP.patterns.p_phantom_assassin = function(sec, frame, diff, w) {
+    let _gw = w - (typeof RIGHT_UI_WIDTH !== 'undefined' ? RIGHT_UI_WIDTH : 0);
+    let clusters = sec >= 15 ? 2 : 1;
+    if (frame % 600 === 0) {
+        for (let k = 0; k < clusters; k++) {
+            let cx = (k === 0 ? 0.35 : 0.65) * _gw + (Math.random() - 0.5) * 60;
+            for (let i = -1; i <= 1; i++)
+                spawn('CrystalLocator', cx + i * 35, { speedOverride: 0.5, y: -30 });
+            spawn('KamikazeSpec', cx, { speedOverride: 0.5, y: -80 });
+        }
+    }
+};
+
+WORKSHOP.patterns.p_meat_grinder = function(sec, frame, diff, w) {
+    let _gw = w - (typeof RIGHT_UI_WIDTH !== 'undefined' ? RIGHT_UI_WIDTH : 0);
+    let lType = diff >= 2 ? 'LocatorSwarm' : 'Locator';
+    if (frame % 20 === 0)
+        spawn(lType, Math.random() * (_gw - 60) + 30, { speedOverride: 1.0 + diff * 0.15 });
+    if (sec >= 5 && frame % 720 === 0)
+        spawn('Tank', _gw / 2, { speedOverride: 0.65 });
+};

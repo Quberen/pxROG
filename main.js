@@ -167,6 +167,16 @@ let pnamSlotCds = [];
 let asrFireQueues = [];
 let pnamFireQueues = [];
 let pendingLoadoutData = { wingman: [], subweapon: [] };
+let lsUIState = { selectedSlotIdx: 0, focusedItemType: null, slots: [] };
+
+const LS_ITEM_STATS = {
+    as1:     { typeName:'自爆僚机',  color:'#ffea00', rows:[['伤害','80'],['溅射','20 (小)'],['制导','弱'],['冷却','2.5s']] },
+    ds1:     { typeName:'拦截僚机',  color:'#00b0ff', rows:[['制导','弱'],['冷却','3s'],['备注','拦截最近敌弹']] },
+    pnam:    { typeName:'核战僚机',  color:'#b0bec5', rows:[['伤害','650'],['溅射','100 (大)'],['制导','无'],['冷却','19s'],['费用','PT×6']] },
+    rfa:     { typeName:'机枪',      color:'#ff9800', rows:[['伤害','1'],['制导','弱'],['冷却','0.4s'],['备注','自动攻击']] },
+    avenger: { typeName:'制导导弹',  color:'#ab47bc', rows:[['伤害','25'],['溅射','20 (小)'],['制导','强'],['冷却','4s'],['费用','PT×1']] },
+    asr:     { typeName:'火箭炮',    color:'#ef5350', rows:[['伤害','20'],['溅射','5 (小)'],['制导','无'],['冷却','9s'],['费用','PT×2']] }
+};
 let waveIndexLastSaved = -1;
 let isDebugMode = false;
 let score = 0, frameCount = 0, gameTimeSeconds = 0;
@@ -1712,16 +1722,18 @@ function loop(timestamp) {
                     let dmgType = b.isRFA ? 'rfa' : 'bullet';
                     e.takeDamage(finalDmg, true, isCrit, dmgType);
                     b.hitEnemies.add(e);
-                    if (player.equipment && player.equipment.aoe && player.equipment.aoe.equipped) triggerAOE(e.x, e.y);
+                    if (!b.isRFA && player.equipment && player.equipment.aoe && player.equipment.aoe.equipped) triggerAOE(e.x, e.y);
                     // afterburn：命中后有概率留下持续燃烧区域
-                    let afterburnLevel = (player.equipment && player.equipment.afterburn && player.equipment.afterburn.equipped) ? player.equipment.afterburn.level : 0;
-                    if (afterburnLevel > 0 && Math.random() < 0.25 * afterburnLevel) {
-                        const BASE_BURN_R = 30;
-                        let burnDmg = [2, 3, 5][afterburnLevel - 1] || 2;
-                        let burnRadius = BASE_BURN_R * 1.1 * (1 + 0.05 * (afterburnLevel - 1));
-                        let burnLife = Math.round(180 * (1 + 0.10 * (afterburnLevel - 1)));
-                        let burnTick = Math.round(20 / (afterburnLevel >= 3 ? 1.2 : 1.0));
-                        burnEffects.push(new BurnEffect(e.x, e.y, burnRadius, burnDmg, burnLife, burnTick));
+                    if (!b.isRFA) {
+                        let afterburnLevel = (player.equipment && player.equipment.afterburn && player.equipment.afterburn.equipped) ? player.equipment.afterburn.level : 0;
+                        if (afterburnLevel > 0 && Math.random() < 0.25 * afterburnLevel) {
+                            const BASE_BURN_R = 30;
+                            let burnDmg = [2, 3, 5][afterburnLevel - 1] || 2;
+                            let burnRadius = BASE_BURN_R * 1.1 * (1 + 0.05 * (afterburnLevel - 1));
+                            let burnLife = Math.round(180 * (1 + 0.10 * (afterburnLevel - 1)));
+                            let burnTick = Math.round(20 / (afterburnLevel >= 3 ? 1.2 : 1.0));
+                            burnEffects.push(new BurnEffect(e.x, e.y, burnRadius, burnDmg, burnLife, burnTick));
+                        }
                     }
                     if (b.hitEnemies.size > b.pierceCount) {
                         b.active = false;
@@ -1759,9 +1771,9 @@ function loop(timestamp) {
         if (player && player.hp > 0 && endingState !== 'playerDead') {
             let wLv = (player.upgrades && player.upgrades.wingman) || 0;
             let count = player.wingmanSlots || 0;
-            let swoopCD   = [180, 165, 150, 135][wLv];
-            let directDmg = [30,  48,  72, 100][wLv];
-            let splashDmg = [5,   12,  22,  35][wLv];
+            let swoopCD   = [150, 138, 126, 114][wLv];
+            let directDmg = [80, 100, 125, 155][wLv];
+            let splashDmg = [20,  28,  39,  54][wLv];
             let arcFrames = [60,  52,  44,  36][wLv];
             let splashR   = 60;
 
@@ -2426,6 +2438,7 @@ function saveCheckpoint() {
             subweapon: player.subweaponLoadout || []
         },
         waveIndex: cas.state.currentWave,
+        waveTimer: cas.state.waveTimer,
         shopItemIds: currentShopItems.map(i => i.id),
         score, gameTimeSeconds, shopInflation,
         player: {
@@ -2477,7 +2490,7 @@ function restoreFromCheckpoint(data) {
         player.subweaponTimers  = Array(player.subweaponSlots).fill(0);
     }
     let cas = WORKSHOP.cassettes[currentLevel];
-    if (cas && cas.state) { cas.state.currentWave = data.waveIndex; cas.state.waveTimer = 0; cas.state.waveEnemiesSpawned = 0; }
+    if (cas && cas.state) { cas.state.currentWave = data.waveIndex; cas.state.waveTimer = data.waveTimer || 0; cas.state.waveEnemiesSpawned = 0; }
     // 恢复商店内容，防止退出重进刷新商店
     if (data.shopItemIds && data.shopItemIds.length > 0) {
         let restored = data.shopItemIds.map(id => upgradePool.find(u => u.id === id)).filter(Boolean);
@@ -2532,18 +2545,28 @@ window.openShipSelect = function(levelId, useCheckpoint) {
     selectedShipType = 'rt1';
     let screen = document.getElementById('ship-select-screen');
     screen.dataset.levelId = levelId;
-    document.querySelectorAll('.ship-card').forEach(c => c.classList.remove('selected'));
+    document.querySelectorAll('.ship-card').forEach(c => {
+        c.classList.remove('selected', 'unselected');
+        c.classList.add('unselected');
+    });
     let defCard = document.getElementById('ship-card-rt1');
-    if (defCard) defCard.classList.add('selected');
+    if (defCard) { defCard.classList.remove('unselected'); defCard.classList.add('selected'); }
     renderShipPreviews();
     showScreen('ship-select');
 };
 
 window.selectShip = function(shipType) {
+    if (selectedShipType === shipType) {
+        confirmShipSelect();
+        return;
+    }
     selectedShipType = shipType;
-    document.querySelectorAll('.ship-card').forEach(c => c.classList.remove('selected'));
+    document.querySelectorAll('.ship-card').forEach(c => {
+        c.classList.remove('selected', 'unselected');
+        c.classList.add('unselected');
+    });
     let card = document.getElementById('ship-card-' + shipType);
-    if (card) card.classList.add('selected');
+    if (card) { card.classList.remove('unselected'); card.classList.add('selected'); }
 };
 
 window.confirmShipSelect = function() {
@@ -2652,66 +2675,207 @@ window.openLoadoutSelect = function(levelId, shipType) {
     if (!screen) { startGame(levelId, false, shipType); return; }
     screen.dataset.levelId = levelId;
     screen.dataset.shipType = shipType;
+
+    lsUIState.selectedSlotIdx = 0;
+    lsUIState.focusedItemType = null;
+    lsUIState.slots = [];
+    let panel = document.getElementById('ls-detail-panel');
+    if (panel) panel.style.maxWidth = '0';
+
     buildLoadoutUI(shipType);
     showScreen('loadout-select');
 };
 
+function lsDrawSlotSquare(cvs, isSelected, groupSize, equippedType, slotType) {
+    let ctx = cvs.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, 40, 40);
+    ctx.fillStyle = isSelected ? '#0d1f0d' : '#0a0a1e';
+    ctx.fillRect(0, 0, 40, 40);
+    ctx.strokeStyle = isSelected ? '#00e676' : '#2a2a40';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1, 1, 38, 38);
+    let typeMap = slotType === 'wingman' ? WINGMAN_TYPES : SUBWEAPON_TYPES;
+    let def = typeMap[equippedType];
+    if (def) {
+        ctx.fillStyle = def.color;
+        ctx.fillRect(2, 2, 36, 4);
+    }
+    if (groupSize > 1) {
+        ctx.font = '7px monospace';
+        ctx.fillStyle = '#888';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText('×' + groupSize, 37, 38);
+    }
+}
+
+function lsDrawItemChip(cvs, def, isActive, isEquipped) {
+    let ctx = cvs.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, cvs.width, cvs.height);
+    ctx.fillStyle = isActive ? '#0d200d' : (isEquipped ? '#0a1420' : '#0a0a18');
+    ctx.fillRect(0, 0, cvs.width, cvs.height);
+    ctx.strokeStyle = isActive ? '#00e676' : (isEquipped ? '#00b0ff' : '#333');
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1, 1, cvs.width - 2, cvs.height - 2);
+    ctx.font = '6px monospace';
+    ctx.fillStyle = '#ddd';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(def.name, 4, 14);
+    ctx.fillStyle = def.color;
+    ctx.fillRect(0, cvs.height - 3, cvs.width, 3);
+}
+
+function lsSelectSlot(idx) {
+    lsUIState.selectedSlotIdx = idx;
+    lsUIState.focusedItemType = null;
+    let panel = document.getElementById('ls-detail-panel');
+    if (panel) panel.style.maxWidth = '0';
+    let slotCol = document.getElementById('ls-slot-col');
+    if (slotCol) {
+        let squares = slotCol.querySelectorAll('canvas');
+        squares.forEach((cvs, i) => {
+            let slot = lsUIState.slots[i];
+            if (slot) lsDrawSlotSquare(cvs, i === idx, slot.groupSize, slot.currentType, slot.slotType);
+        });
+    }
+    lsUpdateIconRow();
+}
+
+function lsClickIcon(itemType) {
+    if (lsUIState.focusedItemType === itemType) {
+        let slot = lsUIState.slots[lsUIState.selectedSlotIdx];
+        if (slot) {
+            if (slot.slotType === 'wingman') pendingLoadoutData.wingman[slot.groupIdx] = itemType;
+            else pendingLoadoutData.subweapon[slot.groupIdx] = itemType;
+            slot.currentType = itemType;
+        }
+        lsUIState.focusedItemType = null;
+        let panel = document.getElementById('ls-detail-panel');
+        if (panel) panel.style.maxWidth = '0';
+        let slotCol = document.getElementById('ls-slot-col');
+        if (slotCol) {
+            let squares = slotCol.querySelectorAll('canvas');
+            squares.forEach((cvs, i) => {
+                let s = lsUIState.slots[i];
+                if (s) lsDrawSlotSquare(cvs, i === lsUIState.selectedSlotIdx, s.groupSize, s.currentType, s.slotType);
+            });
+        }
+        lsUpdateIconRow();
+        return;
+    }
+    lsUIState.focusedItemType = itemType;
+    lsUpdateDetailPanel(itemType);
+    let panel = document.getElementById('ls-detail-panel');
+    if (panel) panel.style.maxWidth = '180px';
+    lsUpdateIconRowActive();
+}
+
+function lsUpdateIconRow() {
+    let row = document.getElementById('ls-icon-row');
+    if (!row) return;
+    row.innerHTML = '';
+    let slot = lsUIState.slots[lsUIState.selectedSlotIdx];
+    if (!slot) { row.style.opacity = '0'; row.style.pointerEvents = 'none'; return; }
+    let typeMap = slot.slotType === 'wingman' ? WINGMAN_TYPES : SUBWEAPON_TYPES;
+    row.style.opacity = '1';
+    row.style.pointerEvents = 'auto';
+    Object.keys(typeMap).forEach(type => {
+        let def = typeMap[type];
+        let cvs = document.createElement('canvas');
+        cvs.width = 72; cvs.height = 28;
+        cvs.style.cssText = 'cursor:pointer;image-rendering:pixelated;display:block;';
+        lsDrawItemChip(cvs, def, lsUIState.focusedItemType === type, slot.currentType === type);
+        cvs.onclick = (e) => { e.stopPropagation(); lsClickIcon(type); };
+        row.appendChild(cvs);
+    });
+}
+
+function lsUpdateIconRowActive() {
+    let row = document.getElementById('ls-icon-row');
+    if (!row) return;
+    let slot = lsUIState.slots[lsUIState.selectedSlotIdx];
+    if (!slot) return;
+    let typeMap = slot.slotType === 'wingman' ? WINGMAN_TYPES : SUBWEAPON_TYPES;
+    let keys = Object.keys(typeMap);
+    row.querySelectorAll('canvas').forEach((cvs, i) => {
+        let type = keys[i];
+        if (!type) return;
+        lsDrawItemChip(cvs, typeMap[type], lsUIState.focusedItemType === type, slot.currentType === type);
+    });
+}
+
+function lsUpdateDetailPanel(itemType) {
+    let stats = LS_ITEM_STATS[itemType];
+    let allTypes = Object.assign({}, WINGMAN_TYPES, SUBWEAPON_TYPES);
+    let def = allTypes[itemType];
+    if (!stats || !def) return;
+    let header = document.getElementById('ls-detail-header');
+    if (header) header.innerHTML = '<span style="color:' + def.color + '">〈' + stats.typeName + '〉</span><br>' + def.name;
+    let statsDiv = document.getElementById('ls-detail-stats');
+    if (statsDiv) {
+        statsDiv.innerHTML = stats.rows.map(([label, value]) =>
+            '<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #1a1a30;">' +
+            '<span style="color:#666;font-family:\'Press Start 2P\',monospace;font-size:7px">' + label + '</span>' +
+            '<span style="color:#fff;font-family:\'Press Start 2P\',monospace;font-size:7px">' + value + '</span>' +
+            '</div>'
+        ).join('');
+    }
+}
+
+function lsDismissOnBlank(e) {
+    if (e.target.id === 'loadout-select-screen') {
+        lsUIState.focusedItemType = null;
+        let panel = document.getElementById('ls-detail-panel');
+        if (panel) panel.style.maxWidth = '0';
+        lsUpdateIconRowActive();
+    }
+}
+
 function buildLoadoutUI(shipType) {
     let cfg = SHIPS[shipType];
     if (!cfg) return;
-    let container = document.getElementById('ls-sections');
-    if (!container) return;
-    container.innerHTML = '';
 
-    function makeSection(title, groups, loadoutArr, typeMap, field) {
-        let sec = document.createElement('div');
-        sec.className = 'ls-section';
-        sec.innerHTML = '<div class="ls-section-title">' + title + '</div>';
-        let row = document.createElement('div');
-        row.className = 'ls-slots-row';
-        groups.forEach((groupSize, gIdx) => {
-            if (gIdx > 0) {
-                let sep = document.createElement('div');
-                sep.className = 'ls-group-sep';
-                row.appendChild(sep);
-            }
-            // One card per group (all slots in same group share the same type)
-            let card = document.createElement('div');
-            card.className = 'ls-slot-card';
-            let type = loadoutArr[gIdx] || Object.keys(typeMap)[0];
-            let def = typeMap[type] || typeMap[Object.keys(typeMap)[0]];
-            let multiplierLabel = groupSize > 1 ? ' <span style="color:#888;font-size:6px">×' + groupSize + '</span>' : '';
-            card.innerHTML = '<div class="ls-slot-name">' + def.name + multiplierLabel + '</div><div class="ls-slot-type" style="color:' + def.color + '">' + def.desc.split('。')[0] + '</div>';
-            card.onclick = (function(g, f) {
-                return function() {
-                    let keys = Object.keys(typeMap);
-                    let cur = pendingLoadoutData[f][g] || keys[0];
-                    pendingLoadoutData[f][g] = keys[(keys.indexOf(cur) + 1) % keys.length];
-                    buildLoadoutUI(document.getElementById('loadout-select-screen').dataset.shipType);
-                };
-            })(gIdx, field);
-            row.appendChild(card);
+    let lsCvs = document.getElementById('ls-ship-canvas');
+    if (lsCvs) {
+        let ctx = lsCvs.getContext('2d');
+        let spr = sprites && sprites[cfg.sprite];
+        if (spr) {
+            ctx.clearRect(0, 0, lsCvs.width, lsCvs.height);
+            ctx.imageSmoothingEnabled = false;
+            let sc = Math.min(lsCvs.width / spr.width, lsCvs.height / spr.height);
+            ctx.drawImage(spr, (lsCvs.width - spr.width*sc)/2, (lsCvs.height - spr.height*sc)/2, spr.width*sc, spr.height*sc);
+        }
+    }
+    let lsLabel = document.getElementById('ls-ship-label');
+    if (lsLabel) lsLabel.textContent = cfg.nameEn || cfg.name;
+
+    let slots = [];
+    cfg.wingmanGroups.forEach((groupSize, gIdx) => {
+        slots.push({ slotType:'wingman',   groupIdx:gIdx, groupSize, currentType: pendingLoadoutData.wingman[gIdx]  || 'as1' });
+    });
+    cfg.subweaponGroups.forEach((groupSize, gIdx) => {
+        slots.push({ slotType:'subweapon', groupIdx:gIdx, groupSize, currentType: pendingLoadoutData.subweapon[gIdx] || 'rfa' });
+    });
+    lsUIState.slots = slots;
+    if (lsUIState.selectedSlotIdx >= slots.length) lsUIState.selectedSlotIdx = 0;
+
+    let slotCol = document.getElementById('ls-slot-col');
+    if (slotCol) {
+        slotCol.innerHTML = '';
+        slots.forEach((slot, idx) => {
+            let cvs = document.createElement('canvas');
+            cvs.width = 40; cvs.height = 40;
+            cvs.style.cssText = 'display:block;cursor:pointer;image-rendering:pixelated;';
+            lsDrawSlotSquare(cvs, idx === lsUIState.selectedSlotIdx, slot.groupSize, slot.currentType, slot.slotType);
+            cvs.onclick = (e) => { e.stopPropagation(); lsSelectSlot(idx); };
+            slotCol.appendChild(cvs);
         });
-        sec.appendChild(row);
-        container.appendChild(sec);
     }
 
-    makeSection('◈ 僚机位', cfg.wingmanGroups, pendingLoadoutData.wingman, WINGMAN_TYPES, 'wingman');
-    makeSection('✦ 副武器位', cfg.subweaponGroups, pendingLoadoutData.subweapon, SUBWEAPON_TYPES, 'subweapon');
-
-    let shSec = document.createElement('div');
-    shSec.className = 'ls-section';
-    shSec.innerHTML = '<div class="ls-section-title">◆ 射击位</div>';
-    let shRow = document.createElement('div');
-    shRow.className = 'ls-slots-row';
-    for (let s = 0; s < cfg.shootSlots; s++) {
-        let card = document.createElement('div');
-        card.className = 'ls-slot-card locked-slot';
-        card.innerHTML = '<div class="ls-slot-name">原型弹药</div><div class="ls-slot-type" style="color:#888">基础子弹</div>';
-        shRow.appendChild(card);
-    }
-    shSec.appendChild(shRow);
-    container.appendChild(shSec);
+    lsUpdateIconRow();
 }
 
 window.confirmLoadout = function() {

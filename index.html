@@ -175,11 +175,12 @@
         .ship-card {
             background: #0a0a1e; border: 3px solid #2a2a3e; border-radius: 8px;
             padding: 12px 10px; width: 136px; cursor: pointer;
-            transition: border-color 0.15s, box-shadow 0.15s;
+            transition: transform 0.18s ease, border-color 0.15s, box-shadow 0.15s;
             display: flex; flex-direction: column; align-items: center; gap: 6px;
         }
         .ship-card:hover { border-color: #00b0ff; }
-        .ship-card.selected { border-color: #00e676; box-shadow: 0 0 14px #00e67638; }
+        .ship-card.selected { transform: scale(1.07); border-color: #00e676; box-shadow: 0 0 18px #00e67640; }
+        .ship-card.unselected { transform: scale(0.92); border-color: #1e1e30; box-shadow: none; }
         .ship-preview { image-rendering: pixelated; display: block; }
         .ship-name { font-family: 'Press Start 2P', monospace; font-size: 7px; color: #00b0ff; letter-spacing: 1px; }
         .ship-name-zh { font-size: 10px; color: #ddd; }
@@ -416,9 +417,11 @@
          战机选择
     ══════════════════════════════════════ -->
     <div id="ship-select-screen" class="overlay" data-level-id="">
+        <button onclick="showScreen('start')" style="position:absolute;top:16px;left:16px;background:none;border:none;color:#fff;font-family:'Press Start 2P',monospace;font-size:18px;cursor:pointer;padding:4px;line-height:1;">〈</button>
         <h1>战机选择</h1>
+        <p style="font-size:8px;color:#777;margin-bottom:8px;max-width:280px;">点击卡片选择战机，再次点击确认</p>
         <div class="ship-cards-row">
-            <div class="ship-card selected" id="ship-card-rt1" onclick="selectShip('rt1')">
+            <div class="ship-card unselected" id="ship-card-rt1" onclick="selectShip('rt1')">
                 <canvas class="ship-preview" id="preview-rt1" width="66" height="48"></canvas>
                 <div class="ship-name">RT-1 RESCUER</div>
                 <div class="ship-name-zh">拯救者</div>
@@ -430,7 +433,7 @@
                 </div>
                 <div class="ship-desc">均衡型战机。三联分体僚机独立索敌，双翼副武器覆盖广。</div>
             </div>
-            <div class="ship-card" id="ship-card-rtg2" onclick="selectShip('rtg2')">
+            <div class="ship-card unselected" id="ship-card-rtg2" onclick="selectShip('rtg2')">
                 <canvas class="ship-preview" id="preview-rtg2" width="66" height="48"></canvas>
                 <div class="ship-name">RTG-II</div>
                 <div class="ship-name-zh">RTG-II</div>
@@ -443,22 +446,33 @@
                 <div class="ship-desc">双炮战机。双槽僚机始终锁定同一目标，副武器搭载受限。</div>
             </div>
         </div>
-        <div class="btn-group" style="margin-top:12px">
-            <button class="btn btn-green" onclick="confirmShipSelect()">下一步 →</button>
-            <button class="btn btn-dark" onclick="showScreen('start')">返回</button>
-        </div>
     </div>
 
     <!-- ══════════════════════════════════════
          装备配置
     ══════════════════════════════════════ -->
-    <div id="loadout-select-screen" class="overlay" data-level-id="" data-ship-type="">
-        <h2>装备配置</h2>
-        <div id="ls-sections" style="width:95%;max-width:340px;overflow-y:auto;max-height:58%;"></div>
-        <div class="btn-group" style="margin-top:10px">
-            <button class="btn btn-green" onclick="confirmLoadout()">确认出发</button>
-            <button class="btn btn-dark" onclick="showScreen('ship-select')">← 返回战机选择</button>
+    <div id="loadout-select-screen" class="overlay" data-level-id="" data-ship-type="" onclick="lsDismissOnBlank(event)">
+        <button onclick="showScreen('ship-select');event.stopPropagation();" style="position:absolute;top:16px;left:16px;background:none;border:none;color:#fff;font-family:'Press Start 2P',monospace;font-size:18px;cursor:pointer;padding:4px;line-height:1;">〈</button>
+
+        <div id="ls-main-row" style="display:flex;align-items:flex-start;gap:10px;">
+            <div id="ls-ship-wrap" style="display:flex;flex-direction:column;align-items:center;gap:4px;background:#0a0a1e;border:2px solid #2a2a3e;border-radius:6px;padding:8px;flex-shrink:0;">
+                <canvas id="ls-ship-canvas" width="66" height="66" style="image-rendering:pixelated;display:block;"></canvas>
+                <div id="ls-ship-label" style="font-family:'Press Start 2P',monospace;font-size:6px;color:#00b0ff;max-width:66px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+            </div>
+
+            <div id="ls-slot-col" style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;"></div>
+
+            <div id="ls-detail-panel" style="overflow:hidden;max-width:0;transition:max-width 0.22s ease-out;flex-shrink:0;">
+                <div id="ls-detail-inner" style="width:160px;padding:8px;background:#0a0a1e;border:2px solid #2a2a3e;border-radius:6px;box-sizing:border-box;">
+                    <div id="ls-detail-header" style="text-align:center;font-family:'Press Start 2P',monospace;font-size:7px;color:#fff;margin-bottom:6px;line-height:1.6;"></div>
+                    <div id="ls-detail-stats"></div>
+                </div>
+            </div>
         </div>
+
+        <div id="ls-icon-row" style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;justify-content:center;opacity:0;transition:opacity 0.15s;pointer-events:none;max-width:340px;"></div>
+
+        <button class="btn btn-green" style="margin-top:14px;" onclick="confirmLoadout();event.stopPropagation();">确认出发</button>
     </div>
 
     <!-- ══════════════════════════════════════

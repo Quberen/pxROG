@@ -25,7 +25,7 @@ class Player {
 
         // 1. 基线属性 (Base)
         this.baseStats = {
-            maxHp: diffData.p_hp,
+            maxHp: shipCfg.p_hp || diffData.p_hp,
             damage: diffData.p_dmg,
             fireRate: 20,          
             critRate: 0.05,
