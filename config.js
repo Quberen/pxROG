@@ -121,6 +121,21 @@ function createPixelTexture(grid, colors, pixelSize) {
     return c;
 }
 
+function _imgToCanvas(img, w, h) {
+    let c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    let cx = c.getContext('2d');
+    cx.imageSmoothingEnabled = false;
+    cx.drawImage(img, 0, 0, w, h);
+    let d = cx.getImageData(0, 0, w, h);
+    for (let i = 0; i < d.data.length; i += 4) {
+        if (d.data[i] > 220 && d.data[i+1] > 220 && d.data[i+2] > 220)
+            d.data[i+3] = 0;
+    }
+    cx.putImageData(d, 0, 0);
+    return c;
+}
+
 const sprites = {};
 function initSprites() {
     const pSize = 3; 
@@ -250,25 +265,29 @@ function initSprites() {
         [0,0,0]
     ], ['#ff9800'], 2);
 
-    // PNAM-1 游戏内精灵：竖向黑色导弹体，横纹面板，右侧红色指示灯，6×16 pSize=2 → 12×32px
-    sprites.pnam_drone = createPixelTexture([
-        [0,0,1,1,0,0],
-        [0,1,2,2,1,0],
-        [0,1,2,2,1,0],
-        [1,2,2,2,4,1],
-        [1,2,3,3,2,1],
-        [1,1,2,2,1,1],
-        [1,2,3,3,2,1],
-        [1,1,2,2,1,1],
-        [1,2,3,3,2,1],
-        [1,1,2,2,1,1],
-        [1,2,3,3,2,1],
-        [1,1,2,2,1,1],
-        [1,2,2,2,2,1],
-        [0,1,2,2,1,0],
-        [0,1,0,0,1,0],
-        [0,1,0,0,1,0]
-    ], ['#111111','#1c1c1c','#2c2c2c','#ff1744'], 2);
+    // PNAM-1 游戏内精灵：优先使用 PNG；PNG 未加载时用像素阵列 fallback
+    if (window.preloadedImages && window.preloadedImages.pnam) {
+        sprites.pnam_drone = _imgToCanvas(window.preloadedImages.pnam, 14, 36);
+    } else {
+        sprites.pnam_drone = createPixelTexture([
+            [0,0,1,1,0,0],
+            [0,1,2,2,1,0],
+            [0,1,2,2,1,0],
+            [1,2,2,2,4,1],
+            [1,2,3,3,2,1],
+            [1,1,2,2,1,1],
+            [1,2,3,3,2,1],
+            [1,1,2,2,1,1],
+            [1,2,3,3,2,1],
+            [1,1,2,2,1,1],
+            [1,2,3,3,2,1],
+            [1,1,2,2,1,1],
+            [1,2,2,2,2,1],
+            [0,1,2,2,1,0],
+            [0,1,0,0,1,0],
+            [0,1,0,0,1,0]
+        ], ['#111111','#1c1c1c','#2c2c2c','#ff1744'], 2);
+    }
 
     // PNAM-1 按钮图标：导弹轮廓，5×11 pSize=3 → 15×33px
     sprites.i_pnam = createPixelTexture([
@@ -296,29 +315,33 @@ function initSprites() {
         [0,1,0,0,0,1,0]
     ], ['#ffffff'], 2);
 
-    // 核辐射图标：三叶扇形，黄色扇段从圆心附近延伸至外圈，匹配参考像素图
-    (function() {
-        let size = 16, c = size / 2;
-        let armAngles = [-Math.PI / 2, Math.PI / 6, 5 * Math.PI / 6];
-        let grid = [];
-        for (let row = 0; row < size; row++) {
-            let rowArr = [];
-            for (let col = 0; col < size; col++) {
-                let x = col - c + 0.5, y = row - c + 0.5;
-                let dist = Math.sqrt(x * x + y * y);
-                if (dist > 7.5) { rowArr.push(0); continue; }
-                if (dist < 2.8) { rowArr.push(2); continue; }
-                let ang = Math.atan2(y, x);
-                let inArm = armAngles.some(function(a) {
-                    let d = ang - a;
-                    while (d > Math.PI) d -= 2 * Math.PI;
-                    while (d < -Math.PI) d += 2 * Math.PI;
-                    return Math.abs(d) < Math.PI / 6 && dist >= 3.0 && dist <= 7.2;
-                });
-                rowArr.push(inArm ? 2 : 1);
+    // 核辐射图标：优先使用 PNG；未加载时用数学生成 fallback
+    if (window.preloadedImages && window.preloadedImages.nuclear) {
+        window._nuclearSymSprite = _imgToCanvas(window.preloadedImages.nuclear, 32, 32);
+    } else {
+        (function() {
+            let size = 16, c = size / 2;
+            let armAngles = [-Math.PI / 2, Math.PI / 6, 5 * Math.PI / 6];
+            let grid = [];
+            for (let row = 0; row < size; row++) {
+                let rowArr = [];
+                for (let col = 0; col < size; col++) {
+                    let x = col - c + 0.5, y = row - c + 0.5;
+                    let dist = Math.sqrt(x * x + y * y);
+                    if (dist > 7.5) { rowArr.push(0); continue; }
+                    if (dist < 2.8) { rowArr.push(2); continue; }
+                    let ang = Math.atan2(y, x);
+                    let inArm = armAngles.some(function(a) {
+                        let d = ang - a;
+                        while (d > Math.PI) d -= 2 * Math.PI;
+                        while (d < -Math.PI) d += 2 * Math.PI;
+                        return Math.abs(d) < Math.PI / 6 && dist >= 3.0 && dist <= 7.2;
+                    });
+                    rowArr.push(inArm ? 2 : 1);
+                }
+                grid.push(rowArr);
             }
-            grid.push(rowArr);
-        }
-        window._nuclearSymSprite = createPixelTexture(grid, ['#111111', '#ffeb3b'], 1);
-    })();
+            window._nuclearSymSprite = createPixelTexture(grid, ['#111111', '#ffeb3b'], 1);
+        })();
+    }
 }

@@ -168,6 +168,15 @@ let asrFireQueues = [];
 let pnamFireQueues = [];
 let pendingLoadoutData = { wingman: [], subweapon: [] };
 let lsUIState = { selectedSlotIdx: 0, focusedItemType: null, slots: [] };
+const preloadedImages = {};
+
+function preloadGameImages() {
+    [['pnam', 'assets/img/pnam.png'], ['nuclear', 'assets/img/nuclear.png']].forEach(([key, src]) => {
+        let img = new Image();
+        img.onload = () => { preloadedImages[key] = img; };
+        img.src = src;
+    });
+}
 
 const LS_ITEM_STATS = {
     as1:     { typeName:'自爆僚机',  color:'#ffea00', rows:[['伤害','80'],['溅射','20 (小)'],['制导','弱'],['冷却','2.5s']] },
@@ -3006,8 +3015,10 @@ canvas.addEventListener('mouseup', () => { isTouchActive = false; });
 canvas.addEventListener('mouseleave', () => { isTouchActive = false; });
 window.addEventListener('resize', resize);
 
+// 预加载 PNG 图像资产（异步，后续 initSprites 优先使用）
+preloadGameImages();
 // 初始化同步渲染资产
-initUI(); showScreen('start'); resize(); initSprites(); initStars(); 
+initUI(); showScreen('start'); resize(); initSprites(); initStars();
 
 // 字体与音频就绪后再点火主循环
 if (document.fonts && document.fonts.ready) AssetManager.add(document.fonts.ready);
