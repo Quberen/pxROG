@@ -168,12 +168,12 @@ let asrFireQueues = [];
 let pnamFireQueues = [];
 let pendingLoadoutData = { wingman: [], subweapon: [] };
 let lsUIState = { selectedSlotIdx: 0, focusedItemType: null, slots: [] };
-const preloadedImages = {};
+window.preloadedImages = {};
 
 function preloadGameImages() {
     [['pnam', 'assets/img/pnam.png'], ['nuclear', 'assets/img/nuclear.png']].forEach(([key, src]) => {
         let img = new Image();
-        img.onload = () => { preloadedImages[key] = img; };
+        img.onload = () => { window.preloadedImages[key] = img; };
         img.src = src;
     });
 }
