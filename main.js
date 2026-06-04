@@ -1728,12 +1728,27 @@ function loop(timestamp) {
         applyElastic(uiOffsets.terminal, document.getElementById('terminal-btn-cvs'), 'terminal');
         if (frameCount % 10 === 0) updateHUD();
 
+        // P2 子弹射程检查（到达 40% 高度时爆炸）
+        for (let b of bullets) {
+            if (b.active && b.isP2 && b.y <= b.p2LimitY) {
+                triggerP2Explosion(b.x, b.y);
+                b.active = false;
+            }
+        }
+
         bullets.forEach(b => {
             if (!b.active) return;
             enemies.forEach(e => {
+                if (!b.active) return;  // 防止 P2 对同帧多敌人重复爆炸
                 if (!e.active || e.hp <= 0) return;
                 let r_w = e.w * e.scale; let r_h = e.h * e.scale;
-                if (!b.hitEnemies.has(e) && Math.abs(b.x - e.x) < (b.w/2 + r_w/2 + 6) && Math.abs(b.y - e.y) < (b.h/2 + r_h/2 + 6)) {
+                let padding = b.isP2 ? 10 : 6;
+                if (!b.hitEnemies.has(e) && Math.abs(b.x - e.x) < (b.w/2 + r_w/2 + padding) && Math.abs(b.y - e.y) < (b.h/2 + r_h/2 + padding)) {
+                    if (b.isP2) {
+                        triggerP2Explosion(b.x, b.y);
+                        b.active = false;
+                        return;
+                    }
                     let isCrit = Math.random() < b.critRate;
                     let curDmg = b.damage * Math.pow(b.pierceRetain, b.hitEnemies.size);
                     let finalDmg = isCrit ? curDmg * b.critDamage : curDmg;
@@ -1876,13 +1891,13 @@ function loop(timestamp) {
                     } else { w.vx *= 0.8; w.vy *= 0.8; }
                     w.x += w.vx; w.y += w.vy;
 
-                    w.shootTimer = (w.shootTimer || 60) - 1;
+                    w.shootTimer = (w.shootTimer || 78) - 1;
                     let isFast = (w.vx*w.vx + w.vy*w.vy) > 9;
                     if (w.shootTimer <= 0 && !isFast) {
                         let ds1Rank = ds1SlotRankMap[w.slotId] !== undefined ? ds1SlotRankMap[w.slotId] : 0;
                         let chosen = ds1Targets[ds1Rank] || null;
                         if (chosen && chosen.active) interceptorBullets.push(new InterceptorBullet(w.x, w.y, chosen));
-                        w.shootTimer = 60;
+                        w.shootTimer = 78;
                     }
                     ctx.save();
                     ctx.fillStyle = '#00b0ff'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1;
@@ -2011,6 +2026,7 @@ function loop(timestamp) {
                                 2, 4, 1, 0, 1.0, 0, 1.0, '#ff9800'
                             );
                             rfaBullet.isRFA = true;
+                            rfaBullet.hp = undefined;  // 机枪弹无耐久，不可被拦截
                             rfaBullet.alignToVelocity = true;
                             bullets.push(rfaBullet);
                             player.subweaponTimers[slotIdx] = 12;
@@ -2040,7 +2056,7 @@ function loop(timestamp) {
                 for (let i = asrFireQueues.length-1; i >= 0; i--) {
                     let q = asrFireQueues[i];
                     if (q.timer <= 0) {
-                        let spd = 6.4;
+                        let spd = 333 / 800 * 16;  // ≈6.66 px/frame
                         for (let ang of [-15, -5, 5, 15]) {
                             let rad = ang * Math.PI / 180;
                             asrProjectiles.push(new ASRocketProjectile(

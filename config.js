@@ -57,6 +57,7 @@ const ENEMY_TYPES = Object.keys(WORKSHOP.data.enemies).map(key => {
 // 【数据混入】：保留静态描述，混入工坊里的价格与等级上限
 const baseUpgradePool = [
 { id: 'high_explosive', type: 'equip', name: '高能弹头',  slotCost: 1, rarity: 'R', prices: [3,5,10,15,19], max: 5, desc: '弹头伤害提升。每级+20%基础伤害。' },
+{ id: 'proto2',         type: 'equip', name: 'Prototype-2 (Short Range)', slotCost: 2, rarity: 'R', prices: [4], max: 1, desc: '短程爆破主炮。子弹在到达40%射程或命中敌人时爆炸，爆炸伤害敌人和敌弹。深渊难度下爆炸伤害降低。' },
 { id: 'spread',         type: 'equip', name: '散弹模组',  slotCost: 2, rarity: 'R', prices: [3,6,9,16],    max: 4, desc: '发射扇形散弹。分弹头伤害为主弹80%。' },
 { id: 'skill_duration', type: 'upgrade', name: '超频运转', rarity: 'R', cost: 3, max: 3, desc: '技能持续时间+1秒/级。' },
 { id: 'burst_core',     type: 'equip', name: '连发核心',  slotCost: 1, rarity: 'E', initialCost: 2,   cost: 3.0, costStep: 2, max: 3, desc: '射速大幅提升。每级额外缩短射击间隔。' },
@@ -277,8 +278,8 @@ function initSprites() {
     // PNAM-1 游戏内精灵：优先使用 PNG；PNG 未加载时用像素阵列 fallback
     if (window.preloadedImages && window.preloadedImages.pnam) {
         let _dpr = window.canvasDPR || window.devicePixelRatio || 1;
-        let s = _imgToCanvas(window.preloadedImages.pnam, Math.round(14 * _dpr), Math.round(36 * _dpr));
-        s.cssW = 14; s.cssH = 36;
+        let s = _imgToCanvas(window.preloadedImages.pnam, Math.round(20 * _dpr), Math.round(20 * _dpr));
+        s.cssW = 20; s.cssH = 20;
         sprites.pnam_drone = s;
     } else {
         sprites.pnam_drone = createPixelTexture([

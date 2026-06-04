@@ -213,13 +213,20 @@ class Player {
             pRet = eq.pierce.level >= 2 ? 0.8 : 0.5;
         }
         
+        let p2Active = !!(eq.proto2 && eq.proto2.equipped);
+
         let spawnBullet = (vx, vy, damageMult = 1.0, xOffset = 0) => {
             // [技能视觉反馈：弹道变黄]
             let bulletColor = this.skillActiveTimer > 0 ? '#ffeb3b' : '#ffffff';
             let skillMult = (this.skillActiveTimer > 0 && this.skillDamageMult) ? this.skillDamageMult : 1.0;
+            if (p2Active) vy = Math.sign(vy || -1) * 10;  // P2 弹速 500/800×16 ≈ 10
             let b = new Bullet(this.x + xOffset, this.y - this.h / 2, vx, vy, cw, ch, currentDamage * skillMult * damageMult, pCnt, pRet, actCritRate, actCritDmg, bulletColor);
             b.isHoming = eq.homing && eq.homing.equipped;
             b.homingTurn = homingTurn;
+            if (p2Active) {
+                b.isP2 = true;
+                b.p2LimitY = (this.y - this.h / 2) - height * 0.4;
+            }
             bullets.push(b);
         };
 
@@ -455,6 +462,7 @@ class Bullet {
         this.hitEnemies = new Set();
         this.isHoming = false;
         this.homingTurn = 0.15;
+        this.hp = 5;
     }
 
     update() {
@@ -524,6 +532,7 @@ class EnemyBullet {
         this.guidanceFactor = guidanceFactor;
         this.color = type === 'homing' ? '#ab47bc' : '#ff1744';
         this.coreColor = type === 'homing' ? '#00b0ff' : '#ffeb3b';
+        this.hp = (type === 'homing') ? 10 : 5;
     }
 
     update() {
@@ -1794,9 +1803,11 @@ class InterceptorBullet {
             let eb = enemyBullets[i];
             if (!eb.active) continue;
             if (Math.sqrt((eb.x-this.x)**2+(eb.y-this.y)**2) < hitR) {
-                eb.active = false;
+                eb.hp -= 20; if (eb.hp <= 0) eb.active = false;
                 for (let eb2 of enemyBullets) {
-                    if (eb2.active && Math.sqrt((eb2.x-this.x)**2+(eb2.y-this.y)**2) < 20) eb2.active = false;
+                    if (eb2.active && Math.sqrt((eb2.x-this.x)**2+(eb2.y-this.y)**2) < 20) {
+                        eb2.hp -= 20; if (eb2.hp <= 0) eb2.active = false;
+                    }
                 }
                 createExplosion(this.x, this.y, '#00b0ff', 8);
                 this.active = false;
@@ -1806,8 +1817,7 @@ class InterceptorBullet {
         for (let e of enemies) {
             if (!e.active || !e.isKamikaze) continue;
             if (Math.sqrt((e.x-this.x)**2+(e.y-this.y)**2) < hitR) {
-                let dmg = Math.max(8, Math.ceil(e.maxHp * 0.3));
-                e.takeDamage(dmg, true, false, 'interceptor');
+                e.takeDamage(20, true, false, 'interceptor');
                 createExplosion(this.x, this.y, '#00b0ff', 8);
                 this.active = false;
                 return;
@@ -2065,13 +2075,17 @@ class PNAMDrone {
     }
 
     _nuclearExplosion() {
-        let r1 = 80, r2 = 200;
+        let r1 = 55, r2 = 110;
         enemies.forEach(e => {
             if (!e.active) return;
             let dx = e.x-this.x, dy = e.y-this.y, d2 = dx*dx+dy*dy;
-            if (d2 < r1*r1) e.takeDamage(650, true, false, 'pnam');
-            else if (d2 < r2*r2) e.takeDamage(100, true, false, 'pnam_shock');
-            e.takeDamage(20, true, false, 'pnam_rad');
+            if (d2 < r1*r1) e.takeDamage(500, true, false, 'pnam');
+            else if (d2 < r2*r2) e.takeDamage(85, true, false, 'pnam_shock');
+        });
+        enemyBullets.forEach(eb => {
+            if (!eb.active) return;
+            let dx = eb.x-this.x, dy = eb.y-this.y;
+            if (dx*dx+dy*dy < r1*r1) { eb.hp -= 80; if (eb.hp <= 0) eb.active = false; }
         });
         // 扩散环（6层，由内到外）
         aoeEffects.push(new AOEEffect(this.x, this.y, r1 * 0.45, '#ffffff'));
@@ -2133,14 +2147,12 @@ class PNAMDrone {
         if (spr) {
             let sw = spr.cssW || 14, sh = spr.cssH || 36;
             ctx.drawImage(spr, -sw/2, -sh/2, sw, sh);
-            // 红色小灯（覆盖在精灵正中心，颜色随状态变化）
-            let lightColor = this._lightOn ? '#ff1744' : '#555555';
-            ctx.fillStyle = lightColor;
-            if (this._lightOn) {
-                ctx.shadowBlur = 4; ctx.shadowColor = '#ff1744';
-            }
-            ctx.fillRect(-1.5, -1.5, 3, 3);
-            ctx.shadowBlur = 0;
+            // 红色小灯（暂时注释）
+            // let lightColor = this._lightOn ? '#ff1744' : '#555555';
+            // ctx.fillStyle = lightColor;
+            // if (this._lightOn) { ctx.shadowBlur = 4; ctx.shadowColor = '#ff1744'; }
+            // ctx.fillRect(-1.5, -1.5, 3, 3);
+            // ctx.shadowBlur = 0;
         } else {
             ctx.fillStyle = '#111111'; ctx.fillRect(-7,-10,14,20);
             ctx.fillStyle = this._lightOn ? '#ff1744' : '#555555';
@@ -2184,4 +2196,25 @@ function triggerAOE(x, y, exDmg = null, exR = null, color = '#ab47bc') {
             }
         });
     }
+}
+
+function triggerP2Explosion(x, y) {
+    let r = 22;
+    let dmg = (typeof currentDifficulty !== 'undefined' && currentDifficulty === 3) ? 5 : 8;
+    aoeEffects.push(new AOEEffect(x, y, r, '#ff6e40'));
+    createExplosion(x, y, '#ff6e40', 6);
+    enemies.forEach(e => {
+        if (!e.active) return;
+        let dx = e.x-x, dy = e.y-y;
+        if (dx*dx+dy*dy < (r + e.w/2*(e.scale||1))**2) {
+            e.takeDamage(dmg, true, false, 'proto2');
+        }
+    });
+    enemyBullets.forEach(eb => {
+        if (!eb.active) return;
+        let dx = eb.x-x, dy = eb.y-y;
+        if (dx*dx+dy*dy < r*r) {
+            eb.hp -= dmg; if (eb.hp <= 0) { eb.active = false; }
+        }
+    });
 }
