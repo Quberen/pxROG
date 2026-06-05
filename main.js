@@ -3280,23 +3280,19 @@ function cOnUp(e) {
     cDragging = false;
     let totalDx = Math.abs(e.clientX - cDragX0);
     if (totalDx < 10) {
-        // 按点击的 X 位置算最近目标卡片，不依赖 CSS transform 的 hit-test
         let wrap = document.getElementById('carousel-wrap');
         if (wrap) {
             let cx = wrap.clientWidth / 2;
             let rawDiff = (e.clientX - cx) / CARD_SPACING;
-            let centerIdx = cIdxWrap(Math.round(cPos));
-            if (Math.abs(rawDiff) < 0.35) {
-                // 点击中心区域 → 双击判定
-                let now = Date.now();
-                if (cLastTapIdx === centerIdx && now - cLastTapTime < 700) {
-                    cOnConfirm(centerIdx);
-                } else {
-                    cLastTapIdx = centerIdx;
-                    cLastTapTime = now;
+            if (Math.abs(rawDiff) < 0.5) {
+                // 单击中心卡片：基本静止则直接进入，否则先吸附到位
+                if (Math.abs(cPos - Math.round(cPos)) < 0.25) {
+                    cOnConfirm(cIdxWrap(Math.round(cPos)));
+                    return;
                 }
+                cVel = (Math.round(cPos) - cPos) * 0.28;
             } else {
-                // 点击非中心区域 → 平滑吸附到最近整数卡
+                // 单击侧卡：平滑吸附到该卡
                 let targetIdx = Math.round(cPos + rawDiff);
                 cVel = (targetIdx - cPos) * 0.28;
             }
@@ -3310,15 +3306,19 @@ function cStartInertia() {
     cCoastFrames = 0;
     (function tick() {
         if (cDragging) return;
-        cPos += cVel;
-        cVel *= 0.90;   // 摩擦系数宽松，让卡片滑得更远
         cCoastFrames++;
-        // 至少滑行 12 帧后才允许 snap，避免慢速拖拽松手立即吸附
-        if (cCoastFrames >= 12 && Math.abs(cVel) < 0.015) {
-            cPos = Math.round(cPos);
+        let absV = Math.abs(cVel);
+        if (cCoastFrames < 8 || absV > 0.02) {
+            // 惯性滑行阶段：摩擦更宽松，滑得更久、更顺
+            cPos += cVel;
+            cVel *= 0.94;
+        } else {
+            // 磁吸缓动阶段：向最近整数平滑靠拢（非瞬间吸附）
+            let target = Math.round(cPos);
+            let d = target - cPos;
+            if (Math.abs(d) < 0.002) { cPos = target; cVel = 0; cDrawCarousel(); return; }
+            cPos += d * 0.18;
             cVel = 0;
-            cDrawCarousel();
-            return;
         }
         cDrawCarousel();
         cRafId = requestAnimationFrame(tick);
@@ -3620,7 +3620,7 @@ function dcClickCard(level) {
 }
 
 function dcConfirm(level) {
-    selectDifficulty(level);
+    currentDifficulty = level;
     let levelId = (level === 3) ? 'sector2' : 'sector1';
     startGame(levelId, false, newFlowShipId, pendingLoadoutData);
 }
