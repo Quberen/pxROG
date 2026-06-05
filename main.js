@@ -3203,18 +3203,19 @@ function buildCarousel() {
     cDrawCarousel();
 }
 
-function cRenderPreviews() {
+function cRenderPreviews(retries) {
+    let retryCount = (retries === undefined) ? 5 : retries;
     let wrap = document.getElementById('carousel-wrap');
-    if (!wrap || !sprites) return;
+    if (!wrap) return;
+    let anyMissing = false;
     CAROUSEL_CARDS.forEach((data, i) => {
         if (!data.shipId) return;
         let card = wrap.children[i];
         if (!card) return;
         let cvs = card.querySelector('canvas');
         if (!cvs) return;
-        let cfg = SHIPS[data.shipId];
-        let spr = cfg && sprites[cfg.sprite];
-        if (!spr) return;
+        let spr = (typeof sprites !== 'undefined') && SHIPS[data.shipId] && sprites[SHIPS[data.shipId].sprite];
+        if (!spr) { anyMissing = true; return; }
         let ctx = cvs.getContext('2d');
         ctx.imageSmoothingEnabled = false;
         ctx.clearRect(0, 0, cvs.width, cvs.height);
@@ -3222,6 +3223,7 @@ function cRenderPreviews() {
         let sc = Math.min(cvs.width / sw, cvs.height / sh) * 0.8;
         ctx.drawImage(spr, (cvs.width - sw * sc) / 2, (cvs.height - sh * sc) / 2, sw * sc, sh * sc);
     });
+    if (anyMissing && retryCount > 0) requestAnimationFrame(() => cRenderPreviews(retryCount - 1));
 }
 
 function cIdxWrap(i) { return ((i % CARD_COUNT) + CARD_COUNT) % CARD_COUNT; }
@@ -3352,26 +3354,28 @@ function openNewLoadout(shipId) {
     } catch(e) {}
     if (!pendingLoadoutData.primary && cfg.primaryOptions && cfg.primaryOptions.length)
         pendingLoadoutData.primary = cfg.primaryOptions[0];
-    nlBuildUI(cfg);
+    // 先切换屏幕（overlay 变 active），再 rAF 后构建 UI 确保 DOM 可见时渲染精灵
     showScreen('new-loadout');
+    requestAnimationFrame(() => nlBuildUI(cfg));
 }
 
 function nlBuildUI(cfg) {
     let lsCvs = document.getElementById('nl-ship-canvas');
     if (lsCvs) {
-        let drawShip = () => {
-            if (!sprites) return;
+        let drawShip = (retries) => {
+            let spr = (typeof sprites !== 'undefined') && sprites[cfg.sprite];
+            if (!spr) {
+                if (retries > 0) requestAnimationFrame(() => drawShip(retries - 1));
+                return;
+            }
             let ctx = lsCvs.getContext('2d');
             ctx.imageSmoothingEnabled = false;
-            let spr = sprites[cfg.sprite];
-            if (!spr) return;
             ctx.clearRect(0, 0, lsCvs.width, lsCvs.height);
             let sw = spr.cssW || spr.width, sh = spr.cssH || spr.height;
             let sc = Math.min(lsCvs.width / sw, lsCvs.height / sh) * 0.8;
             ctx.drawImage(spr, (lsCvs.width - sw * sc) / 2, (lsCvs.height - sh * sc) / 2, sw * sc, sh * sc);
         };
-        drawShip();
-        requestAnimationFrame(drawShip); // 保底
+        drawShip(5); // 最多重试 5 帧
     }
     let lbl = document.getElementById('nl-ship-label');
     if (lbl) lbl.textContent = cfg.nameEn || cfg.name || newFlowShipId.toUpperCase();

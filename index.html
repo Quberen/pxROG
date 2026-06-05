@@ -262,18 +262,30 @@
         .c-card-tap   { color:#00e676; }
         #carousel-hint { font-family:'Press Start 2P',monospace; font-size:6px; color:#2a2a40; padding:14px 0 22px; flex-shrink:0; }
         /* ═══ 新装备界面 ═══ */
-        #new-loadout-screen { overflow:hidden; flex-direction:column; }
+        /* 覆盖 .overlay 的居中/padding 默认值 */
+        #new-loadout-screen {
+            padding: 0 !important;
+            align-items: stretch !important;
+            justify-content: flex-start !important;
+            overflow: hidden;
+            flex-direction: column;
+        }
+        /* 轮盘界面同样不需要 overlay 的 padding */
+        #ship-carousel-screen {
+            padding: 0 !important;
+            align-items: stretch !important;
+        }
 
         /* 战机区 —— flex:1，开托盘时通过 max-height 缩小 */
         #nl-ship-area {
             flex:1; min-height:0;
-            display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;
+            display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px;
             overflow:hidden; cursor:pointer;
-            transition:max-height 0.28s ease-out;
-            max-height:75vh;
+            transition:max-height 0.3s ease-out;
+            max-height:100vh; /* 初始不限制，compact 时压缩 */
         }
-        #nl-ship-area.nl-compact { max-height:120px; }
-        #nl-ship-area:active { background:rgba(0,230,118,0.04); }
+        #nl-ship-area.nl-compact { max-height:130px; }
+        #nl-ship-area:active { background:rgba(0,230,118,0.03); }
 
         /* 横向槽位栏 —— 始终可见，位于托盘上方 */
         #nl-slot-row {
@@ -287,11 +299,10 @@
         #nl-slot-row::-webkit-scrollbar { display:none; }
         .nl-slot-sep { width:1px; height:36px; background:#1e1e32; flex-shrink:0; }
 
-        /* 装备托盘 —— 绝对定位，从 slot-row 底线下方滑入，不遮挡 slot-row */
+        /* 装备托盘 —— 绝对定位，bottom:0，padding-bottom 给 slot-row 留空间 */
         #nl-tray {
             position:absolute; bottom:0; left:0; right:0;
-            /* padding-bottom 给 slot-row 留出 56px 高度 */
-            height:calc(30vh + 56px); padding:10px 12px 64px;
+            height:calc(32vh + 58px); padding:10px 12px 66px;
             background:rgba(3,3,12,0.98); border-top:2px solid #1e1e32;
             display:flex; flex-wrap:wrap; gap:8px; align-content:flex-start;
             overflow-y:auto; overflow-x:hidden;
@@ -302,17 +313,17 @@
         .nl-eq-icon { width:44px; height:44px; cursor:pointer; image-rendering:pixelated; flex-shrink:0; border:2px solid #1e1e30; box-shadow:2px 2px 0 #000; }
         .nl-eq-icon.nl-focused { border-color:#00e676; }
 
-        /* 介绍卡 —— 静态 top/bottom，四边完整边框 */
+        /* 介绍卡 —— 右侧滑入，高度自适应（top/bottom 距屏幕绝对边界） */
         #nl-detail {
-            position:absolute; right:0;
-            top:44px; bottom:64px;
+            position:fixed; right:0;    /* fixed 脱离 overlay 的 padding 影响 */
+            top:44px; bottom:66px;
             width:min(55%, 200px);
             background:#06060f;
             border:3px solid #00e676; border-right:none;
             box-shadow:-4px 4px 0 #000, inset 1px 0 0 #00e67618;
             padding:14px 12px; box-sizing:border-box;
             overflow-y:auto;
-            transform:translateX(110%); transition:transform 0.22s ease-out; z-index:20;
+            transform:translateX(110%); transition:transform 0.22s ease-out; z-index:30;
         }
         #nl-detail.nl-open { transform:translateX(0); }
         /* ═══ 难度界面 ═══ */
