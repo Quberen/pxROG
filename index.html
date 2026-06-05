@@ -276,16 +276,15 @@
             align-items: stretch !important;
         }
 
-        /* 战机区 —— flex:1，开托盘时通过 max-height 缩小 */
+        /* 战机区 —— flex:1，画布顶部锚定，不再随托盘压缩 */
         #nl-ship-area {
             flex:1; min-height:0;
-            display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px;
+            display:flex; flex-direction:column; align-items:center; justify-content:flex-start;
+            padding-top:60px; gap:8px;
             overflow:hidden; cursor:pointer;
-            transition:max-height 0.3s ease-out;
-            max-height:100vh; /* 初始不限制，compact 时压缩 */
         }
-        #nl-ship-area.nl-compact { max-height:130px; }
         #nl-ship-area:active { background:rgba(0,230,118,0.03); }
+        #nl-ship-canvas { max-width:90%; }
 
         /* 横向槽位栏 —— 始终可见，位于托盘上方 */
         #nl-slot-row {

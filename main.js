@@ -3371,7 +3371,9 @@ function nlBuildUI(cfg) {
         if (area && area.clientWidth > 0) {
             let aw = area.clientWidth;
             let ah = area.clientHeight || aw;
-            let size = Math.min(aw * 0.6, ah * 0.6, 220);
+            let trayH = Math.round(0.32 * window.innerHeight + 58);
+            let availH = Math.max(100, ah - trayH - 80);
+            let size = Math.min(aw * 0.65, availH, 280);
             if (size > 80) {
                 lsCvs.width = Math.round(size);
                 lsCvs.height = Math.round(size * 0.75);
@@ -3558,12 +3560,10 @@ function nlSetDetail(def) {
 
 function nlOpenTray() {
     document.getElementById('nl-tray')?.classList.add('nl-open');
-    document.getElementById('nl-ship-area')?.classList.add('nl-compact');
 }
 
 function nlCloseTray() {
     document.getElementById('nl-tray')?.classList.remove('nl-open');
-    document.getElementById('nl-ship-area')?.classList.remove('nl-compact');
     nlDetailEquipId = null;
     nlSetDetail(null);
 }
