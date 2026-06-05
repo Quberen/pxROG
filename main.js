@@ -732,20 +732,24 @@ function gameOver(title, isVictory) {
     showScreen('gameOver');
 }
 
-function initDifficultyUI() { 
-    if (unlockedDifficulty >= 2) document.getElementById('diff-nightmare').classList.remove('locked'); 
-    selectDifficulty(Math.min(currentDifficulty, unlockedDifficulty >= 2 ? 3 : 2)); 
+function initDifficultyUI() {
+    let dn = document.getElementById('diff-nightmare');
+    if (unlockedDifficulty >= 2 && dn) dn.classList.remove('locked');
+    selectDifficulty(Math.min(currentDifficulty, unlockedDifficulty >= 2 ? 3 : 2));
 }
 
-function selectDifficulty(level) { 
-    if (level === 3 && unlockedDifficulty < 2) return; 
-    currentDifficulty = level; 
-    document.querySelectorAll('.diff-btn').forEach((btn, idx) => { 
-        if (idx === level) btn.classList.add('selected'); else btn.classList.remove('selected'); 
-    }); 
-    document.getElementById('diff-desc').innerText = DIFF_CONFIG[level].desc; 
-    if (level === 3) document.getElementById('diff-desc').style.color = '#ff1744'; 
-    else document.getElementById('diff-desc').style.color = '#ffeb3b'; 
+function selectDifficulty(level) {
+    if (level === 3 && unlockedDifficulty < 2) return;
+    currentDifficulty = level;
+    // 旧版主界面的难度按钮/描述元素在新 UI 中已移除，做空值保护
+    document.querySelectorAll('.diff-btn').forEach((btn, idx) => {
+        if (idx === level) btn.classList.add('selected'); else btn.classList.remove('selected');
+    });
+    let desc = document.getElementById('diff-desc');
+    if (desc) {
+        desc.innerText = DIFF_CONFIG[level].desc;
+        desc.style.color = (level === 3) ? '#ff1744' : '#ffeb3b';
+    }
 }
 
 function unlockNextDifficulty() { 
