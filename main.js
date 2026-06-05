@@ -3165,7 +3165,7 @@ function stopUIBackground() {
 // ═══ 战机轮盘 ═══
 const CAROUSEL_CARDS = [
     { shipId: 'rt1',  label: 'RT-1 RESCUER',  unlocked: true  },
-    { shipId: 'rtg2', label: 'RTG-II',         unlocked: false },
+    { shipId: 'rtg2', label: 'RTG-II',         unlocked: true  },
     { shipId: null,   label: 'COMING SOON',    unlocked: false },
     { shipId: null,   label: 'COMING SOON',    unlocked: false },
     { shipId: null,   label: 'COMING SOON',    unlocked: false }
