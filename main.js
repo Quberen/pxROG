@@ -3196,7 +3196,7 @@ function buildCarousel() {
         div.appendChild(nm);
         let sub = document.createElement('div');
         sub.className = 'c-card-sub ' + (data.unlocked ? 'c-card-tap' : 'c-card-locked');
-        sub.textContent = data.unlocked ? 'TAP AGAIN' : 'LOCKED';
+        sub.textContent = data.unlocked ? 'TAP TO SELECT' : 'LOCKED';
         div.appendChild(sub);
         wrap.appendChild(div);
     });
@@ -3366,6 +3366,17 @@ function openNewLoadout(shipId) {
 function nlBuildUI(cfg) {
     let lsCvs = document.getElementById('nl-ship-canvas');
     if (lsCvs) {
+        // 动态适配：让画布填满战机区可用空间，与轮盘卡片的精灵尺寸保持一致的视觉比例
+        let area = document.getElementById('nl-ship-area');
+        if (area && area.clientWidth > 0) {
+            let aw = area.clientWidth;
+            let ah = area.clientHeight || aw;
+            let size = Math.min(aw * 0.6, ah * 0.6, 220);
+            if (size > 80) {
+                lsCvs.width = Math.round(size);
+                lsCvs.height = Math.round(size * 0.75);
+            }
+        }
         let drawShip = (retries) => {
             let spr = (typeof sprites !== 'undefined') && sprites[cfg.sprite];
             if (!spr) {
@@ -3379,7 +3390,7 @@ function nlBuildUI(cfg) {
             let sc = Math.min(lsCvs.width / sw, lsCvs.height / sh) * 0.8;
             ctx.drawImage(spr, (lsCvs.width - sw * sc) / 2, (lsCvs.height - sh * sc) / 2, sw * sc, sh * sc);
         };
-        drawShip(5); // 最多重试 5 帧
+        drawShip(5);
     }
     let lbl = document.getElementById('nl-ship-label');
     if (lbl) lbl.textContent = cfg.nameEn || cfg.name || newFlowShipId.toUpperCase();
